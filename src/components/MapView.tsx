@@ -114,11 +114,117 @@ const COMUNI_COORDS: Record<string, [number, number]> = {
   "nuoro": [40.3186, 9.3295],
   "oristano": [39.9068, 8.5916],
   "olbia": [40.9232, 9.4986],
+  // Comuni toscani e altri
+  "montecatini terme": [43.8847, 10.7735],
+  "montecatini-terme": [43.8847, 10.7735],
+  "empoli": [43.7197, 10.9453],
+  "pontedera": [43.6614, 10.6325],
+  "massa": [44.0353, 10.1418],
+  "carrara": [44.0786, 10.0998],
+  "viareggio": [43.8673, 10.2505],
+  "forte dei marmi": [43.9631, 10.1705],
+  "pietrasanta": [43.9580, 10.2240],
+  "capannori": [43.8427, 10.5742],
+  "altopascio": [43.8175, 10.6760],
+  "pescia": [43.9022, 10.6913],
+  "monsummano terme": [43.8715, 10.8128],
+  "buggiano": [43.8784, 10.7349],
+  "uzzano": [43.8872, 10.7213],
+  "lamporecchio": [43.8203, 10.8961],
+  "serravalle pistoiese": [43.9097, 10.8296],
+  "quarrata": [43.8458, 10.9858],
+  "montale": [43.9408, 11.0183],
+  "agliana": [43.9024, 11.0028],
+  "pieve a nievole": [43.8817, 10.7954],
+  "massa e cozzile": [43.9108, 10.7511],
+  "larciano": [43.8218, 10.8714],
+  "ponte buggianese": [43.8416, 10.7499],
+  "san miniato": [43.6857, 10.8498],
+  "certaldo": [43.5480, 11.0420],
+  "castelfiorentino": [43.6055, 10.9736],
+  "poggibonsi": [43.4688, 11.1511],
+  "colle val d'elsa": [43.4228, 11.1197],
+  "colle di val d'elsa": [43.4228, 11.1197],
+  "volterra": [43.4014, 10.8604],
+  "san gimignano": [43.4677, 11.0435],
+  "montalcino": [43.0588, 11.4900],
+  "montepulciano": [43.0980, 11.7861],
+  "pienza": [43.0748, 11.6790],
+  "chianciano terme": [43.0604, 11.8260],
+  "chiusi": [43.0156, 11.9457],
+  "sansepolcro": [43.5693, 12.1395],
+  "bibbiena": [43.6959, 11.8170],
+  "poppi": [43.7262, 11.7704],
+  "stia": [43.7996, 11.7097],
+  "pratovecchio": [43.7810, 11.7211],
+  "castiglion fiorentino": [43.3411, 11.9225],
+  "cortona": [43.2763, 11.9875],
+  "castiglione della pescaia": [42.7622, 10.8765],
+  "orbetello": [42.4384, 11.2148],
+  "pitigliano": [42.6362, 11.6680],
+  "sorano": [42.6826, 11.7158],
+  "manciano": [42.5907, 11.5153],
+  "scansano": [42.6889, 11.3318],
+  "follonica": [42.9234, 10.7612],
+  "massa marittima": [43.0505, 10.8943],
+  "roccastrada": [43.0061, 11.1636],
+  "civitavecchia": [42.0938, 11.7961],
+  "montefiascone": [42.5403, 12.0267],
+  "tivoli": [41.9634, 12.7981],
+  "velletri": [41.6869, 12.7805],
+  "anzio": [41.4477, 12.6267],
+  "nettuno": [41.4639, 12.6602],
+  "pomezia": [41.6719, 12.5012],
+  "albano laziale": [41.7292, 12.6608],
+  "genzano di roma": [41.7009, 12.6921],
+  "marino": [41.7706, 12.6548],
+  "frascati": [41.8082, 12.6813],
+  "palestrina": [41.8388, 12.8908],
+  "valmontone": [41.7804, 12.9206],
+  "colleferro": [41.7277, 13.0049],
+  "guidonia montecelio": [41.9968, 12.7218],
+  "monterotondo": [42.0514, 12.6168],
+  "mentana": [42.0232, 12.6422],
+  "fiumicino": [41.7756, 12.2381],
+  "cerveteri": [41.9994, 12.1000],
+  "ladispoli": [41.9479, 12.0791],
+  "santa marinella": [42.0342, 11.8498],
+  "tarquinia": [42.2591, 11.7559],
 };
 
-function getComuneCoords(comune: string): [number, number] {
+function getComuneCoords(comune: string): [number, number] | null {
   const key = comune.toLowerCase().trim();
-  return COMUNI_COORDS[key] ?? [41.9028, 12.4964];
+  return COMUNI_COORDS[key] ?? null;
+}
+
+// Geocode a municipality via Nominatim (OpenStreetMap) as fallback
+async function geocodeComune(comune: string): Promise<[number, number]> {
+  const known = getComuneCoords(comune);
+  if (known) return known;
+
+  try {
+    const q = encodeURIComponent(`${comune}, Italy`);
+    const resp = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=it`,
+      { headers: { "User-Agent": "GeoVincoli/1.0" } }
+    );
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.length > 0) {
+        const lat = parseFloat(data[0].lat);
+        const lon = parseFloat(data[0].lon);
+        if (!isNaN(lat) && !isNaN(lon)) {
+          console.log(`Geocoded "${comune}" via Nominatim →`, lat, lon);
+          return [lat, lon];
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Nominatim geocoding failed:", e);
+  }
+  // Ultimate fallback: center of Italy
+  console.warn(`Could not geocode "${comune}", using Italy center`);
+  return [42.8333, 12.8333];
 }
 
 // Generate a placeholder polygon near the given center
@@ -140,14 +246,22 @@ function makePlaceholderPolygon(
 }
 
 // Fetch real parcel geometries from the WFS proxy edge function
+// Pass foglio/particella for server-side filtering
 async function fetchParcelGeometry(
   lat: number,
   lng: number,
-  radius = 0.003
+  foglio: string,
+  particella: string,
+  radius = 0.005
 ): Promise<GeoJSON.Feature[]> {
-  const url =
-    `${SUPABASE_URL}/functions/v1/wfs-proxy` +
-    `?lat=${lat}&lng=${lng}&radius=${radius}`;
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lng: String(lng),
+    radius: String(radius),
+    foglio,
+    particella,
+  });
+  const url = `${SUPABASE_URL}/functions/v1/wfs-proxy?${params.toString()}`;
 
   const resp = await fetch(url, {
     headers: {
@@ -235,14 +349,14 @@ function addParcelLabel(map: L.Map, polygon: L.Polygon, text: string, pane: stri
   const center = polygon.getBounds().getCenter();
   const marker = L.marker(center, {
     icon: L.divIcon({
-      className: "leaflet-parcel-label",
-      html: text,
-      iconSize: undefined,
-      iconAnchor: undefined,
+      className: "",  // no class, we use inline style via html wrapper
+      html: `<div class="leaflet-parcel-label">${text}</div>`,
+      iconSize: [0, 0],   // zero size so marker point = center
+      iconAnchor: [0, 0], // anchor at top-left of 0×0 box; CSS does the centering
     }),
     interactive: false,
     pane,
-    zIndexOffset: 100,
+    zIndexOffset: 200,
   });
   marker.addTo(map);
   return marker;
@@ -395,7 +509,7 @@ export function MapView({
       const { lat, lng } = e.latlng;
       setClickLoading(true);
       try {
-        const features = await fetchParcelGeometry(lat, lng, 0.001);
+        const features = await fetchParcelGeometry(lat, lng, "", "", 0.001);
         if (features.length === 0) {
           setClickLoading(false);
           return;
@@ -511,8 +625,7 @@ export function MapView({
     const map = mapRef.current;
     if (!map) return;
 
-    // KEY FIX: only re-draw when the set of parcel IDs actually changes,
-    // NOT when superficieMq or other derived data changes (prevents loop).
+    // Only re-draw when the set of parcel IDs actually changes
     const currentIds = particelle.map(p => p.id).join(",");
     if (currentIds === drawnParcelIdsRef.current) return;
     drawnParcelIdsRef.current = currentIds;
@@ -528,76 +641,72 @@ export function MapView({
     }
 
     const geometries: Record<string, L.LatLngExpression[][]> = {};
-    const allPlaceholderPolygons: L.Polygon[] = [];
-    const allLabelMarkers: L.Marker[] = [];
-
-    // 1. Draw placeholder polygons immediately with DivIcon labels
-    particelle.forEach((p, idx) => {
-      const center = getComuneCoords(p.comune);
-      const rawCoords = makePlaceholderPolygon(center, idx);
-      const coords: L.LatLngExpression[][] = [
-        rawCoords.map(([lat, lng]) => [lat, lng] as L.LatLngExpression),
-      ];
-
-      const color = p.color || "#3b82f6";
-
-      const polygon = L.polygon(coords, {
-        color,
-        fillColor: color,
-        fillOpacity: 0.35,
-        weight: 3,
-        opacity: 0.8,
-        pane: "parcelsPane",
-        dashArray: "8 5",
-      });
-
-      polygon.bindPopup(
-        `<strong>${p.comune}</strong><br>` +
-        `Foglio <b>${p.foglio}</b> / Particella <b>${p.particella}</b><br>` +
-        `<em style="font-size:10px;opacity:0.6">⚠ Perimetro stimato</em>`
-      );
-
-      polygon.addTo(map);
-      geometries[p.id] = coords;
-      allPlaceholderPolygons.push(polygon);
-
-      // DivIcon label marker — reliable alternative to bindTooltip(permanent)
-      const labelText = `Fg.${p.foglio} / ${p.particella}`;
-      const lm = addParcelLabel(map, polygon, labelText, "parcelsPane");
-      allLabelMarkers.push(lm);
-    });
-
-    parcelLayersRef.current = [...allPlaceholderPolygons, ...allLabelMarkers];
-
-    // Center on placeholders immediately
-    try {
-      const group = L.featureGroup(allPlaceholderPolygons);
-      const bounds = group.getBounds();
-      if (bounds.isValid()) map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
-    } catch {
-      map.setView(CENTER, 14);
-    }
-
-    onParcelGeometries?.(geometries);
 
     // Mark all as loading
     const loadingStatuses: Record<string, ParcelStatus> = {};
     particelle.forEach(p => { loadingStatuses[p.id] = "loading"; });
     setParcelStatuses(loadingStatuses);
 
-    // 2. Fetch real geometries from WFS proxy for each parcel
+    // Process each parcel: geocode → placeholder → WFS fetch → real polygon
     particelle.forEach(async (p, idx) => {
-      const [lat, lng] = getComuneCoords(p.comune);
       const color = p.color || "#3b82f6";
-      const placeholderPoly = allPlaceholderPolygons[idx];
-      const placeholderLabel = allLabelMarkers[idx];
 
+      // 1. Geocode the municipality (local dict + Nominatim fallback)
+      let center: [number, number];
       try {
-        const features = await fetchParcelGeometry(lat, lng, 0.005);
+        center = await geocodeComune(p.comune);
+      } catch {
+        center = [42.8333, 12.8333];
+      }
+      const [lat, lng] = center;
+
+      // 2. Draw placeholder polygon immediately
+      const rawCoords = makePlaceholderPolygon(center, idx);
+      const coords: L.LatLngExpression[][] = [
+        rawCoords.map(([plat, plng]) => [plat, plng] as L.LatLngExpression),
+      ];
+
+      const placeholderPoly = L.polygon(coords, {
+        color,
+        fillColor: color,
+        fillOpacity: 0.25,
+        weight: 2,
+        opacity: 0.7,
+        pane: "parcelsPane",
+        dashArray: "8 5",
+      });
+
+      placeholderPoly.bindPopup(
+        `<strong>${p.comune}</strong><br>` +
+        `Foglio <b>${p.foglio}</b> / Particella <b>${p.particella}</b><br>` +
+        `<em style="font-size:10px;opacity:0.6">⚠ Perimetro stimato</em>`
+      );
+
+      placeholderPoly.addTo(map);
+      geometries[p.id] = coords;
+      parcelLayersRef.current.push(placeholderPoly);
+
+      // Placeholder label
+      const placeholderLabel = addParcelLabel(
+        map, placeholderPoly,
+        `Fg.${p.foglio} / ${p.particella}`, "parcelsPane"
+      );
+      parcelLayersRef.current.push(placeholderLabel);
+
+      // Center map on first parcel placeholder
+      if (idx === 0) {
+        try { map.setView(placeholderPoly.getBounds().getCenter(), 15); } catch {}
+      }
+
+      onParcelGeometries?.(geometries);
+
+      // 3. Fetch real geometry from WFS with foglio/particella filter
+      try {
+        const features = await fetchParcelGeometry(lat, lng, p.foglio, p.particella, 0.01);
 
         if (features.length === 0) throw new Error("No features returned");
 
-        // Remove placeholder polygon + its label
+        // Remove placeholder
         try { map.removeLayer(placeholderPoly); } catch {}
         try { map.removeLayer(placeholderLabel); } catch {}
         parcelLayersRef.current = parcelLayersRef.current.filter(
@@ -608,7 +717,18 @@ export function MapView({
         let totalMq = 0;
         let firstPoly: L.Polygon | null = null;
 
-        features.forEach(feat => {
+        // Use only features that best match foglio/particella
+        // The server may return multiple features; prefer exact match
+        const particellaNum = parseInt(p.particella, 10).toString();
+        const foglioNum = parseInt(p.foglio, 10).toString();
+        const exactMatch = features.filter(f => {
+          const lbl: string = f.properties?.label ?? "";
+          const ref: string = f.properties?.nationalRef ?? f.properties?.localId ?? "";
+          return lbl.includes(particellaNum) || ref.includes(particellaNum);
+        });
+        const toRender = exactMatch.length > 0 ? exactMatch : [features[0]];
+
+        toRender.forEach(feat => {
           if (!feat.geometry || feat.geometry.type !== "Polygon") return;
           const rings = (feat.geometry as GeoJSON.Polygon).coordinates;
 
@@ -628,10 +748,14 @@ export function MapView({
             pane: "parcelsPane",
           });
 
+          const surfaceLabel = totalMq > 0
+            ? `<span style="color:#16a34a;font-weight:600">Superficie: ${formatArea(Math.round(totalMq))}</span><br>`
+            : "";
+
           poly.bindPopup(
             `<strong>${p.comune}</strong><br>` +
             `Foglio <b>${p.foglio}</b> / Particella <b>${p.particella}</b><br>` +
-            `<span style="color:#16a34a;font-weight:600">Superficie: ${formatArea(Math.round(totalMq))}</span><br>` +
+            surfaceLabel +
             `<em style="font-size:10px;color:#16a34a">✓ Perimetro reale (WFS)</em>`
           );
 
@@ -640,20 +764,25 @@ export function MapView({
           if (!firstPoly) firstPoly = poly;
         });
 
-        // Add a single DivIcon label on the first (largest) polygon
+        // Add label on first real polygon
         if (firstPoly) {
           const lm = addParcelLabel(map, firstPoly, `Fg.${p.foglio} / ${p.particella}`, "parcelsPane");
           parcelLayersRef.current.push(lm);
+
+          // Fly to real polygon
+          try {
+            const b = firstPoly.getBounds();
+            if (b.isValid()) map.flyToBounds(b, { padding: [80, 80], maxZoom: 17, duration: 0.8 });
+          } catch {}
         }
 
         const mqFinal = Math.round(totalMq);
         geometries[p.id] = realCoords;
         onParcelGeometries?.(geometries);
-        // Store area locally to avoid re-triggering parent's useEffect
         setLocalAreas(prev => ({ ...prev, [p.id]: mqFinal }));
         setParcelStatuses(prev => ({ ...prev, [p.id]: "real" }));
       } catch (err) {
-        console.warn(`WFS fetch failed for ${p.comune}:`, err);
+        console.warn(`WFS fetch failed for ${p.comune} Fg.${p.foglio} Part.${p.particella}:`, err);
         setParcelStatuses(prev => ({ ...prev, [p.id]: "placeholder" }));
       }
     });
