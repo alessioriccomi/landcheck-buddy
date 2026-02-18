@@ -138,7 +138,6 @@ export function MapView({
     map.createPane("parcelsPane");
     const parcelsPane = map.getPane("parcelsPane")!;
     parcelsPane.style.zIndex = "650"; // above overlayPane (400) and shadowPane (500)
-    parcelsPane.style.pointerEvents = "none";
 
     // Custom pane for WMS overlays — below parcels but above basemap
     map.createPane("wmsPane");
@@ -314,11 +313,13 @@ export function MapView({
       }
 
       const color = p.color || "#3b82f6";
+
+      // Add directly to map with explicit pane to guarantee visibility above all WMS/tile layers
       const polygon = L.polygon(coords, {
         color,
         fillColor: color,
-        fillOpacity: 0.3,
-        weight: 3,
+        fillOpacity: 0.35,
+        weight: 4,
         pane: "parcelsPane",
       });
 
@@ -327,7 +328,10 @@ export function MapView({
         { permanent: false, direction: "center", className: "leaflet-custom-tooltip" }
       );
 
-      polygon.addTo(fg);
+      // Add to map directly (NOT to featureGroup) so pane assignment is respected
+      polygon.addTo(map);
+      // Also add to fg for bounds calculation only
+      fg.addLayer(polygon);
       geometries[p.id] = coords;
     };
 
