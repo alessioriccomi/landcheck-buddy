@@ -134,22 +134,34 @@ export function MapView({
 
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
+    // Custom pane for parcel polygons — always above ALL tile/WMS layers
+    map.createPane("parcelsPane");
+    const parcelsPane = map.getPane("parcelsPane")!;
+    parcelsPane.style.zIndex = "650"; // above overlayPane (400) and shadowPane (500)
+    parcelsPane.style.pointerEvents = "none";
+
+    // Custom pane for WMS overlays — below parcels but above basemap
+    map.createPane("wmsPane");
+    const wmsPane = map.getPane("wmsPane")!;
+    wmsPane.style.zIndex = "300";
+
     // Initial basemap
     const base = makeBaselayer("osm");
     base.addTo(map);
     basemapRef.current = base;
 
-    // Catasto WMS overlay (always on top of basemap when catasto base or showCatasto)
+    // Catasto WMS overlay
     const catastoWms = L.tileLayer.wms(
       "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
       {
         layers: "CP.CadastralParcel",
         format: "image/png",
         transparent: true,
-        opacity: 0.7,
+        opacity: 0.75,
         version: "1.3.0",
         attribution: "Agenzia delle Entrate",
-      }
+        pane: "wmsPane",
+      } as L.WMSOptions & { pane: string }
     );
     catastoOverlayRef.current = catastoWms;
 
@@ -161,7 +173,8 @@ export function MapView({
       opacity: 0.45,
       version: "1.3.0",
       errorTileUrl: "",
-    });
+      pane: "wmsPane",
+    } as L.WMSOptions & { pane: string });
 
     const pai = L.tileLayer.wms(
       "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
@@ -171,7 +184,8 @@ export function MapView({
         transparent: true,
         opacity: 0.35,
         version: "1.3.0",
-      }
+        pane: "wmsPane",
+      } as L.WMSOptions & { pane: string }
     );
 
     const natura = L.tileLayer.wms(
@@ -182,13 +196,14 @@ export function MapView({
         transparent: true,
         opacity: 0.35,
         version: "1.3.0",
-      }
+        pane: "wmsPane",
+      } as L.WMSOptions & { pane: string }
     );
 
     wmsLayersRef.current = { paesaggio, pai, natura };
 
-    // Parcel feature group (always on top)
-    const fg = L.featureGroup().addTo(map);
+    // Parcel feature group — rendered in parcelsPane, always on top
+    const fg = L.featureGroup([], { pane: "parcelsPane" } as L.LayerOptions).addTo(map);
     parcelLayerRef.current = fg;
 
     mapRef.current = map;
@@ -228,8 +243,6 @@ export function MapView({
       // Keep it if showCatasto is true, otherwise respect that toggle
     }
 
-    // Bring parcel layer to front
-    parcelLayerRef.current?.bringToFront();
   }, [activeBase]);
 
   // ── Toggle WMS overlays ─────────────────────────────────────
@@ -252,7 +265,6 @@ export function MapView({
     toggle(pai, showPAI);
     toggle(natura, showNatura2000);
 
-    parcelLayerRef.current?.bringToFront();
   }, [showCatasto, showVincoliPaesaggistici, showVincoliIdrogeologici, showNatura2000, showPAI, activeBase]);
 
   // ── Draw parcels (WFS + demo fallback) ─────────────────────
@@ -305,8 +317,9 @@ export function MapView({
       const polygon = L.polygon(coords, {
         color,
         fillColor: color,
-        fillOpacity: 0.25,
-        weight: 2.5,
+        fillOpacity: 0.3,
+        weight: 3,
+        pane: "parcelsPane",
       });
 
       polygon.bindTooltip(
