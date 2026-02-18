@@ -1,10 +1,10 @@
-import { useEffect, useRef } from "react";
-import { MapContainer, TileLayer, WMSTileLayer, FeatureGroup, Polygon, Tooltip, ZoomControl } from "react-leaflet";
+import { useEffect } from "react";
+import { MapContainer, TileLayer, WMSTileLayer, Polygon, Tooltip, ZoomControl, useMap } from "react-leaflet";
 import { LatLngTuple } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Particella } from "@/types/vincoli";
 
-// Fix Leaflet default icon issue with webpack/vite
+// Fix Leaflet default icon issue with vite
 import L from "leaflet";
 import iconUrl from "leaflet/dist/images/marker-icon.png";
 import iconShadow from "leaflet/dist/images/marker-shadow.png";
@@ -12,13 +12,24 @@ const DefaultIcon = L.icon({ iconUrl, shadowUrl: iconShadow, iconSize: [25, 41],
 L.Marker.prototype.options.icon = DefaultIcon;
 
 // Demo polygons for visual representation
-const DEMO_POLYGONS: Record<string, LatLngTuple[]> = {
-  "0": [[41.896, 12.483], [41.898, 12.483], [41.898, 12.487], [41.896, 12.487]],
-  "1": [[41.894, 12.490], [41.896, 12.490], [41.896, 12.494], [41.894, 12.494]],
-  "2": [[41.900, 12.480], [41.902, 12.480], [41.902, 12.484], [41.900, 12.484]],
-};
+const DEMO_POLYGONS: LatLngTuple[][] = [
+  [[41.896, 12.483], [41.898, 12.483], [41.898, 12.487], [41.896, 12.487]],
+  [[41.894, 12.490], [41.896, 12.490], [41.896, 12.494], [41.894, 12.494]],
+  [[41.900, 12.480], [41.902, 12.480], [41.902, 12.484], [41.900, 12.484]],
+];
 
 const CENTER_COORDS: LatLngTuple = [41.896, 12.486];
+
+// Inner component that uses useMap hook safely inside MapContainer context
+function MapUpdater({ particelle }: { particelle: Particella[] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (particelle.length > 0) {
+      map.setView(CENTER_COORDS, 15);
+    }
+  }, [particelle, map]);
+  return null;
+}
 
 interface MapViewProps {
   particelle: Particella[];
@@ -29,15 +40,7 @@ interface MapViewProps {
   showPAI: boolean;
 }
 
-export function MapView({ particelle, showCatasto, showVincoliPaesaggistici, showVincoliIdrogeologici, showNatura2000, showPAI }: MapViewProps) {
-  const mapRef = useRef<L.Map | null>(null);
-
-  useEffect(() => {
-    if (particelle.length > 0 && mapRef.current) {
-      mapRef.current.setView(CENTER_COORDS, 15);
-    }
-  }, [particelle]);
-
+export function MapView({ particelle, showCatasto, showVincoliPaesaggistici }: MapViewProps) {
   return (
     <div className="h-full w-full relative">
       <MapContainer
@@ -45,9 +48,9 @@ export function MapView({ particelle, showCatasto, showVincoliPaesaggistici, sho
         zoom={13}
         className="h-full w-full"
         zoomControl={false}
-        ref={mapRef}
       >
         <ZoomControl position="bottomright" />
+        <MapUpdater particelle={particelle} />
 
         {/* Base tile layer */}
         <TileLayer
@@ -69,7 +72,7 @@ export function MapView({ particelle, showCatasto, showVincoliPaesaggistici, sho
           />
         )}
 
-        {/* Vincoli paesaggistici - Geoportale Nazionale */}
+        {/* Vincoli paesaggistici */}
         {showVincoliPaesaggistici && (
           <WMSTileLayer
             url="https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php"
@@ -83,8 +86,8 @@ export function MapView({ particelle, showCatasto, showVincoliPaesaggistici, sho
 
         {/* Parcel polygons */}
         {particelle.map((p, idx) => {
-          const coords = DEMO_POLYGONS[String(idx % Object.keys(DEMO_POLYGONS).length)];
-          const offsetCoords = coords.map(([lat, lng]: LatLngTuple) => [lat + idx * 0.001, lng + idx * 0.001] as LatLngTuple);
+          const base = DEMO_POLYGONS[idx % DEMO_POLYGONS.length];
+          const offsetCoords: LatLngTuple[] = base.map(([lat, lng]) => [lat + idx * 0.001, lng + idx * 0.001]);
           return (
             <Polygon
               key={p.id}
@@ -94,11 +97,12 @@ export function MapView({ particelle, showCatasto, showVincoliPaesaggistici, sho
                 fillColor: p.color || "#3b82f6",
                 fillOpacity: 0.2,
                 weight: 2.5,
-                dashArray: undefined,
               }}
             >
-              <Tooltip permanent direction="center" className="leaflet-parcel-tooltip">
-                <span className="font-semibold text-xs">{p.comune}<br />Fg. {p.foglio} / Part. {p.particella}</span>
+              <Tooltip permanent direction="center">
+                <span className="font-semibold text-xs">
+                  {p.comune}<br />Fg. {p.foglio} / Part. {p.particella}
+                </span>
               </Tooltip>
             </Polygon>
           );
@@ -111,8 +115,13 @@ export function MapView({ particelle, showCatasto, showVincoliPaesaggistici, sho
           <p className="text-xs font-semibold text-foreground mb-2">Particelle selezionate</p>
           {particelle.map(p => (
             <div key={p.id} className="flex items-center gap-2 mb-1">
-              <div className="w-3 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: p.color, opacity: 0.8, border: `2px solid ${p.color}` }} />
-              <span className="text-xs text-muted-foreground truncate">{p.comune} {p.foglio}/{p.particella}</span>
+              <div
+                className="w-3 h-3 rounded-sm flex-shrink-0"
+                style={{ backgroundColor: p.color, opacity: 0.8, border: `2px solid ${p.color}` }}
+              />
+              <span className="text-xs text-muted-foreground truncate">
+                {p.comune} {p.foglio}/{p.particella}
+              </span>
             </div>
           ))}
         </div>
