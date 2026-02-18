@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Particella } from "@/types/vincoli";
-import { Satellite, Map, Layers } from "lucide-react";
+import { Satellite, Map, Layers, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Fix Leaflet icon paths for Vite
@@ -10,6 +10,10 @@ import iconUrl from "leaflet/dist/images/marker-icon.png";
 import iconShadow from "leaflet/dist/images/marker-shadow.png";
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({ iconUrl, shadowUrl: iconShadow });
+
+// ── Supabase project config ────────────────────────────────────
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
 // ──────────────────────────────────────────────────────────────
 // Dizionario coordinate capoluoghi e comuni italiani principali
@@ -60,20 +64,16 @@ const COMUNI_COORDS: Record<string, [number, number]> = {
   "novara": [45.4469, 8.6224],
   "piacenza": [45.0526, 9.6930],
   "ancona": [43.6158, 13.5189],
-  "andria": [41.2282, 16.2990],
   "arezzo": [43.4633, 11.8800],
   "udine": [46.0614, 13.2356],
   "cesena": [44.1394, 12.2420],
   "lecce": [40.3516, 18.1750],
   "pesaro": [43.9100, 12.9132],
-  "barletta": [41.3178, 16.2831],
   "catanzaro": [38.9099, 16.5879],
   "la spezia": [44.1024, 9.8240],
-  "torre del greco": [40.7886, 14.3687],
   "como": [45.8081, 9.0852],
   "lucca": [43.8430, 10.5077],
   "brindisi": [40.6326, 17.9415],
-  "busto arsizio": [45.6105, 8.8501],
   "pistoia": [43.9298, 10.9066],
   "savona": [44.3068, 8.4814],
   "pisa": [43.7228, 10.4017],
@@ -84,16 +84,8 @@ const COMUNI_COORDS: Record<string, [number, number]> = {
   "l'aquila": [42.3498, 13.3995],
   "campobasso": [41.5602, 14.6680],
   "aosta": [45.7372, 7.3206],
-  "enna": [37.5656, 14.2765],
-  "caltanissetta": [37.4906, 14.0629],
-  "agrigento": [37.3115, 13.5765],
-  "trapani": [38.0175, 12.5113],
-  "ragusa": [36.9282, 14.7257],
   "matera": [40.6664, 16.6043],
   "cosenza": [39.3087, 16.2529],
-  "reggio di calabria": [38.1114, 15.6438],
-  "vibo valentia": [38.6763, 16.0967],
-  "crotone": [39.0809, 17.1269],
   "caserta": [41.0740, 14.3325],
   "avellino": [40.9147, 14.7900],
   "benevento": [41.1297, 14.7784],
@@ -104,45 +96,39 @@ const COMUNI_COORDS: Record<string, [number, number]> = {
   "chieti": [42.3517, 14.1681],
   "macerata": [43.2984, 13.4533],
   "ascoli piceno": [42.8509, 13.5745],
-  "fermo": [43.1603, 13.7144],
   "mantova": [45.1564, 10.7914],
   "cremona": [45.1327, 10.0227],
   "lodi": [45.3098, 9.5041],
   "lecco": [45.8566, 9.3944],
-  "sondrio": [46.1698, 9.8737],
   "varese": [45.8206, 8.8257],
   "pavia": [45.1847, 9.1582],
   "asti": [44.9004, 8.2059],
-  "biella": [45.5651, 8.0540],
   "cuneo": [44.3842, 7.5421],
   "vercelli": [45.3219, 8.4233],
-  "verbania": [45.9234, 8.5513],
   "rovigo": [45.0699, 11.7901],
   "belluno": [46.1434, 12.2169],
   "treviso": [45.6699, 12.2430],
   "pordenone": [45.9564, 12.6615],
   "gorizia": [45.9408, 13.6219],
   "imperia": [43.8886, 8.0214],
-  "massa": [44.0348, 10.1427],
   "nuoro": [40.3186, 9.3295],
   "oristano": [39.9068, 8.5916],
-  "tempio pausania": [40.9019, 9.1013],
   "olbia": [40.9232, 9.4986],
 };
 
 function getComuneCoords(comune: string): [number, number] {
   const key = comune.toLowerCase().trim();
-  return COMUNI_COORDS[key] ?? [41.9028, 12.4964]; // default Roma
+  return COMUNI_COORDS[key] ?? [41.9028, 12.4964];
 }
 
 // Generate a placeholder polygon near the given center
 function makePlaceholderPolygon(
   center: [number, number],
   idx: number,
-  size = 0.003
+  size = 0.002
 ): [number, number][] {
   const [lat, lng] = center;
-  const offset = idx * 0.006;
+  const offset = idx * 0.005;
   const clat = lat + offset * 0.5;
   const clng = lng + offset * 0.7;
   return [
@@ -151,6 +137,27 @@ function makePlaceholderPolygon(
     [clat + size, clng + size],
     [clat - size, clng + size],
   ];
+}
+
+// Fetch real parcel geometries from the WFS proxy edge function
+async function fetchParcelGeometry(
+  lat: number,
+  lng: number,
+  radius = 0.003
+): Promise<GeoJSON.Feature[]> {
+  const url =
+    `${SUPABASE_URL}/functions/v1/wfs-proxy` +
+    `?lat=${lat}&lng=${lng}&radius=${radius}`;
+
+  const resp = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+
+  if (!resp.ok) throw new Error(`WFS proxy error: ${resp.status}`);
+  const geojson: GeoJSON.FeatureCollection = await resp.json();
+  return geojson.features ?? [];
 }
 
 const CENTER: L.LatLngExpression = [41.897, 12.483];
@@ -181,16 +188,16 @@ function makeBaselayer(id: BasemapId): L.TileLayer {
       return L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
-          attribution: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+          attribution: "Tiles &copy; Esri",
           maxZoom: 19,
         }
       );
     case "catasto":
-      // Per "Catasto" usiamo OSM come base — l'overlay WMS catastale viene aggiunto sopra
+      // OSM as base + catasto WMS overlay added separately
       return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> + Agenzia delle Entrate',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         maxZoom: 19,
-        opacity: 0.6,
+        opacity: 0.55,
       });
   }
 }
@@ -205,6 +212,8 @@ interface MapViewProps {
   onParcelGeometries?: (geoms: Record<string, L.LatLngExpression[][]>) => void;
 }
 
+type ParcelStatus = "idle" | "loading" | "real" | "placeholder";
+
 export function MapView({
   particelle,
   showCatasto,
@@ -217,10 +226,11 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const wmsLayersRef = useRef<Record<string, L.TileLayer.WMS | L.TileLayer>>({});
-  const parcelPolygonsRef = useRef<L.Polygon[]>([]);
+  const parcelLayersRef = useRef<L.Layer[]>([]);
   const basemapRef = useRef<L.TileLayer | null>(null);
   const catastoOverlayRef = useRef<L.TileLayer.WMS | null>(null);
   const [activeBase, setActiveBase] = useState<BasemapId>("osm");
+  const [parcelStatuses, setParcelStatuses] = useState<Record<string, ParcelStatus>>({});
 
   // ── Initialize map once ─────────────────────────────────────
   useEffect(() => {
@@ -254,35 +264,31 @@ export function MapView({
       pane: "wmsPane",
     };
 
-    // ── Catasto WMS overlay ──
-    // IMPORTANTE: NON impostare crossOrigin — le tile WMS vengono caricate come <img>
-    // e non sono soggette a CORS. Impostare crossOrigin causerebbe il blocco.
+    // ── Catasto WMS overlay ──────────────────────────────────
+    // No crossOrigin set → browser loads tiles as plain <img>, no CORS block
     const catastoWms = L.tileLayer.wms(
       "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
       {
         ...wmsCommonOptions,
         layers: "CP.CadastralParcel",
-        opacity: 0.8,
+        opacity: 0.85,
         attribution: "Agenzia delle Entrate",
       } as L.WMSOptions & { pane: string }
     );
     catastoOverlayRef.current = catastoWms;
 
-    const zoning = { ...wmsCommonOptions, layers: "CP.CadastralZoning", opacity: 0.35 };
-
+    const zoningOpts = { ...wmsCommonOptions, layers: "CP.CadastralZoning", opacity: 0.35 };
     const paesaggio = L.tileLayer.wms(
       "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
-      zoning as L.WMSOptions & { pane: string }
+      zoningOpts as L.WMSOptions & { pane: string }
     );
-
     const pai = L.tileLayer.wms(
       "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
-      zoning as L.WMSOptions & { pane: string }
+      zoningOpts as L.WMSOptions & { pane: string }
     );
-
     const natura = L.tileLayer.wms(
       "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
-      zoning as L.WMSOptions & { pane: string }
+      zoningOpts as L.WMSOptions & { pane: string }
     );
 
     wmsLayersRef.current = { paesaggio, pai, natura };
@@ -299,23 +305,17 @@ export function MapView({
     const map = mapRef.current;
     if (!map) return;
 
-    if (basemapRef.current) {
-      map.removeLayer(basemapRef.current);
-    }
+    if (basemapRef.current) map.removeLayer(basemapRef.current);
 
     const newBase = makeBaselayer(activeBase);
     newBase.addTo(map);
     basemapRef.current = newBase;
 
-    // Catasto WMS overlay: mostralo quando basemap "catasto" è attivo
     const catastoWms = catastoOverlayRef.current;
     if (catastoWms) {
       const shouldShow = showCatasto || activeBase === "catasto";
-      if (shouldShow && !map.hasLayer(catastoWms)) {
-        catastoWms.addTo(map);
-      } else if (!shouldShow && map.hasLayer(catastoWms)) {
-        map.removeLayer(catastoWms);
-      }
+      if (shouldShow && !map.hasLayer(catastoWms)) catastoWms.addTo(map);
+      else if (!shouldShow && map.hasLayer(catastoWms)) map.removeLayer(catastoWms);
     }
   }, [activeBase, showCatasto]);
 
@@ -337,7 +337,6 @@ export function MapView({
     toggle(paesaggio, showVincoliPaesaggistici);
     toggle(pai, showPAI);
     toggle(natura, showNatura2000);
-
   }, [showCatasto, showVincoliPaesaggistici, showVincoliIdrogeologici, showNatura2000, showPAI, activeBase]);
 
   // ── Draw parcels ────────────────────────────────────────────
@@ -345,11 +344,9 @@ export function MapView({
     const map = mapRef.current;
     if (!map) return;
 
-    // Rimuovi tutti i poligoni precedenti
-    parcelPolygonsRef.current.forEach(poly => {
-      try { map.removeLayer(poly); } catch {}
-    });
-    parcelPolygonsRef.current = [];
+    // Remove previous layers
+    parcelLayersRef.current.forEach(layer => { try { map.removeLayer(layer); } catch {} });
+    parcelLayersRef.current = [];
 
     if (particelle.length === 0) {
       map.setView(CENTER, 13);
@@ -357,13 +354,14 @@ export function MapView({
     }
 
     const geometries: Record<string, L.LatLngExpression[][]> = {};
-    const newPolygons: L.Polygon[] = [];
+    const allPlaceholderPolygons: L.Polygon[] = [];
 
+    // 1. Draw placeholder polygons immediately (one per parcel)
     particelle.forEach((p, idx) => {
       const center = getComuneCoords(p.comune);
       const rawCoords = makePlaceholderPolygon(center, idx);
       const coords: L.LatLngExpression[][] = [
-        rawCoords.map(([lat, lng]) => [lat, lng] as L.LatLngExpression)
+        rawCoords.map(([lat, lng]) => [lat, lng] as L.LatLngExpression),
       ];
 
       const color = p.color || "#3b82f6";
@@ -371,46 +369,111 @@ export function MapView({
       const polygon = L.polygon(coords, {
         color,
         fillColor: color,
-        fillOpacity: 0.45,
-        weight: 4,
-        opacity: 1,
+        fillOpacity: 0.35,
+        weight: 3,
+        opacity: 0.8,
         pane: "parcelsPane",
         dashArray: "8 5",
-        dashOffset: "0",
       });
 
       polygon.bindTooltip(
         `<strong>${p.comune}</strong><br>` +
         `Fg. ${p.foglio} / Part. ${p.particella}<br>` +
-        `<em style="font-size:10px;opacity:0.75">⚠ Perimetro stimato</em>`,
+        `<em style="font-size:10px;opacity:0.7">⚠ Perimetro stimato</em>`,
         { permanent: false, direction: "top", className: "leaflet-custom-tooltip" }
       );
 
       polygon.addTo(map);
       geometries[p.id] = coords;
-      newPolygons.push(polygon);
+      allPlaceholderPolygons.push(polygon);
     });
 
-    parcelPolygonsRef.current = newPolygons;
+    parcelLayersRef.current = [...allPlaceholderPolygons];
 
-    // Centra la mappa sui poligoni
+    // Center on placeholders immediately
     try {
-      const group = L.featureGroup(newPolygons);
+      const group = L.featureGroup(allPlaceholderPolygons);
       const bounds = group.getBounds();
-      if (bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
-      }
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
     } catch {
       map.setView(CENTER, 14);
     }
 
     onParcelGeometries?.(geometries);
 
-  }, [particelle, onParcelGeometries]);
+    // Mark all as loading
+    const loadingStatuses: Record<string, ParcelStatus> = {};
+    particelle.forEach(p => { loadingStatuses[p.id] = "loading"; });
+    setParcelStatuses(loadingStatuses);
+
+    // 2. Fetch real geometries from WFS proxy for each parcel
+    particelle.forEach(async (p, idx) => {
+      const [lat, lng] = getComuneCoords(p.comune);
+      const color = p.color || "#3b82f6";
+      const placeholderPoly = allPlaceholderPolygons[idx];
+
+      try {
+        const features = await fetchParcelGeometry(lat, lng, 0.005);
+
+        if (features.length === 0) throw new Error("No features returned");
+
+        // Remove placeholder for this parcel
+        try { map.removeLayer(placeholderPoly); } catch {}
+        parcelLayersRef.current = parcelLayersRef.current.filter(l => l !== placeholderPoly);
+
+        const realCoords: L.LatLngExpression[][] = [];
+
+        features.forEach(feat => {
+          if (!feat.geometry || feat.geometry.type !== "Polygon") return;
+          const rings = (feat.geometry as GeoJSON.Polygon).coordinates;
+
+          const leafletRings = rings.map(ring =>
+            ring.map(([lng2, lat2]) => [lat2, lng2] as L.LatLngExpression)
+          );
+          leafletRings.forEach(r => realCoords.push(r));
+
+          const poly = L.polygon(leafletRings, {
+            color,
+            fillColor: color,
+            fillOpacity: 0.4,
+            weight: 3,
+            opacity: 1,
+            pane: "parcelsPane",
+          });
+
+          poly.bindTooltip(
+            `<strong>${p.comune}</strong><br>` +
+            `Fg. ${p.foglio} / Part. ${p.particella}<br>` +
+            `<em style="font-size:10px;color:var(--color-green-500)">✓ Perimetro reale (WFS)</em>`,
+            { permanent: false, direction: "top", className: "leaflet-custom-tooltip" }
+          );
+
+          poly.addTo(map);
+          parcelLayersRef.current.push(poly);
+        });
+
+        geometries[p.id] = realCoords;
+        onParcelGeometries?.(geometries);
+        setParcelStatuses(prev => ({ ...prev, [p.id]: "real" }));
+      } catch (err) {
+        console.warn(`WFS fetch failed for ${p.comune}:`, err);
+        setParcelStatuses(prev => ({ ...prev, [p.id]: "placeholder" }));
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [particelle]);
 
   return (
     <div className="h-full w-full relative">
       <div ref={containerRef} className="h-full w-full" />
+
+      {/* Loading indicator */}
+      {Object.values(parcelStatuses).some(s => s === "loading") && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-card/95 backdrop-blur border border-border rounded-lg px-3 py-1.5 flex items-center gap-2 shadow-md">
+          <Loader2 size={14} className="animate-spin text-primary" />
+          <span className="text-xs text-foreground">Caricamento perimetri reali…</span>
+        </div>
+      )}
 
       {/* Basemap switcher */}
       <div className="absolute bottom-8 right-3 z-[1000] flex flex-col gap-1">
@@ -435,24 +498,29 @@ export function MapView({
 
       {/* Parcel legend */}
       {particelle.length > 0 && (
-        <div className="absolute bottom-8 left-3 z-[1000] bg-card/95 backdrop-blur border border-border rounded-lg p-3 shadow-lg max-w-[210px]">
+        <div className="absolute bottom-8 left-3 z-[1000] bg-card/95 backdrop-blur border border-border rounded-lg p-3 shadow-lg max-w-[220px]">
           <p className="text-xs font-semibold text-foreground mb-2">Particelle</p>
-          {particelle.map(p => (
-            <div key={p.id} className="flex items-center gap-2 mb-1.5">
-              <div
-                className="w-4 h-4 rounded-sm flex-shrink-0 border-2"
-                style={{
-                  backgroundColor: p.color ? p.color + "70" : "#3b82f670",
-                  borderColor: p.color,
-                  borderStyle: "dashed",
-                }}
-              />
-              <span className="text-xs text-muted-foreground truncate">
-                {p.comune} {p.foglio}/{p.particella}
-              </span>
-            </div>
-          ))}
-          {/* Legenda tipi */}
+          {particelle.map(p => {
+            const status = parcelStatuses[p.id];
+            return (
+              <div key={p.id} className="flex items-center gap-2 mb-1.5">
+                <div
+                  className="w-4 h-4 rounded-sm flex-shrink-0 border-2"
+                  style={{
+                    backgroundColor: p.color ? p.color + "60" : "#3b82f660",
+                    borderColor: p.color,
+                    borderStyle: status === "real" ? "solid" : "dashed",
+                  }}
+                />
+                <span className="text-xs text-muted-foreground truncate flex-1">
+                  {p.comune} {p.foglio}/{p.particella}
+                </span>
+                {status === "loading" && <Loader2 size={10} className="animate-spin text-primary flex-shrink-0" />}
+                {status === "real" && <span className="text-[10px] text-green-500 flex-shrink-0">✓</span>}
+              </div>
+            );
+          })}
+          {/* Legend types */}
           <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
             <div className="flex items-center gap-2">
               <div className="w-4 h-0 border-t-2 border-dashed border-muted-foreground/60 flex-shrink-0" />
