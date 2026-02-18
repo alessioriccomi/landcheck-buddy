@@ -59,8 +59,8 @@ export default function Index() {
       {/* Header */}
       <header className="flex-shrink-0 h-14 flex items-center px-4 gap-3 border-b border-border bg-primary text-primary-foreground z-10">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 bg-amber rounded flex items-center justify-center flex-shrink-0">
-            <Map size={15} className="text-amber-foreground" />
+          <div className="w-7 h-7 rounded flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "hsl(var(--amber, 38 92% 50%))" }}>
+            <Map size={15} className="text-white" />
           </div>
           <div>
             <h1 className="text-sm font-bold tracking-tight leading-none">GeoVincoli</h1>

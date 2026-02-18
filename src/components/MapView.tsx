@@ -1,7 +1,9 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Particella } from "@/types/vincoli";
+import { Satellite, Map, Layers } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // Fix Leaflet icon paths for Vite
 import iconUrl from "leaflet/dist/images/marker-icon.png";
@@ -18,9 +20,6 @@ export async function fetchCadastralParcel(
   foglio: string,
   particella: string
 ): Promise<GeoJSON.Feature | null> {
-  // The AdE WFS uses INSPIRE schema - filter by National Cadastral Reference
-  // Format: IT.<CODICE_COMUNE>.<FOGLIO>.<PARTICELLA>
-  // Since we only have the comune name (not code), we use a broader CQL filter
   const cqlFilter = encodeURIComponent(
     `nationalCadastralReference LIKE '%${foglio}%${particella}%'`
   );
@@ -45,13 +44,56 @@ export async function fetchCadastralParcel(
 }
 
 // Demo fallback polygons (Rome area)
-const DEMO_POLYGONS: L.LatLngExpression[][] = [
+const DEMO_POLYGONS: [number, number][][] = [
   [[41.896, 12.483], [41.898, 12.483], [41.898, 12.487], [41.896, 12.487]],
   [[41.894, 12.490], [41.896, 12.490], [41.896, 12.494], [41.894, 12.494]],
   [[41.900, 12.480], [41.902, 12.480], [41.902, 12.484], [41.900, 12.484]],
 ];
 
 const CENTER: L.LatLngExpression = [41.897, 12.483];
+
+// ── Basemap definitions ────────────────────────────────────────
+type BasemapId = "osm" | "satellite" | "catasto";
+
+interface BasemapDef {
+  id: BasemapId;
+  label: string;
+  icon: "map" | "satellite" | "layers";
+}
+
+const BASEMAPS: BasemapDef[] = [
+  { id: "osm", label: "Mappa", icon: "map" },
+  { id: "satellite", label: "Satellite", icon: "satellite" },
+  { id: "catasto", label: "Catasto", icon: "layers" },
+];
+
+function makeBaselayer(id: BasemapId): L.TileLayer | L.TileLayer.WMS {
+  switch (id) {
+    case "osm":
+      return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19,
+      });
+    case "satellite":
+      return L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+          maxZoom: 19,
+        }
+      );
+    case "catasto":
+      // Ortofoto base + catasto overlay
+      return L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution: "Esri + Agenzia delle Entrate",
+          maxZoom: 19,
+          opacity: 0.7,
+        }
+      );
+  }
+}
 
 interface MapViewProps {
   particelle: Particella[];
@@ -74,10 +116,13 @@ export function MapView({
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const layersRef = useRef<Record<string, L.TileLayer.WMS | L.TileLayer>>({});
+  const wmsLayersRef = useRef<Record<string, L.TileLayer.WMS | L.TileLayer>>({});
   const parcelLayerRef = useRef<L.FeatureGroup | null>(null);
+  const basemapRef = useRef<L.TileLayer | L.TileLayer.WMS | null>(null);
+  const catastoOverlayRef = useRef<L.TileLayer.WMS | null>(null);
+  const [activeBase, setActiveBase] = useState<BasemapId>("osm");
 
-  // ── Initialize map once ────────────────────────────────────
+  // ── Initialize map once ─────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
@@ -89,39 +134,35 @@ export function MapView({
 
     L.control.zoom({ position: "bottomright" }).addTo(map);
 
-    // Base layer
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      opacity: 0.85,
-    }).addTo(map);
+    // Initial basemap
+    const base = makeBaselayer("osm");
+    base.addTo(map);
+    basemapRef.current = base;
 
-    // Catasto WMS
-    const catasto = L.tileLayer.wms(
+    // Catasto WMS overlay (always on top of basemap when catasto base or showCatasto)
+    const catastoWms = L.tileLayer.wms(
       "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
       {
         layers: "CP.CadastralParcel",
         format: "image/png",
         transparent: true,
-        opacity: 0.6,
+        opacity: 0.7,
         version: "1.3.0",
         attribution: "Agenzia delle Entrate",
       }
     );
+    catastoOverlayRef.current = catastoWms;
 
-    // Vincoli paesaggistici - Geoportale Nazionale (INSPIRE endpoint)
-    const paesaggio = L.tileLayer.wms(
-      "https://geodati.gov.it/inspire/wms",
-      {
-        layers: "VP.VincoliPaesaggistici",
-        format: "image/png",
-        transparent: true,
-        opacity: 0.45,
-        version: "1.3.0",
-        errorTileUrl: "",
-      }
-    );
+    // Other WMS overlays
+    const paesaggio = L.tileLayer.wms("https://geodati.gov.it/inspire/wms", {
+      layers: "VP.VincoliPaesaggistici",
+      format: "image/png",
+      transparent: true,
+      opacity: 0.45,
+      version: "1.3.0",
+      errorTileUrl: "",
+    });
 
-    // PAI — uso un tile layer neutro colorato come placeholder visivo
     const pai = L.tileLayer.wms(
       "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
       {
@@ -133,7 +174,6 @@ export function MapView({
       }
     );
 
-    // Rete Natura 2000 — ISPRA endpoint diretto
     const natura = L.tileLayer.wms(
       "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
       {
@@ -145,9 +185,9 @@ export function MapView({
       }
     );
 
-    layersRef.current = { catasto, paesaggio, pai, natura };
+    wmsLayersRef.current = { paesaggio, pai, natura };
 
-    // Parcel feature group
+    // Parcel feature group (always on top)
     const fg = L.featureGroup().addTo(map);
     parcelLayerRef.current = fg;
 
@@ -159,23 +199,63 @@ export function MapView({
     };
   }, []);
 
-  // ── Toggle WMS layers ──────────────────────────────────────
+  // ── Switch basemap ──────────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const { catasto, paesaggio, pai, natura } = layersRef.current;
-    const toggle = (layer: L.Layer | undefined, active: boolean) => {
+
+    // Remove old basemap
+    if (basemapRef.current) {
+      map.removeLayer(basemapRef.current);
+    }
+
+    // Add new basemap
+    const newBase = makeBaselayer(activeBase);
+    newBase.addTo(map);
+    // Ensure basemap is below everything
+    newBase.setZIndex(0);
+    basemapRef.current = newBase;
+
+    // Catasto overlay: show when catasto basemap is selected
+    const catastoWms = catastoOverlayRef.current;
+    if (catastoWms) {
+      if (activeBase === "catasto") {
+        if (!map.hasLayer(catastoWms)) {
+          catastoWms.addTo(map);
+          catastoWms.setZIndex(2);
+        }
+      }
+      // Keep it if showCatasto is true, otherwise respect that toggle
+    }
+
+    // Bring parcel layer to front
+    parcelLayerRef.current?.bringToFront();
+  }, [activeBase]);
+
+  // ── Toggle WMS overlays ─────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const catastoWms = catastoOverlayRef.current;
+    const { paesaggio, pai, natura } = wmsLayersRef.current;
+
+    const toggle = (layer: L.Layer | undefined | null, active: boolean) => {
       if (!layer) return;
       if (active && !map.hasLayer(layer)) map.addLayer(layer);
       if (!active && map.hasLayer(layer)) map.removeLayer(layer);
     };
-    toggle(catasto, showCatasto);
+
+    // For catasto overlay: show if showCatasto OR catasto basemap selected
+    toggle(catastoWms, showCatasto || activeBase === "catasto");
     toggle(paesaggio, showVincoliPaesaggistici);
     toggle(pai, showPAI);
     toggle(natura, showNatura2000);
-  }, [showCatasto, showVincoliPaesaggistici, showVincoliIdrogeologici, showNatura2000, showPAI]);
 
-  // ── Draw parcels (WFS + demo fallback) ────────────────────
+    parcelLayerRef.current?.bringToFront();
+  }, [showCatasto, showVincoliPaesaggistici, showVincoliIdrogeologici, showNatura2000, showPAI, activeBase]);
+
+  // ── Draw parcels (WFS + demo fallback) ─────────────────────
   useEffect(() => {
     const map = mapRef.current;
     const fg = parcelLayerRef.current;
@@ -188,7 +268,7 @@ export function MapView({
       return;
     }
 
-    const allCoords: L.LatLngExpression[] = [];
+    const geometries: Record<string, L.LatLngExpression[][]> = {};
 
     const drawParcel = async (p: Particella, idx: number) => {
       let coords: L.LatLngExpression[][] | null = null;
@@ -215,18 +295,17 @@ export function MapView({
       // Demo fallback
       if (!coords) {
         const base = DEMO_POLYGONS[idx % DEMO_POLYGONS.length];
-        coords = [base.map((pt) => {
-          const lat = (pt as [number, number])[0] + idx * 0.003;
-          const lng = (pt as [number, number])[1] + idx * 0.003;
-          return [lat, lng] as L.LatLngExpression;
-        })];
+        coords = [base.map(([lat, lng]) => [
+          lat + idx * 0.003,
+          lng + idx * 0.003,
+        ] as L.LatLngExpression)];
       }
 
       const color = p.color || "#3b82f6";
       const polygon = L.polygon(coords, {
         color,
         fillColor: color,
-        fillOpacity: 0.2,
+        fillOpacity: 0.25,
         weight: 2.5,
       });
 
@@ -236,10 +315,7 @@ export function MapView({
       );
 
       polygon.addTo(fg);
-      // collect bounds
-
-      // Notify parent with geometries for PDF
-      onParcelGeometries?.({ [p.id]: coords });
+      geometries[p.id] = coords;
     };
 
     Promise.all(particelle.map((p, i) => drawParcel(p, i))).then(() => {
@@ -250,6 +326,7 @@ export function MapView({
           map.setView(CENTER, 14);
         }
       }
+      onParcelGeometries?.(geometries);
     });
   }, [particelle, onParcelGeometries]);
 
@@ -257,10 +334,31 @@ export function MapView({
     <div className="h-full w-full relative">
       <div ref={containerRef} className="h-full w-full" />
 
+      {/* Basemap switcher */}
+      <div className="absolute bottom-8 right-3 z-[1000] flex flex-col gap-1">
+        {BASEMAPS.map((bm) => (
+          <button
+            key={bm.id}
+            onClick={() => setActiveBase(bm.id)}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border shadow-md transition-all",
+              activeBase === bm.id
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-card/95 backdrop-blur text-foreground border-border hover:bg-muted"
+            )}
+          >
+            {bm.icon === "map" && <Map size={12} />}
+            {bm.icon === "satellite" && <Satellite size={12} />}
+            {bm.icon === "layers" && <Layers size={12} />}
+            {bm.label}
+          </button>
+        ))}
+      </div>
+
       {/* Parcel legend */}
       {particelle.length > 0 && (
         <div className="absolute bottom-8 left-3 z-[1000] bg-card/95 backdrop-blur border border-border rounded-lg p-3 shadow-lg max-w-[200px]">
-          <p className="text-xs font-semibold text-foreground mb-2">Particelle selezionate</p>
+          <p className="text-xs font-semibold text-foreground mb-2">Particelle</p>
           {particelle.map(p => (
             <div key={p.id} className="flex items-center gap-2 mb-1">
               <div
