@@ -1,15 +1,14 @@
-import { useState, Suspense, lazy } from "react";
-import { Search, FileSearch, RotateCcw, AlertCircle, ChevronLeft, ChevronRight, Loader2, Map } from "lucide-react";
+import { useState } from "react";
+import { Search, FileSearch, RotateCcw, AlertCircle, ChevronLeft, ChevronRight, Loader2, Map, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ParcelInput } from "@/components/ParcelInput";
 import { ConstraintPanel } from "@/components/ConstraintPanel";
 import { LayerControl } from "@/components/LayerControl";
+import { MapView } from "@/components/MapView";
 import { Particella, AnalisiVincolistica } from "@/types/vincoli";
 import { runAnalisiVincolistica } from "@/lib/analisiVincoli";
+import { exportReportPDF } from "@/lib/exportPDF";
 import { cn } from "@/lib/utils";
-
-// Lazy load map to avoid SSR issues with Leaflet
-const MapView = lazy(() => import("@/components/MapView").then(m => ({ default: m.MapView })));
 
 type Step = "input" | "analyzing" | "results";
 
@@ -18,6 +17,7 @@ export default function Index() {
   const [particelle, setParticelle] = useState<Particella[]>([]);
   const [analisi, setAnalisi] = useState<AnalisiVincolistica | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [layerState, setLayerState] = useState({
     catasto: true,
     paesaggistici: true,
@@ -44,6 +44,16 @@ export default function Index() {
     setParticelle([]);
   };
 
+  const handleExportPDF = async () => {
+    if (!analisi) return;
+    setPdfLoading(true);
+    try {
+      exportReportPDF(analisi);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background">
       {/* Header */}
@@ -58,19 +68,31 @@ export default function Index() {
           </div>
         </div>
         <div className="flex-1" />
-        <div className="flex items-center gap-2 text-xs text-primary-foreground/70">
-          <span className="hidden sm:block">D.Lgs. 42/2004 · D.Lgs. 152/2006 · R.D. 3267/1923</span>
-        </div>
-        {step === "results" && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleReset}
-            className="text-primary-foreground/80 hover:text-primary-foreground hover:bg-primary-light h-8 gap-1.5 text-xs"
-          >
-            <RotateCcw size={13} />
-            Nuova analisi
-          </Button>
+        <span className="hidden sm:block text-xs text-primary-foreground/60">
+          D.Lgs. 42/2004 · D.Lgs. 152/2006 · R.D. 3267/1923
+        </span>
+        {step === "results" && analisi && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleExportPDF}
+              disabled={pdfLoading}
+              className="text-primary-foreground/80 hover:text-primary-foreground hover:bg-primary-light h-8 gap-1.5 text-xs border border-primary-foreground/20"
+            >
+              {pdfLoading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+              Esporta PDF
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleReset}
+              className="text-primary-foreground/80 hover:text-primary-foreground hover:bg-primary-light h-8 gap-1.5 text-xs"
+            >
+              <RotateCcw size={13} />
+              Nuova analisi
+            </Button>
+          </div>
         )}
       </header>
 
@@ -123,21 +145,25 @@ export default function Index() {
                 <div>
                   <p className="text-sm font-semibold text-foreground">Analisi in corso...</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Interrogazione banche dati<br />
-                    nazionali e regionali
+                    Interrogazione banche dati<br />nazionali e regionali
                   </p>
                 </div>
                 <div className="w-full space-y-1.5 text-left bg-muted/30 rounded-lg p-3">
                   {[
+                    "Catasto WFS — Agenzia delle Entrate",
                     "Geoportale Nazionale (MiC)",
-                    "ISPRA - Banca dati PAI",
+                    "ISPRA — Banca dati PAI",
                     "Rete Natura 2000 (MASE)",
                     "Catasto Vincolo Idrogeologico",
-                    "PGRA - Rischio alluvioni",
+                    "PGRA — Rischio alluvioni",
                     "Mappe servitù reti",
                   ].map((s, i) => (
                     <div key={s} className="flex items-center gap-2">
-                      <Loader2 size={10} className="text-primary animate-spin flex-shrink-0" style={{ animationDelay: `${i * 200}ms` }} />
+                      <Loader2
+                        size={10}
+                        className="text-primary animate-spin flex-shrink-0"
+                        style={{ animationDelay: `${i * 200}ms` }}
+                      />
                       <span className="text-xs text-muted-foreground">{s}</span>
                     </div>
                   ))}
@@ -147,11 +173,25 @@ export default function Index() {
 
             {step === "results" && analisi && (
               <>
-                <div>
-                  <h2 className="text-sm font-semibold text-foreground">Analisi vincolistica</h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {analisi.particelle.length} particella/e · {analisi.dataAnalisi}
-                  </p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground">Analisi vincolistica</h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {analisi.particelle.length} particella/e · {analisi.dataAnalisi}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportPDF}
+                    disabled={pdfLoading}
+                    className="h-7 text-xs gap-1 flex-shrink-0"
+                  >
+                    {pdfLoading
+                      ? <Loader2 size={11} className="animate-spin" />
+                      : <Download size={11} />}
+                    PDF
+                  </Button>
                 </div>
                 <ConstraintPanel analisi={analisi} />
                 <div className="pt-2 border-t border-border">
@@ -170,33 +210,29 @@ export default function Index() {
         {/* Sidebar toggle */}
         <button
           onClick={() => setSidebarOpen(o => !o)}
-          className="absolute left-0 top-1/2 -translate-y-1/2 z-20 w-5 h-10 bg-card border border-border rounded-r-lg flex items-center justify-center shadow-md hover:bg-muted transition-colors"
+          className="absolute top-1/2 -translate-y-1/2 z-20 w-5 h-10 bg-card border border-border rounded-r-lg flex items-center justify-center shadow-md hover:bg-muted transition-colors"
           style={{ left: sidebarOpen ? "320px" : "0px" }}
         >
-          {sidebarOpen ? <ChevronLeft size={12} className="text-muted-foreground" /> : <ChevronRight size={12} className="text-muted-foreground" />}
+          {sidebarOpen
+            ? <ChevronLeft size={12} className="text-muted-foreground" />
+            : <ChevronRight size={12} className="text-muted-foreground" />}
         </button>
 
         {/* Map area */}
         <main className="flex-1 relative overflow-hidden">
-          <Suspense fallback={
-            <div className="h-full flex items-center justify-center bg-muted/20">
-              <Loader2 className="animate-spin text-primary" size={32} />
-            </div>
-          }>
-            <MapView
-              particelle={particelle}
-              showCatasto={layerState.catasto}
-              showVincoliPaesaggistici={layerState.paesaggistici}
-              showVincoliIdrogeologici={layerState.idrogeologici}
-              showNatura2000={layerState.natura2000}
-              showPAI={layerState.pai}
-            />
-          </Suspense>
+          <MapView
+            particelle={particelle}
+            showCatasto={layerState.catasto}
+            showVincoliPaesaggistici={layerState.paesaggistici}
+            showVincoliIdrogeologici={layerState.idrogeologici}
+            showNatura2000={layerState.natura2000}
+            showPAI={layerState.pai}
+          />
 
           {/* Layer control */}
           <LayerControl onChange={(next) => setLayerState(prev => ({ ...prev, ...next }))} />
 
-          {/* Empty state overlay */}
+          {/* Empty state */}
           {particelle.length === 0 && step === "input" && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="bg-card/90 backdrop-blur border border-border rounded-2xl px-8 py-6 text-center shadow-xl max-w-sm">
@@ -205,7 +241,7 @@ export default function Index() {
                 </div>
                 <h3 className="font-semibold text-foreground text-sm mb-1">Inserisci le particelle catastali</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Utilizza il pannello laterale per inserire i dati catastali dei terreni da analizzare. Il perimetro verrà visualizzato su questa mappa.
+                  Utilizza il pannello laterale per inserire i dati catastali. Il perimetro verrà ricercato nel WFS del Catasto e visualizzato su questa mappa.
                 </p>
               </div>
             </div>
