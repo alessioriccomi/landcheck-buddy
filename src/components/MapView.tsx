@@ -117,7 +117,8 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const wmsLayersRef = useRef<Record<string, L.TileLayer.WMS | L.TileLayer>>({});
-  const parcelLayerRef = useRef<L.FeatureGroup | null>(null);
+  // Track parcel polygons added directly to map so we can remove them on update
+  const parcelPolygonsRef = useRef<L.Polygon[]>([]);
   const basemapRef = useRef<L.TileLayer | L.TileLayer.WMS | null>(null);
   const catastoOverlayRef = useRef<L.TileLayer.WMS | null>(null);
   const [activeBase, setActiveBase] = useState<BasemapId>("osm");
@@ -201,10 +202,6 @@ export function MapView({
 
     wmsLayersRef.current = { paesaggio, pai, natura };
 
-    // Parcel feature group — rendered in parcelsPane, always on top
-    const fg = L.featureGroup([], { pane: "parcelsPane" } as L.LayerOptions).addTo(map);
-    parcelLayerRef.current = fg;
-
     mapRef.current = map;
 
     return () => {
@@ -269,10 +266,11 @@ export function MapView({
   // ── Draw parcels (WFS + demo fallback) ─────────────────────
   useEffect(() => {
     const map = mapRef.current;
-    const fg = parcelLayerRef.current;
-    if (!map || !fg) return;
+    if (!map) return;
 
-    fg.clearLayers();
+    // Remove all previously drawn parcel polygons from map
+    parcelPolygonsRef.current.forEach(p => map.removeLayer(p));
+    parcelPolygonsRef.current = [];
 
     if (particelle.length === 0) {
       map.setView(CENTER, 13);
@@ -280,6 +278,7 @@ export function MapView({
     }
 
     const geometries: Record<string, L.LatLngExpression[][]> = {};
+    const drawnPolygons: L.Polygon[] = [];
 
     const drawParcel = async (p: Particella, idx: number) => {
       let coords: L.LatLngExpression[][] | null = null;
@@ -303,22 +302,22 @@ export function MapView({
         // fallback below
       }
 
-      // Demo fallback
+      // Demo fallback — always uses visible coords near Rome
       if (!coords) {
         const base = DEMO_POLYGONS[idx % DEMO_POLYGONS.length];
         coords = [base.map(([lat, lng]) => [
-          lat + idx * 0.003,
-          lng + idx * 0.003,
+          lat + idx * 0.004,
+          lng + idx * 0.004,
         ] as L.LatLngExpression)];
       }
 
       const color = p.color || "#3b82f6";
 
-      // Add directly to map with explicit pane to guarantee visibility above all WMS/tile layers
+      // Polygon always in parcelsPane (zIndex 650) — above all WMS/tile layers
       const polygon = L.polygon(coords, {
         color,
         fillColor: color,
-        fillOpacity: 0.35,
+        fillOpacity: 0.5,
         weight: 4,
         pane: "parcelsPane",
       });
@@ -328,17 +327,19 @@ export function MapView({
         { permanent: false, direction: "center", className: "leaflet-custom-tooltip" }
       );
 
-      // Add to map directly (NOT to featureGroup) so pane assignment is respected
       polygon.addTo(map);
-      // Also add to fg for bounds calculation only
-      fg.addLayer(polygon);
+      drawnPolygons.push(polygon);
       geometries[p.id] = coords;
     };
 
     Promise.all(particelle.map((p, i) => drawParcel(p, i))).then(() => {
-      if (fg.getLayers().length > 0) {
+      // Store ref so next run can clean them up
+      parcelPolygonsRef.current = drawnPolygons;
+
+      if (drawnPolygons.length > 0) {
         try {
-          map.fitBounds(fg.getBounds(), { padding: [40, 40] });
+          const group = L.featureGroup(drawnPolygons);
+          map.fitBounds(group.getBounds(), { padding: [40, 40] });
         } catch {
           map.setView(CENTER, 14);
         }
