@@ -226,10 +226,27 @@ interface MapViewProps {
   showPAI: boolean;
   onParcelGeometries?: (geoms: Record<string, L.LatLngExpression[][]>) => void;
   onAddParticella?: (p: Particella) => void;
-  onUpdateSuperficie?: (id: string, mq: number) => void;
 }
 
 type ParcelStatus = "idle" | "loading" | "real" | "placeholder";
+
+// Helper: add a DivIcon label marker on a polygon
+function addParcelLabel(map: L.Map, polygon: L.Polygon, text: string, pane: string): L.Marker {
+  const center = polygon.getBounds().getCenter();
+  const marker = L.marker(center, {
+    icon: L.divIcon({
+      className: "leaflet-parcel-label",
+      html: text,
+      iconSize: undefined,
+      iconAnchor: undefined,
+    }),
+    interactive: false,
+    pane,
+    zIndexOffset: 100,
+  });
+  marker.addTo(map);
+  return marker;
+}
 
 export function MapView({
   particelle,
@@ -240,7 +257,6 @@ export function MapView({
   showPAI,
   onParcelGeometries,
   onAddParticella,
-  onUpdateSuperficie,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -251,8 +267,12 @@ export function MapView({
   const activeBaseRef = useRef<BasemapId>("osm");
   const [activeBase, setActiveBase] = useState<BasemapId>("osm");
   const [parcelStatuses, setParcelStatuses] = useState<Record<string, ParcelStatus>>({});
+  // Local area map: parcelId → mq (avoids triggering re-render loop in parent)
+  const [localAreas, setLocalAreas] = useState<Record<string, number>>({});
   const [clickLoading, setClickLoading] = useState(false);
   const [clickMode, setClickMode] = useState(false);
+  // Track parcel IDs already drawn/fetched to prevent redundant re-runs
+  const drawnParcelIdsRef = useRef<string>("");
 
   // Keep refs for callbacks so map click handler always has fresh values
   const onAddParticellaRef = useRef(onAddParticella);
@@ -491,9 +511,16 @@ export function MapView({
     const map = mapRef.current;
     if (!map) return;
 
+    // KEY FIX: only re-draw when the set of parcel IDs actually changes,
+    // NOT when superficieMq or other derived data changes (prevents loop).
+    const currentIds = particelle.map(p => p.id).join(",");
+    if (currentIds === drawnParcelIdsRef.current) return;
+    drawnParcelIdsRef.current = currentIds;
+
     // Remove previous layers
     parcelLayersRef.current.forEach(layer => { try { map.removeLayer(layer); } catch {} });
     parcelLayersRef.current = [];
+    setLocalAreas({});
 
     if (particelle.length === 0) {
       map.setView(CENTER, 13);
@@ -502,8 +529,9 @@ export function MapView({
 
     const geometries: Record<string, L.LatLngExpression[][]> = {};
     const allPlaceholderPolygons: L.Polygon[] = [];
+    const allLabelMarkers: L.Marker[] = [];
 
-    // 1. Draw placeholder polygons immediately
+    // 1. Draw placeholder polygons immediately with DivIcon labels
     particelle.forEach((p, idx) => {
       const center = getComuneCoords(p.comune);
       const rawCoords = makePlaceholderPolygon(center, idx);
@@ -523,28 +551,23 @@ export function MapView({
         dashArray: "8 5",
       });
 
-      // Permanent label showing Fg./Part. number
-      const label = `Fg.${p.foglio} / ${p.particella}`;
-      polygon.bindTooltip(label, {
-        permanent: true,
-        direction: "center",
-        className: "leaflet-parcel-label",
-        offset: [0, 0],
-      });
-
       polygon.bindPopup(
         `<strong>${p.comune}</strong><br>` +
-        `Foglio ${p.foglio} / Particella ${p.particella}` +
-        (p.superficieMq ? `<br><span style="color:#16a34a">Superficie: ${formatArea(p.superficieMq)}</span>` : "") +
-        `<br><em style="font-size:10px;opacity:0.6">⚠ Perimetro stimato</em>`
+        `Foglio <b>${p.foglio}</b> / Particella <b>${p.particella}</b><br>` +
+        `<em style="font-size:10px;opacity:0.6">⚠ Perimetro stimato</em>`
       );
 
       polygon.addTo(map);
       geometries[p.id] = coords;
       allPlaceholderPolygons.push(polygon);
+
+      // DivIcon label marker — reliable alternative to bindTooltip(permanent)
+      const labelText = `Fg.${p.foglio} / ${p.particella}`;
+      const lm = addParcelLabel(map, polygon, labelText, "parcelsPane");
+      allLabelMarkers.push(lm);
     });
 
-    parcelLayersRef.current = [...allPlaceholderPolygons];
+    parcelLayersRef.current = [...allPlaceholderPolygons, ...allLabelMarkers];
 
     // Center on placeholders immediately
     try {
@@ -567,24 +590,28 @@ export function MapView({
       const [lat, lng] = getComuneCoords(p.comune);
       const color = p.color || "#3b82f6";
       const placeholderPoly = allPlaceholderPolygons[idx];
+      const placeholderLabel = allLabelMarkers[idx];
 
       try {
         const features = await fetchParcelGeometry(lat, lng, 0.005);
 
         if (features.length === 0) throw new Error("No features returned");
 
-        // Remove placeholder for this parcel
+        // Remove placeholder polygon + its label
         try { map.removeLayer(placeholderPoly); } catch {}
-        parcelLayersRef.current = parcelLayersRef.current.filter(l => l !== placeholderPoly);
+        try { map.removeLayer(placeholderLabel); } catch {}
+        parcelLayersRef.current = parcelLayersRef.current.filter(
+          l => l !== placeholderPoly && l !== placeholderLabel
+        );
 
         const realCoords: L.LatLngExpression[][] = [];
         let totalMq = 0;
+        let firstPoly: L.Polygon | null = null;
 
         features.forEach(feat => {
           if (!feat.geometry || feat.geometry.type !== "Polygon") return;
           const rings = (feat.geometry as GeoJSON.Polygon).coordinates;
 
-          // Calculate area
           totalMq += area(feat as GeoJSON.Feature<GeoJSON.Polygon>);
 
           const leafletRings = rings.map(ring =>
@@ -601,31 +628,29 @@ export function MapView({
             pane: "parcelsPane",
           });
 
-          // Permanent label
-          const labelText = `Fg.${p.foglio} / ${p.particella}`;
-          poly.bindTooltip(labelText, {
-            permanent: true,
-            direction: "center",
-            className: "leaflet-parcel-label",
-            offset: [0, 0],
-          });
-
-          const mqRounded = Math.round(totalMq);
           poly.bindPopup(
             `<strong>${p.comune}</strong><br>` +
-            `Foglio ${p.foglio} / Particella ${p.particella}<br>` +
-            `<span style="color:#16a34a;font-weight:600">Superficie: ${formatArea(mqRounded)}</span><br>` +
+            `Foglio <b>${p.foglio}</b> / Particella <b>${p.particella}</b><br>` +
+            `<span style="color:#16a34a;font-weight:600">Superficie: ${formatArea(Math.round(totalMq))}</span><br>` +
             `<em style="font-size:10px;color:#16a34a">✓ Perimetro reale (WFS)</em>`
           );
 
           poly.addTo(map);
           parcelLayersRef.current.push(poly);
+          if (!firstPoly) firstPoly = poly;
         });
+
+        // Add a single DivIcon label on the first (largest) polygon
+        if (firstPoly) {
+          const lm = addParcelLabel(map, firstPoly, `Fg.${p.foglio} / ${p.particella}`, "parcelsPane");
+          parcelLayersRef.current.push(lm);
+        }
 
         const mqFinal = Math.round(totalMq);
         geometries[p.id] = realCoords;
         onParcelGeometries?.(geometries);
-        onUpdateSuperficie?.(p.id, mqFinal);
+        // Store area locally to avoid re-triggering parent's useEffect
+        setLocalAreas(prev => ({ ...prev, [p.id]: mqFinal }));
         setParcelStatuses(prev => ({ ...prev, [p.id]: "real" }));
       } catch (err) {
         console.warn(`WFS fetch failed for ${p.comune}:`, err);
@@ -635,8 +660,8 @@ export function MapView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [particelle]);
 
-  // ── Total area display ──────────────────────────────────────
-  const totalMq = particelle.reduce((sum, p) => sum + (p.superficieMq ?? 0), 0);
+  // ── Total area display (local, avoids parent re-render loop) ─
+  const totalMq = Object.values(localAreas).reduce((s, v) => s + v, 0);
 
   return (
     <div className="h-full w-full relative">
@@ -718,9 +743,9 @@ export function MapView({
                   <span className="text-xs text-foreground block truncate">
                     Fg.{p.foglio} / {p.particella}
                   </span>
-                  {p.superficieMq && (
+                  {localAreas[p.id] && (
                     <span className="text-[10px] text-green-600 dark:text-green-400 block">
-                      {formatArea(p.superficieMq)}
+                      {formatArea(localAreas[p.id])}
                     </span>
                   )}
                 </div>
