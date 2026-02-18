@@ -29,6 +29,11 @@ function gmlToGeoJSON(gmlText: string): GeoJSON.FeatureCollection {
     const labelMatch = featureXml.match(/<CP:label>(.*?)<\/CP:label>/);
     const label = labelMatch ? labelMatch[1] : "";
 
+    // Extract national cadastral reference (foglio/particella)
+    // Format: IT.AGE.PLA.CODCOMUNE_FOGLIO_PARTICELLA
+    const nationalIdMatch = featureXml.match(/<CP:nationalCadastralReference>(.*?)<\/CP:nationalCadastralReference>/);
+    const nationalRef = nationalIdMatch ? nationalIdMatch[1] : "";
+
     const rings: [number, number][][] = [];
     const posListRegex = /<gml:posList[^>]*>([\s\S]*?)<\/gml:posList>/g;
     let posMatch: RegExpExecArray | null;
@@ -43,7 +48,7 @@ function gmlToGeoJSON(gmlText: string): GeoJSON.FeatureCollection {
     features.push({
       type: "Feature",
       geometry: { type: "Polygon", coordinates: rings },
-      properties: { localId, label },
+      properties: { localId, label, nationalRef },
     });
   }
 
@@ -61,7 +66,6 @@ serve(async (req) => {
   try {
     // ── WMS tile proxy mode ──────────────────────────────────
     if (mode === "wms") {
-      // Forward all WMS query params to AdE WMS server
       const wmsParams = new URLSearchParams();
       for (const [key, value] of url.searchParams.entries()) {
         if (key !== "mode") wmsParams.set(key, value);
@@ -92,6 +96,9 @@ serve(async (req) => {
     const lat = parseFloat(url.searchParams.get("lat") ?? "");
     const lng = parseFloat(url.searchParams.get("lng") ?? "");
     const radius = parseFloat(url.searchParams.get("radius") ?? "0.005");
+    // Optional foglio/particella filters
+    const foglio = url.searchParams.get("foglio") ?? "";
+    const particella = url.searchParams.get("particella") ?? "";
 
     if (isNaN(lat) || isNaN(lng)) {
       return new Response(
@@ -105,15 +112,30 @@ serve(async (req) => {
     const minLng = lng - radius;
     const maxLng = lng + radius;
 
+    // Build CQL_FILTER for foglio and particella if provided
+    // The nationalCadastralReference format is: IT.AGE.PLA.CODCOMUNE_FOGLIO_PARTICELLA
+    // We filter using LIKE patterns on the reference
+    let cqlFilter = "";
+    if (foglio && particella) {
+      // Pad foglio to 4 digits and particella to 5 digits as used in the cadastral system
+      const foglioStr = foglio.padStart(4, "0");
+      const particellaStr = particella.padStart(5, "0");
+      cqlFilter = `&CQL_FILTER=CP.nationalCadastralReference LIKE '%_${foglioStr}_${particellaStr}'`;
+    } else if (foglio) {
+      const foglioStr = foglio.padStart(4, "0");
+      cqlFilter = `&CQL_FILTER=CP.nationalCadastralReference LIKE '%_${foglioStr}_%'`;
+    }
+
     const wfsUrl =
       `https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php` +
       `?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature` +
       `&TYPENAMES=CP:CadastralParcel` +
       `&SRSNAME=urn:ogc:def:crs:EPSG::6706` +
       `&BBOX=${minLat},${minLng},${maxLat},${maxLng}` +
-      `&COUNT=50`;
+      `&COUNT=50` +
+      cqlFilter;
 
-    console.log("WFS request:", wfsUrl);
+    console.log("WFS request:", wfsUrl.substring(0, 200));
 
     const response = await fetch(wfsUrl, {
       headers: {
@@ -134,6 +156,53 @@ serve(async (req) => {
     console.log("GML response length:", gmlText.length, "chars");
     const geojson = gmlToGeoJSON(gmlText);
     console.log("Parsed features:", geojson.features.length);
+
+    // If CQL filter was used but returned nothing, fallback to bbox-only results
+    // (some municipalities may not support CQL_FILTER)
+    if (geojson.features.length === 0 && cqlFilter) {
+      console.log("CQL filter returned 0 features, trying without filter...");
+      const wfsUrlFallback =
+        `https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php` +
+        `?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature` +
+        `&TYPENAMES=CP:CadastralParcel` +
+        `&SRSNAME=urn:ogc:def:crs:EPSG::6706` +
+        `&BBOX=${minLat},${minLng},${maxLat},${maxLng}` +
+        `&COUNT=50`;
+
+      const resp2 = await fetch(wfsUrlFallback, {
+        headers: {
+          "Accept": "application/xml, text/xml",
+          "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
+        },
+      });
+
+      if (resp2.ok) {
+        const gml2 = await resp2.text();
+        const gj2 = gmlToGeoJSON(gml2);
+        console.log("Fallback parsed features:", gj2.features.length);
+        
+        // Try to find the best matching feature by label
+        if (foglio && particella && gj2.features.length > 0) {
+          const foglioNum = parseInt(foglio, 10).toString();
+          const particellaNum = parseInt(particella, 10).toString();
+          const matched = gj2.features.filter(f => {
+            const lbl: string = f.properties?.label ?? "";
+            // label can be "FG/PART" or similar
+            return lbl.includes(particellaNum) || 
+              (f.properties?.nationalRef ?? "").includes(particellaNum);
+          });
+          if (matched.length > 0) {
+            return new Response(JSON.stringify({ type: "FeatureCollection", features: matched }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
+        
+        return new Response(JSON.stringify(gj2), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
 
     return new Response(JSON.stringify(geojson), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
