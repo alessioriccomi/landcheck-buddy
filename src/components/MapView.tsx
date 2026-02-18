@@ -15,6 +15,9 @@ L.Icon.Default.mergeOptions({ iconUrl, shadowUrl: iconShadow });
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
+// WMS proxy: routes tile requests through our edge function to bypass AdE CORS block
+const WMS_PROXY_URL = `${SUPABASE_URL}/functions/v1/wfs-proxy?mode=wms`;
+
 // ──────────────────────────────────────────────────────────────
 // Dizionario coordinate capoluoghi e comuni italiani principali
 // ──────────────────────────────────────────────────────────────
@@ -229,8 +232,9 @@ export function MapView({
   const parcelLayersRef = useRef<L.Layer[]>([]);
   const basemapRef = useRef<L.TileLayer | null>(null);
   const catastoOverlayRef = useRef<L.TileLayer.WMS | null>(null);
+  const activeBaseRef = useRef<BasemapId>("osm");
   const [activeBase, setActiveBase] = useState<BasemapId>("osm");
-  const [parcelStatuses, setParcelStatuses] = useState<Record<string, ParcelStatus>>({});
+  const [parcelStatuses, setParcelStatuses] = useState<Record<string, ParcelStatus>>({}); 
 
   // ── Initialize map once ─────────────────────────────────────
   useEffect(() => {
@@ -264,18 +268,60 @@ export function MapView({
       pane: "wmsPane",
     };
 
-    // ── Catasto WMS overlay ──────────────────────────────────
-    // No crossOrigin set → browser loads tiles as plain <img>, no CORS block
-    const catastoWms = L.tileLayer.wms(
-      "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
+    // ── Catasto WMS overlay via proxy ────────────────────────
+    // AdE WMS requires EPSG:6706 and blocks browser requests via SSL.
+    // We use a plain TileLayer with a custom getTileUrl that routes
+    // every tile through our edge function proxy server-side.
+    const proxyBase = `${SUPABASE_URL}/functions/v1/wfs-proxy`;
+
+    const CatastoTileLayer = L.TileLayer.extend({
+      getTileUrl(coords: L.Coords): string {
+        const map = (this as unknown as { _map: L.Map })._map;
+        if (!map) return "";
+        // Get tile bounds in lat/lng
+        const tileBounds = map.unproject(
+          [coords.x * 256, coords.y * 256],
+          coords.z
+        );
+        const tileBoundsNE = map.unproject(
+          [(coords.x + 1) * 256, (coords.y + 1) * 256],
+          coords.z
+        );
+        // Build bounding box: south,west,north,east (EPSG:6706 axis order)
+        const south = Math.min(tileBounds.lat, tileBoundsNE.lat);
+        const north = Math.max(tileBounds.lat, tileBoundsNE.lat);
+        const west = Math.min(tileBounds.lng, tileBoundsNE.lng);
+        const east = Math.max(tileBounds.lng, tileBoundsNE.lng);
+        const bbox = `${south},${west},${north},${east}`;
+
+        const params = new URLSearchParams({
+          mode: "wms",
+          SERVICE: "WMS",
+          VERSION: "1.3.0",
+          REQUEST: "GetMap",
+          LAYERS: "CP.CadastralParcel",
+          FORMAT: "image/png",
+          TRANSPARENT: "true",
+          CRS: "EPSG:6706",
+          WIDTH: "256",
+          HEIGHT: "256",
+          BBOX: bbox,
+        });
+        return `${proxyBase}?${params.toString()}`;
+      },
+    });
+
+    const catastoWms = new (CatastoTileLayer as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
+      proxyBase,
       {
-        ...wmsCommonOptions,
-        layers: "CP.CadastralParcel",
         opacity: 0.85,
         attribution: "Agenzia delle Entrate",
-      } as L.WMSOptions & { pane: string }
+        pane: "wmsPane",
+        tileSize: 256,
+        maxZoom: 19,
+      } as L.TileLayerOptions & { pane: string }
     );
-    catastoOverlayRef.current = catastoWms;
+    catastoOverlayRef.current = catastoWms as unknown as L.TileLayer.WMS;
 
     const zoningOpts = { ...wmsCommonOptions, layers: "CP.CadastralZoning", opacity: 0.35 };
     const paesaggio = L.tileLayer.wms(
@@ -300,31 +346,44 @@ export function MapView({
     };
   }, []);
 
-  // ── Switch basemap ──────────────────────────────────────────
+  // ── Switch basemap + catasto overlay ──────────────────────────
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    if (basemapRef.current) map.removeLayer(basemapRef.current);
+    activeBaseRef.current = activeBase;
 
+    // Swap basemap tile layer
+    if (basemapRef.current) map.removeLayer(basemapRef.current);
     const newBase = makeBaselayer(activeBase);
+    // Ensure basemap is added BELOW everything else (insertAt index 0 not needed — Leaflet stacks by addTo order)
     newBase.addTo(map);
     basemapRef.current = newBase;
 
+    // When catasto is selected, force zoom ≥ 15 so WMS tiles are visible
+    if (activeBase === "catasto" && map.getZoom() < 15) {
+      map.setZoom(15);
+    }
+
+    // Manage catasto WMS overlay
     const catastoWms = catastoOverlayRef.current;
     if (catastoWms) {
       const shouldShow = showCatasto || activeBase === "catasto";
-      if (shouldShow && !map.hasLayer(catastoWms)) catastoWms.addTo(map);
-      else if (!shouldShow && map.hasLayer(catastoWms)) map.removeLayer(catastoWms);
+      if (shouldShow) {
+        if (!map.hasLayer(catastoWms)) catastoWms.addTo(map);
+        // Bring overlay on top of basemap
+        catastoWms.bringToFront();
+      } else {
+        if (map.hasLayer(catastoWms)) map.removeLayer(catastoWms);
+      }
     }
   }, [activeBase, showCatasto]);
 
-  // ── Toggle WMS overlays ─────────────────────────────────────
+  // ── Toggle WMS overlays (vincoli) ──────────────────────────
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    const catastoWms = catastoOverlayRef.current;
     const { paesaggio, pai, natura } = wmsLayersRef.current;
 
     const toggle = (layer: L.Layer | undefined | null, active: boolean) => {
@@ -333,11 +392,10 @@ export function MapView({
       if (!active && map.hasLayer(layer)) map.removeLayer(layer);
     };
 
-    toggle(catastoWms, showCatasto || activeBase === "catasto");
     toggle(paesaggio, showVincoliPaesaggistici);
     toggle(pai, showPAI);
     toggle(natura, showNatura2000);
-  }, [showCatasto, showVincoliPaesaggistici, showVincoliIdrogeologici, showNatura2000, showPAI, activeBase]);
+  }, [showVincoliPaesaggistici, showVincoliIdrogeologici, showNatura2000, showPAI]);
 
   // ── Draw parcels ────────────────────────────────────────────
   useEffect(() => {
