@@ -227,6 +227,14 @@ export default function Index() {
             showVincoliIdrogeologici={layerState.idrogeologici}
             showNatura2000={layerState.natura2000}
             showPAI={layerState.pai}
+            onAddParticella={(p) => {
+              if (step === "input") setParticelle(prev => [...prev, p]);
+            }}
+            onUpdateSuperficie={(id, mq) => {
+              setParticelle(prev =>
+                prev.map(p => p.id === id ? { ...p, superficieMq: mq } : p)
+              );
+            }}
           />
 
           {/* Layer control */}
