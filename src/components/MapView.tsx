@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Particella } from "@/types/vincoli";
-import { Satellite, Map, Layers, Loader2 } from "lucide-react";
+import { Particella, PARCEL_COLORS } from "@/types/vincoli";
+import { Satellite, Map, Layers, Loader2, MousePointer } from "lucide-react";
 import { cn } from "@/lib/utils";
+import area from "@turf/area";
 
 // Fix Leaflet icon paths for Vite
 import iconUrl from "leaflet/dist/images/marker-icon.png";
@@ -14,9 +15,6 @@ L.Icon.Default.mergeOptions({ iconUrl, shadowUrl: iconShadow });
 // ── Supabase project config ────────────────────────────────────
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
-
-// WMS proxy: routes tile requests through our edge function to bypass AdE CORS block
-const WMS_PROXY_URL = `${SUPABASE_URL}/functions/v1/wfs-proxy?mode=wms`;
 
 // ──────────────────────────────────────────────────────────────
 // Dizionario coordinate capoluoghi e comuni italiani principali
@@ -54,7 +52,6 @@ const COMUNI_COORDS: Record<string, [number, number]> = {
   "ferrara": [44.8381, 11.6198],
   "sassari": [40.7259, 8.5556],
   "latina": [41.4677, 12.9035],
-  "giugliano in campania": [40.9308, 14.1946],
   "monza": [45.5845, 9.2744],
   "siracusa": [37.0755, 15.2866],
   "pescara": [42.4618, 14.2158],
@@ -163,6 +160,22 @@ async function fetchParcelGeometry(
   return geojson.features ?? [];
 }
 
+// Calculate area in m² from GeoJSON polygon features
+function calcAreaMq(features: GeoJSON.Feature[]): number {
+  let totalMq = 0;
+  for (const feat of features) {
+    if (!feat.geometry || feat.geometry.type !== "Polygon") continue;
+    totalMq += area(feat as GeoJSON.Feature<GeoJSON.Polygon>);
+  }
+  return Math.round(totalMq);
+}
+
+// Format area nicely
+function formatArea(mq: number): string {
+  if (mq >= 10000) return `${(mq / 10000).toFixed(2)} ha`;
+  return `${mq.toLocaleString("it-IT")} m²`;
+}
+
 const CENTER: L.LatLngExpression = [41.897, 12.483];
 
 // ── Basemap definitions ────────────────────────────────────────
@@ -196,7 +209,6 @@ function makeBaselayer(id: BasemapId): L.TileLayer {
         }
       );
     case "catasto":
-      // OSM as base + catasto WMS overlay added separately
       return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         maxZoom: 19,
@@ -213,6 +225,8 @@ interface MapViewProps {
   showNatura2000: boolean;
   showPAI: boolean;
   onParcelGeometries?: (geoms: Record<string, L.LatLngExpression[][]>) => void;
+  onAddParticella?: (p: Particella) => void;
+  onUpdateSuperficie?: (id: string, mq: number) => void;
 }
 
 type ParcelStatus = "idle" | "loading" | "real" | "placeholder";
@@ -225,6 +239,8 @@ export function MapView({
   showNatura2000,
   showPAI,
   onParcelGeometries,
+  onAddParticella,
+  onUpdateSuperficie,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -234,7 +250,15 @@ export function MapView({
   const catastoOverlayRef = useRef<L.TileLayer.WMS | null>(null);
   const activeBaseRef = useRef<BasemapId>("osm");
   const [activeBase, setActiveBase] = useState<BasemapId>("osm");
-  const [parcelStatuses, setParcelStatuses] = useState<Record<string, ParcelStatus>>({}); 
+  const [parcelStatuses, setParcelStatuses] = useState<Record<string, ParcelStatus>>({});
+  const [clickLoading, setClickLoading] = useState(false);
+  const [clickMode, setClickMode] = useState(false);
+
+  // Keep refs for callbacks so map click handler always has fresh values
+  const onAddParticellaRef = useRef(onAddParticella);
+  onAddParticellaRef.current = onAddParticella;
+  const particelleRef = useRef(particelle);
+  particelleRef.current = particelle;
 
   // ── Initialize map once ─────────────────────────────────────
   useEffect(() => {
@@ -269,31 +293,19 @@ export function MapView({
     };
 
     // ── Catasto WMS overlay via proxy ────────────────────────
-    // AdE WMS requires EPSG:6706 and blocks browser requests via SSL.
-    // We use a plain TileLayer with a custom getTileUrl that routes
-    // every tile through our edge function proxy server-side.
     const proxyBase = `${SUPABASE_URL}/functions/v1/wfs-proxy`;
 
     const CatastoTileLayer = L.TileLayer.extend({
       getTileUrl(coords: L.Coords): string {
-        const map = (this as unknown as { _map: L.Map })._map;
-        if (!map) return "";
-        // Get tile bounds in lat/lng
-        const tileBounds = map.unproject(
-          [coords.x * 256, coords.y * 256],
-          coords.z
-        );
-        const tileBoundsNE = map.unproject(
-          [(coords.x + 1) * 256, (coords.y + 1) * 256],
-          coords.z
-        );
-        // Build bounding box: south,west,north,east (EPSG:6706 axis order)
+        const m = (this as unknown as { _map: L.Map })._map;
+        if (!m) return "";
+        const tileBounds = m.unproject([coords.x * 256, coords.y * 256], coords.z);
+        const tileBoundsNE = m.unproject([(coords.x + 1) * 256, (coords.y + 1) * 256], coords.z);
         const south = Math.min(tileBounds.lat, tileBoundsNE.lat);
         const north = Math.max(tileBounds.lat, tileBoundsNE.lat);
         const west = Math.min(tileBounds.lng, tileBoundsNE.lng);
         const east = Math.max(tileBounds.lng, tileBoundsNE.lng);
         const bbox = `${south},${west},${north},${east}`;
-
         const params = new URLSearchParams({
           mode: "wms",
           SERVICE: "WMS",
@@ -346,6 +358,88 @@ export function MapView({
     };
   }, []);
 
+  // ── Map click handler (for adding parcels by clicking) ──────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!clickMode) {
+      map.getContainer().style.cursor = "";
+      return;
+    }
+
+    map.getContainer().style.cursor = "crosshair";
+
+    const handleClick = async (e: L.LeafletMouseEvent) => {
+      if (!onAddParticellaRef.current) return;
+      const { lat, lng } = e.latlng;
+      setClickLoading(true);
+      try {
+        const features = await fetchParcelGeometry(lat, lng, 0.001);
+        if (features.length === 0) {
+          setClickLoading(false);
+          return;
+        }
+
+        // Pick first feature that has localId / label
+        const feat = features[0];
+        const props = feat.properties ?? {};
+        const localId: string = props.localId ?? "";
+        const label: string = props.label ?? "";
+
+        // Parse foglio e particella dal localId (formato: IT.AGE.PLA.XXXXX_FFF_PPPPP)
+        // oppure dall'etichetta, es. "123/456"
+        let foglio = "";
+        let particella = label || (localId.split("_").pop() ?? "");
+
+        // Cerca di estrarre foglio dal localId o dal label
+        const labelParts = label.split("/");
+        if (labelParts.length === 2) {
+          foglio = labelParts[0].trim();
+          particella = labelParts[1].trim();
+        } else {
+          const idParts = localId.split("_");
+          if (idParts.length >= 2) {
+            foglio = idParts[idParts.length - 2] ?? "";
+            particella = idParts[idParts.length - 1] ?? "";
+          }
+        }
+
+        // Cerca comune approssimativo dai comuni nel dizionario (closest coords)
+        let bestComune = "Sconosciuto";
+        let bestDist = Infinity;
+        for (const [nome, [clat, clng]] of Object.entries(COMUNI_COORDS)) {
+          const d = Math.hypot(lat - clat, lng - clng);
+          if (d < bestDist) { bestDist = d; bestComune = nome; }
+        }
+        bestComune = bestComune.charAt(0).toUpperCase() + bestComune.slice(1);
+
+      const mq = calcAreaMq(features);
+        const currentLen = particelleRef.current.length;
+        const newP: Particella = {
+          id: crypto.randomUUID(),
+          comune: bestComune,
+          provincia: "",
+          foglio,
+          particella,
+          color: PARCEL_COLORS[currentLen % PARCEL_COLORS.length],
+          superficieMq: mq > 0 ? mq : undefined,
+        } as Particella;
+        onAddParticellaRef.current(newP);
+      } catch (err) {
+        console.warn("Click WFS error:", err);
+      } finally {
+        setClickLoading(false);
+      }
+    };
+
+    map.on("click", handleClick);
+    return () => {
+      map.off("click", handleClick);
+      map.getContainer().style.cursor = "";
+    };
+  }, [clickMode]);
+
   // ── Switch basemap + catasto overlay ──────────────────────────
   useEffect(() => {
     const map = mapRef.current;
@@ -353,25 +447,20 @@ export function MapView({
 
     activeBaseRef.current = activeBase;
 
-    // Swap basemap tile layer
     if (basemapRef.current) map.removeLayer(basemapRef.current);
     const newBase = makeBaselayer(activeBase);
-    // Ensure basemap is added BELOW everything else (insertAt index 0 not needed — Leaflet stacks by addTo order)
     newBase.addTo(map);
     basemapRef.current = newBase;
 
-    // When catasto is selected, force zoom ≥ 15 so WMS tiles are visible
     if (activeBase === "catasto" && map.getZoom() < 15) {
       map.setZoom(15);
     }
 
-    // Manage catasto WMS overlay
     const catastoWms = catastoOverlayRef.current;
     if (catastoWms) {
       const shouldShow = showCatasto || activeBase === "catasto";
       if (shouldShow) {
         if (!map.hasLayer(catastoWms)) catastoWms.addTo(map);
-        // Bring overlay on top of basemap
         catastoWms.bringToFront();
       } else {
         if (map.hasLayer(catastoWms)) map.removeLayer(catastoWms);
@@ -414,7 +503,7 @@ export function MapView({
     const geometries: Record<string, L.LatLngExpression[][]> = {};
     const allPlaceholderPolygons: L.Polygon[] = [];
 
-    // 1. Draw placeholder polygons immediately (one per parcel)
+    // 1. Draw placeholder polygons immediately
     particelle.forEach((p, idx) => {
       const center = getComuneCoords(p.comune);
       const rawCoords = makePlaceholderPolygon(center, idx);
@@ -434,11 +523,20 @@ export function MapView({
         dashArray: "8 5",
       });
 
-      polygon.bindTooltip(
+      // Permanent label showing Fg./Part. number
+      const label = `Fg.${p.foglio} / ${p.particella}`;
+      polygon.bindTooltip(label, {
+        permanent: true,
+        direction: "center",
+        className: "leaflet-parcel-label",
+        offset: [0, 0],
+      });
+
+      polygon.bindPopup(
         `<strong>${p.comune}</strong><br>` +
-        `Fg. ${p.foglio} / Part. ${p.particella}<br>` +
-        `<em style="font-size:10px;opacity:0.7">⚠ Perimetro stimato</em>`,
-        { permanent: false, direction: "top", className: "leaflet-custom-tooltip" }
+        `Foglio ${p.foglio} / Particella ${p.particella}` +
+        (p.superficieMq ? `<br><span style="color:#16a34a">Superficie: ${formatArea(p.superficieMq)}</span>` : "") +
+        `<br><em style="font-size:10px;opacity:0.6">⚠ Perimetro stimato</em>`
       );
 
       polygon.addTo(map);
@@ -480,10 +578,14 @@ export function MapView({
         parcelLayersRef.current = parcelLayersRef.current.filter(l => l !== placeholderPoly);
 
         const realCoords: L.LatLngExpression[][] = [];
+        let totalMq = 0;
 
         features.forEach(feat => {
           if (!feat.geometry || feat.geometry.type !== "Polygon") return;
           const rings = (feat.geometry as GeoJSON.Polygon).coordinates;
+
+          // Calculate area
+          totalMq += area(feat as GeoJSON.Feature<GeoJSON.Polygon>);
 
           const leafletRings = rings.map(ring =>
             ring.map(([lng2, lat2]) => [lat2, lng2] as L.LatLngExpression)
@@ -499,19 +601,31 @@ export function MapView({
             pane: "parcelsPane",
           });
 
-          poly.bindTooltip(
+          // Permanent label
+          const labelText = `Fg.${p.foglio} / ${p.particella}`;
+          poly.bindTooltip(labelText, {
+            permanent: true,
+            direction: "center",
+            className: "leaflet-parcel-label",
+            offset: [0, 0],
+          });
+
+          const mqRounded = Math.round(totalMq);
+          poly.bindPopup(
             `<strong>${p.comune}</strong><br>` +
-            `Fg. ${p.foglio} / Part. ${p.particella}<br>` +
-            `<em style="font-size:10px;color:var(--color-green-500)">✓ Perimetro reale (WFS)</em>`,
-            { permanent: false, direction: "top", className: "leaflet-custom-tooltip" }
+            `Foglio ${p.foglio} / Particella ${p.particella}<br>` +
+            `<span style="color:#16a34a;font-weight:600">Superficie: ${formatArea(mqRounded)}</span><br>` +
+            `<em style="font-size:10px;color:#16a34a">✓ Perimetro reale (WFS)</em>`
           );
 
           poly.addTo(map);
           parcelLayersRef.current.push(poly);
         });
 
+        const mqFinal = Math.round(totalMq);
         geometries[p.id] = realCoords;
         onParcelGeometries?.(geometries);
+        onUpdateSuperficie?.(p.id, mqFinal);
         setParcelStatuses(prev => ({ ...prev, [p.id]: "real" }));
       } catch (err) {
         console.warn(`WFS fetch failed for ${p.comune}:`, err);
@@ -520,6 +634,9 @@ export function MapView({
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [particelle]);
+
+  // ── Total area display ──────────────────────────────────────
+  const totalMq = particelle.reduce((sum, p) => sum + (p.superficieMq ?? 0), 0);
 
   return (
     <div className="h-full w-full relative">
@@ -530,6 +647,33 @@ export function MapView({
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-card/95 backdrop-blur border border-border rounded-lg px-3 py-1.5 flex items-center gap-2 shadow-md">
           <Loader2 size={14} className="animate-spin text-primary" />
           <span className="text-xs text-foreground">Caricamento perimetri reali…</span>
+        </div>
+      )}
+
+      {/* Click loading */}
+      {clickLoading && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-card/95 backdrop-blur border border-border rounded-lg px-3 py-1.5 flex items-center gap-2 shadow-md">
+          <Loader2 size={14} className="animate-spin text-primary" />
+          <span className="text-xs text-foreground">Ricerca particella…</span>
+        </div>
+      )}
+
+      {/* Click mode toggle button */}
+      {onAddParticella && (
+        <div className="absolute top-3 right-3 z-[1000]">
+          <button
+            onClick={() => setClickMode(m => !m)}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border shadow-md transition-all",
+              clickMode
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-card/95 backdrop-blur text-foreground border-border hover:bg-muted"
+            )}
+            title="Clicca sulla mappa per aggiungere una particella"
+          >
+            <MousePointer size={12} />
+            {clickMode ? "Clicca sulla mappa…" : "Aggiungi da mappa"}
+          </button>
         </div>
       )}
 
@@ -554,9 +698,9 @@ export function MapView({
         ))}
       </div>
 
-      {/* Parcel legend */}
+      {/* Parcel legend + total area */}
       {particelle.length > 0 && (
-        <div className="absolute bottom-8 left-3 z-[1000] bg-card/95 backdrop-blur border border-border rounded-lg p-3 shadow-lg max-w-[220px]">
+        <div className="absolute bottom-8 left-3 z-[1000] bg-card/95 backdrop-blur border border-border rounded-lg p-3 shadow-lg max-w-[240px]">
           <p className="text-xs font-semibold text-foreground mb-2">Particelle</p>
           {particelle.map(p => {
             const status = parcelStatuses[p.id];
@@ -570,14 +714,32 @@ export function MapView({
                     borderStyle: status === "real" ? "solid" : "dashed",
                   }}
                 />
-                <span className="text-xs text-muted-foreground truncate flex-1">
-                  {p.comune} {p.foglio}/{p.particella}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs text-foreground block truncate">
+                    Fg.{p.foglio} / {p.particella}
+                  </span>
+                  {p.superficieMq && (
+                    <span className="text-[10px] text-green-600 dark:text-green-400 block">
+                      {formatArea(p.superficieMq)}
+                    </span>
+                  )}
+                </div>
                 {status === "loading" && <Loader2 size={10} className="animate-spin text-primary flex-shrink-0" />}
                 {status === "real" && <span className="text-[10px] text-green-500 flex-shrink-0">✓</span>}
               </div>
             );
           })}
+
+          {/* Total area */}
+          {totalMq > 0 && (
+            <div className="mt-2 pt-2 border-t border-border/50">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground font-medium">Superficie totale</span>
+                <span className="text-xs font-bold text-foreground">{formatArea(totalMq)}</span>
+              </div>
+            </div>
+          )}
+
           {/* Legend types */}
           <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
             <div className="flex items-center gap-2">

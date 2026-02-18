@@ -6,6 +6,7 @@ export interface Particella {
   particella: string;
   subalterno?: string;
   color?: string;
+  superficieMq?: number; // area calcolata dalla geometria WFS reale
 }
 
 export type RischioLevel = "nessuno" | "basso" | "medio" | "alto" | "molto_alto";
