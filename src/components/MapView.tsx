@@ -263,13 +263,13 @@ export function MapView({
 
   }, [showCatasto, showVincoliPaesaggistici, showVincoliIdrogeologici, showNatura2000, showPAI, activeBase]);
 
-  // ── Draw parcels (WFS + demo fallback) ─────────────────────
+  // ── Draw parcels ────────────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    // Remove all previously drawn parcel polygons from map
-    parcelPolygonsRef.current.forEach(p => map.removeLayer(p));
+    // Clean up previously drawn polygons
+    parcelPolygonsRef.current.forEach(poly => map.removeLayer(poly));
     parcelPolygonsRef.current = [];
 
     if (particelle.length === 0) {
@@ -278,73 +278,82 @@ export function MapView({
     }
 
     const geometries: Record<string, L.LatLngExpression[][]> = {};
-    const drawnPolygons: L.Polygon[] = [];
 
-    const drawParcel = async (p: Particella, idx: number) => {
-      let coords: L.LatLngExpression[][] | null = null;
-
-      // Try real WFS first
-      try {
-        const feature = await fetchCadastralParcel(p.comune, p.foglio, p.particella);
-        if (feature?.geometry) {
-          const geom = feature.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon;
-          if (geom.type === "Polygon") {
-            coords = geom.coordinates.map(ring =>
-              ring.map(([lng, lat]) => [lat, lng] as L.LatLngExpression)
-            );
-          } else if (geom.type === "MultiPolygon") {
-            coords = geom.coordinates.flatMap(poly =>
-              poly.map(ring => ring.map(([lng, lat]) => [lat, lng] as L.LatLngExpression))
-            );
-          }
-        }
-      } catch {
-        // fallback below
-      }
-
-      // Demo fallback — always uses visible coords near Rome
-      if (!coords) {
-        const base = DEMO_POLYGONS[idx % DEMO_POLYGONS.length];
-        coords = [base.map(([lat, lng]) => [
-          lat + idx * 0.004,
-          lng + idx * 0.004,
-        ] as L.LatLngExpression)];
-      }
-
+    // ── Step 1: draw demo placeholder immediately (synchronous) ─
+    const placeholders = particelle.map((p, idx) => {
+      const base = DEMO_POLYGONS[idx % DEMO_POLYGONS.length];
+      const coords: L.LatLngExpression[][] = [
+        base.map(([lat, lng]) => [lat + idx * 0.004, lng + idx * 0.004] as L.LatLngExpression)
+      ];
       const color = p.color || "#3b82f6";
-
-      // Polygon always in parcelsPane (zIndex 650) — above all WMS/tile layers
       const polygon = L.polygon(coords, {
         color,
         fillColor: color,
-        fillOpacity: 0.5,
-        weight: 4,
+        fillOpacity: 0.55,
+        weight: 5,
         pane: "parcelsPane",
+        dashArray: "6 4",
       });
-
       polygon.bindTooltip(
-        `<strong>${p.comune}</strong><br>Fg. ${p.foglio} / Part. ${p.particella}`,
+        `<strong>${p.comune}</strong><br>Fg. ${p.foglio} / Part. ${p.particella}<br><em style="font-size:10px;opacity:0.7">Perimetro stimato</em>`,
         { permanent: false, direction: "center", className: "leaflet-custom-tooltip" }
       );
-
       polygon.addTo(map);
-      drawnPolygons.push(polygon);
       geometries[p.id] = coords;
-    };
+      return { polygon, p, idx, coords };
+    });
 
-    Promise.all(particelle.map((p, i) => drawParcel(p, i))).then(() => {
-      // Store ref so next run can clean them up
-      parcelPolygonsRef.current = drawnPolygons;
+    parcelPolygonsRef.current = placeholders.map(x => x.polygon);
 
-      if (drawnPolygons.length > 0) {
-        try {
-          const group = L.featureGroup(drawnPolygons);
-          map.fitBounds(group.getBounds(), { padding: [40, 40] });
-        } catch {
-          map.setView(CENTER, 14);
-        }
-      }
-      onParcelGeometries?.(geometries);
+    // Fit map to placeholders immediately
+    try {
+      const group = L.featureGroup(parcelPolygonsRef.current);
+      map.fitBounds(group.getBounds(), { padding: [40, 40] });
+    } catch {
+      map.setView(CENTER, 14);
+    }
+
+    onParcelGeometries?.(geometries);
+
+    // ── Step 2: try WFS in background, replace placeholder if successful ─
+    placeholders.forEach(({ polygon, p }) => {
+      fetchCadastralParcel(p.comune, p.foglio, p.particella)
+        .then(feature => {
+          if (!feature?.geometry || !mapRef.current) return;
+          const geom = feature.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon;
+          let realCoords: L.LatLngExpression[][] | null = null;
+          if (geom.type === "Polygon") {
+            realCoords = geom.coordinates.map(ring =>
+              ring.map(([lng, lat]) => [lat, lng] as L.LatLngExpression)
+            );
+          } else if (geom.type === "MultiPolygon") {
+            realCoords = geom.coordinates.flatMap(poly =>
+              poly.map(ring => ring.map(([lng, lat]) => [lat, lng] as L.LatLngExpression))
+            );
+          }
+          if (!realCoords) return;
+
+          const color = p.color || "#3b82f6";
+          mapRef.current!.removeLayer(polygon);
+          parcelPolygonsRef.current = parcelPolygonsRef.current.filter(x => x !== polygon);
+
+          const realPolygon = L.polygon(realCoords, {
+            color,
+            fillColor: color,
+            fillOpacity: 0.55,
+            weight: 5,
+            pane: "parcelsPane",
+          });
+          realPolygon.bindTooltip(
+            `<strong>${p.comune}</strong><br>Fg. ${p.foglio} / Part. ${p.particella}`,
+            { permanent: false, direction: "center", className: "leaflet-custom-tooltip" }
+          );
+          realPolygon.addTo(mapRef.current!);
+          parcelPolygonsRef.current.push(realPolygon);
+          geometries[p.id] = realCoords;
+          onParcelGeometries?.(geometries);
+        })
+        .catch(() => { /* keep placeholder */ });
     });
   }, [particelle, onParcelGeometries]);
 
