@@ -230,11 +230,6 @@ export default function Index() {
             onAddParticella={(p) => {
               if (step === "input") setParticelle(prev => [...prev, p]);
             }}
-            onUpdateSuperficie={(id, mq) => {
-              setParticelle(prev =>
-                prev.map(p => p.id === id ? { ...p, superficieMq: mq } : p)
-              );
-            }}
           />
 
           {/* Layer control */}
