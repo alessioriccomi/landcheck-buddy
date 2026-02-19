@@ -357,28 +357,11 @@ interface MapViewProps {
   showNatura2000: boolean;
   showPAI: boolean;
   onParcelGeometries?: (geoms: Record<string, L.LatLngExpression[][]>) => void;
+  onParcelAreaUpdate?: (id: string, mq: number) => void;
   onAddParticella?: (p: Particella) => void;
 }
 
 type ParcelStatus = "idle" | "loading" | "real" | "placeholder";
-
-// Helper: add a DivIcon label marker on a polygon
-function addParcelLabel(map: L.Map, polygon: L.Polygon, text: string, pane: string): L.Marker {
-  const center = polygon.getBounds().getCenter();
-  const marker = L.marker(center, {
-    icon: L.divIcon({
-      className: "",  // no class, we use inline style via html wrapper
-      html: `<div class="leaflet-parcel-label">${text}</div>`,
-      iconSize: [0, 0],   // zero size so marker point = center
-      iconAnchor: [0, 0], // anchor at top-left of 0×0 box; CSS does the centering
-    }),
-    interactive: false,
-    pane,
-    zIndexOffset: 200,
-  });
-  marker.addTo(map);
-  return marker;
-}
 
 export function MapView({
   particelle,
@@ -388,6 +371,7 @@ export function MapView({
   showNatura2000,
   showPAI,
   onParcelGeometries,
+  onParcelAreaUpdate,
   onAddParticella,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -787,6 +771,7 @@ export function MapView({
         geometries[p.id] = realCoords;
         onParcelGeometries?.(geometries);
         setLocalAreas(prev => ({ ...prev, [p.id]: mqFinal }));
+        onParcelAreaUpdate?.(p.id, mqFinal);
         setParcelStatuses(prev => ({ ...prev, [p.id]: "real" }));
       } catch (err) {
         console.warn(`WFS fetch failed for ${p.comune} Fg.${p.foglio} Part.${p.particella}:`, err);

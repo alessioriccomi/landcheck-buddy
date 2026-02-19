@@ -76,28 +76,73 @@ export function exportReportPDF(analisi: AnalisiVincolistica) {
   doc.text("Particelle catastali analizzate", margin, y);
   y += 5;
 
-  const parcelRows = analisi.particelle.map((p, i) => [
-    String(i + 1),
-    p.comune,
-    p.provincia || "—",
-    p.foglio,
-    p.particella,
-    p.subalterno || "—",
-    p.superficieMq ? `${(p.superficieMq / 10000).toFixed(4)} ha` : "—",
-  ]);
+  const totalMq = analisi.particelle.reduce((s, p) => s + (p.superficieMq ?? 0), 0);
+  const hasAreas = analisi.particelle.some(p => p.superficieMq && p.superficieMq > 0);
+
+  const parcelRows = analisi.particelle.map((p, i) => {
+    const mq = p.superficieMq;
+    const superficieStr = mq && mq > 0
+      ? `${mq.toLocaleString("it-IT")} m²\n${(mq / 10000).toFixed(4)} ha`
+      : "—";
+    return [
+      String(i + 1),
+      p.comune,
+      p.provincia || "—",
+      p.foglio,
+      p.particella,
+      p.subalterno || "—",
+      superficieStr,
+    ];
+  });
 
   autoTable(doc, {
     startY: y,
-    head: [["#", "Comune", "Prov.", "Foglio", "Particella", "Sub.", "Superficie"]],
+    head: [["#", "Comune", "Prov.", "Foglio", "Particella", "Sub.", "Superficie reale (WFS)"]],
     body: parcelRows,
     theme: "grid",
     headStyles: { fillColor: [22, 47, 99], textColor: 255, fontSize: 8, fontStyle: "bold" },
     bodyStyles: { fontSize: 8 },
-    columnStyles: { 0: { cellWidth: 8 }, 2: { cellWidth: 12 }, 3: { cellWidth: 16 }, 4: { cellWidth: 20 }, 5: { cellWidth: 12 } },
+    columnStyles: {
+      0: { cellWidth: 8 },
+      2: { cellWidth: 12 },
+      3: { cellWidth: 14 },
+      4: { cellWidth: 18 },
+      5: { cellWidth: 12 },
+      6: { cellWidth: 36 },
+    },
+    didParseCell(data) {
+      if (data.column.index === 6 && data.section === "body") {
+        const val = data.cell.raw as string;
+        if (val !== "—") {
+          data.cell.styles.textColor = [22, 100, 50];
+          data.cell.styles.fontStyle = "bold";
+        }
+      }
+    },
     margin: { left: margin, right: margin },
   });
 
-  y = (doc as any).lastAutoTable.finalY + 8;
+  y = (doc as any).lastAutoTable.finalY + 4;
+
+  // Total area row
+  if (hasAreas && totalMq > 0) {
+    doc.setFillColor(240, 253, 244);
+    doc.setDrawColor(22, 163, 74);
+    doc.rect(margin, y, pageW - margin * 2, 10, "FD");
+    doc.setTextColor(22, 100, 50);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text("Superficie totale complessiva (WFS):", margin + 4, y + 7);
+    doc.text(
+      `${totalMq.toLocaleString("it-IT")} m²  ·  ${(totalMq / 10000).toFixed(4)} ha`,
+      pageW - margin - 4,
+      y + 7,
+      { align: "right" }
+    );
+    y += 14;
+  } else {
+    y += 4;
+  }
 
   // ── Rischio complessivo ───────────────────────────────────
   const rc = RISCHIO_COLOR[analisi.rischioComplessivo] || [100, 100, 100];

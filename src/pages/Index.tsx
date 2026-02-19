@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Search, FileSearch, RotateCcw, AlertCircle, ChevronLeft, ChevronRight, Loader2, Map, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ParcelInput } from "@/components/ParcelInput";
@@ -26,6 +26,13 @@ export default function Index() {
     pai: false,
   });
 
+  // Called by MapView to propagate real WFS area back to the parcel list
+  const handleParcelAreaUpdate = useCallback((id: string, mq: number) => {
+    setParticelle(prev =>
+      prev.map(p => p.id === id ? { ...p, superficieMq: mq } : p)
+    );
+  }, []);
+
   const handleAnalisi = async () => {
     if (particelle.length === 0) return;
     setStep("analyzing");
@@ -46,13 +53,19 @@ export default function Index() {
 
   const handleExportPDF = async () => {
     if (!analisi) return;
+    // Pass current particelle with real areas into the analisi object before export
+    const analisiWithAreas: AnalisiVincolistica = {
+      ...analisi,
+      particelle: particelle,
+    };
     setPdfLoading(true);
     try {
-      exportReportPDF(analisi);
+      exportReportPDF(analisiWithAreas);
     } finally {
       setPdfLoading(false);
     }
   };
+
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background">
@@ -233,6 +246,7 @@ export default function Index() {
             showVincoliIdrogeologici={layerState.idrogeologici}
             showNatura2000={layerState.natura2000}
             showPAI={layerState.pai}
+            onParcelAreaUpdate={handleParcelAreaUpdate}
             onAddParticella={(p) => {
               if (step === "input") setParticelle(prev => [...prev, p]);
             }}
