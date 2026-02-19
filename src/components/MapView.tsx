@@ -245,31 +245,22 @@ function makePlaceholderPolygon(
   ];
 }
 
-// Fetch real parcel geometries from the WFS proxy edge function
-// Uses the full commune bbox for accurate searching across the entire territory
-async function fetchParcelGeometry(
-  bbox: [number, number, number, number], // [south, north, west, east]
+// Fetch real parcel geometry via mode=parcel (Parquet lookup → tiny WFS bbox)
+// This is the correct approach: finds exact coordinates from onData pre-computed DB
+async function searchParcelByAttribute(
+  comune: string,
   foglio: string,
   particella: string,
 ): Promise<GeoJSON.Feature[]> {
-  const [minLat, maxLat, minLng, maxLng] = bbox;
-  const params = new URLSearchParams({
-    minLat: String(minLat),
-    maxLat: String(maxLat),
-    minLng: String(minLng),
-    maxLng: String(maxLng),
-    foglio,
-    particella,
-  });
+  const params = new URLSearchParams({ mode: "parcel", comune, foglio, particella });
   const url = `${SUPABASE_URL}/functions/v1/wfs-proxy?${params.toString()}`;
-
   const resp = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-    },
+    headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
   });
-
-  if (!resp.ok) throw new Error(`WFS proxy error: ${resp.status}`);
+  if (!resp.ok) {
+    const errData = await resp.json().catch(() => ({}));
+    throw new Error(errData.error ?? `WFS proxy error: ${resp.status}`);
+  }
   const geojson: GeoJSON.FeatureCollection = await resp.json();
   return geojson.features ?? [];
 }
@@ -649,19 +640,19 @@ export function MapView({
     particelle.forEach(p => { loadingStatuses[p.id] = "loading"; });
     setParcelStatuses(loadingStatuses);
 
-    // Process each parcel: geocode (bbox-aware) → placeholder → WFS fetch → real polygon
+    // Process each parcel: geocode center → placeholder → mode=parcel lookup → real polygon
     particelle.forEach(async (p, idx) => {
       const color = p.color || "#3b82f6";
 
-      // 1. Geocode the municipality via proxy (gets full commune bbox from Nominatim)
-      let geocodeResult: { lat: number; lng: number; bbox: [number, number, number, number] };
+      // 1. Geocode just for map centering + placeholder position
+      let center: [number, number] = [42.8333, 12.8333];
       try {
-        geocodeResult = await geocodeComuneWithBbox(p.comune);
+        const geocodeResult = await geocodeComuneWithBbox(p.comune);
+        center = [geocodeResult.lat, geocodeResult.lng];
       } catch {
-        geocodeResult = { lat: 42.8333, lng: 12.8333, bbox: [42.33, 43.33, 12.33, 13.33] };
+        // use Italy center fallback
       }
-      const { lat, lng, bbox } = geocodeResult;
-      const center: [number, number] = [lat, lng];
+      const [lat, lng] = center;
 
       // 2. Draw placeholder polygon immediately (near commune center)
       const rawCoords = makePlaceholderPolygon(center, idx);
@@ -682,13 +673,7 @@ export function MapView({
       placeholderPoly.bindPopup(
         `<strong>${p.comune}</strong><br>` +
         `Foglio <b>${p.foglio}</b> / Particella <b>${p.particella}</b><br>` +
-        `<em style="font-size:10px;opacity:0.6">⚠ Perimetro stimato</em>`
-      );
-
-      // Placeholder tooltip (permanent label)
-      placeholderPoly.bindTooltip(
-        `Fg.${p.foglio} / ${p.particella}`,
-        { permanent: true, direction: "center", className: "leaflet-parcel-label", opacity: 1 }
+        `<em style="font-size:10px;opacity:0.6">⚠ Ricerca in corso…</em>`
       );
 
       placeholderPoly.addTo(map);
@@ -702,9 +687,9 @@ export function MapView({
 
       onParcelGeometries?.(geometries);
 
-      // 3. Fetch real geometry from WFS using full commune bbox for precise search
+      // 3. Fetch real geometry via Parquet lookup + tiny WFS bbox (mode=parcel)
       try {
-        const features = await fetchParcelGeometry(bbox, p.foglio, p.particella);
+        const features = await searchParcelByAttribute(p.comune, p.foglio, p.particella);
 
         if (features.length === 0) throw new Error("No features returned");
 
@@ -737,21 +722,15 @@ export function MapView({
             pane: "parcelsPane",
           });
 
-          const surfaceLabel = totalMq > 0
-            ? `<span style="color:#16a34a;font-weight:600">Superficie: ${formatArea(Math.round(totalMq))}</span><br>`
+          const surfaceTxt = totalMq > 0
+            ? `<span style="font-weight:600;color:hsl(142,60%,35%)">Superficie: ${formatArea(Math.round(totalMq))}</span><br>`
             : "";
 
           poly.bindPopup(
             `<strong>${p.comune}</strong><br>` +
             `Foglio <b>${p.foglio}</b> / Particella <b>${p.particella}</b><br>` +
-            surfaceLabel +
-            `<em style="font-size:10px;color:#16a34a">✓ Perimetro reale (WFS)</em>`
-          );
-
-          // Permanent label via Leaflet tooltip (centered, no arrow)
-          poly.bindTooltip(
-            `Fg.${p.foglio} / ${p.particella}`,
-            { permanent: true, direction: "center", className: "leaflet-parcel-label", opacity: 1 }
+            surfaceTxt +
+            `<em style="font-size:11px;color:hsl(142,60%,35%)">✓ Perimetro reale (WFS)</em>`
           );
 
           poly.addTo(map);

@@ -124,22 +124,31 @@
   background: hsl(var(--primary) / 0.7);
 }
 
-/* ── Leaflet parcel permanent tooltip labels ── */
-.leaflet-tooltip.leaflet-parcel-label {
-  background: rgba(255, 255, 255, 0.97) !important;
-  border: 1.5px solid rgba(26, 39, 68, 0.45) !important;
-  border-radius: 4px !important;
-  padding: 2px 7px !important;
-  font-size: 11px !important;
-  font-weight: 700 !important;
-  color: #1a2744 !important;
-  white-space: nowrap !important;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.25) !important;
-  pointer-events: none !important;
+/* ── Leaflet parcel popup styles ── */
+.leaflet-popup-content-wrapper {
+  background: #ffffff !important;
+  border: 1.5px solid hsl(220, 60%, 22%) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 16px rgba(26, 39, 68, 0.22) !important;
+  padding: 0 !important;
 }
 
-/* Remove the default tooltip arrow */
-.leaflet-tooltip.leaflet-parcel-label::before {
-  display: none !important;
+.leaflet-popup-content {
+  margin: 12px 16px !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+  color: hsl(220, 35%, 12%) !important;
+}
+
+.leaflet-popup-tip {
+  background: #ffffff !important;
+  border: 1.5px solid hsl(220, 60%, 22%) !important;
+}
+
+.leaflet-popup-close-button {
+  color: hsl(220, 60%, 22%) !important;
+  font-size: 16px !important;
+  padding: 6px 8px !important;
 }
 
