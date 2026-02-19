@@ -5,6 +5,7 @@ import { Particella, PARCEL_COLORS } from "@/types/vincoli";
 import { Satellite, Map, Layers, Loader2, MousePointer } from "lucide-react";
 import { cn } from "@/lib/utils";
 import area from "@turf/area";
+import { ALL_LAYERS } from "@/components/LayerControl";
 
 // Fix Leaflet icon paths for Vite
 import iconUrl from "leaflet/dist/images/marker-icon.png";
@@ -344,11 +345,7 @@ function makeBaselayer(id: BasemapId): L.TileLayer {
 
 interface MapViewProps {
   particelle: Particella[];
-  showCatasto: boolean;
-  showVincoliPaesaggistici: boolean;
-  showVincoliIdrogeologici: boolean;
-  showNatura2000: boolean;
-  showPAI: boolean;
+  activeLayers: Record<string, boolean>;
   onParcelGeometries?: (geoms: Record<string, L.LatLngExpression[][]>) => void;
   onParcelAreaUpdate?: (id: string, mq: number) => void;
   onAddParticella?: (p: Particella) => void;
@@ -358,15 +355,12 @@ type ParcelStatus = "idle" | "loading" | "real" | "placeholder";
 
 export function MapView({
   particelle,
-  showCatasto,
-  showVincoliPaesaggistici,
-  showVincoliIdrogeologici,
-  showNatura2000,
-  showPAI,
+  activeLayers,
   onParcelGeometries,
   onParcelAreaUpdate,
   onAddParticella,
 }: MapViewProps) {
+  const showCatasto = activeLayers["catasto"] ?? true;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const wmsLayersRef = useRef<Record<string, L.TileLayer.WMS | L.TileLayer>>({});
@@ -508,21 +502,25 @@ export function MapView({
     );
     fabbricatiOverlayRef.current = fabbricatiLayer as unknown as L.TileLayer;
 
-    const zoningOpts = { ...wmsCommonOptions, layers: "CP.CadastralZoning", opacity: 0.35 };
-    const paesaggio = L.tileLayer.wms(
-      "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
-      zoningOpts as L.WMSOptions & { pane: string }
-    );
-    const pai = L.tileLayer.wms(
-      "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
-      zoningOpts as L.WMSOptions & { pane: string }
-    );
-    const natura = L.tileLayer.wms(
-      "https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php",
-      zoningOpts as L.WMSOptions & { pane: string }
-    );
+    // ── Dynamic WMS layers from ALL_LAYERS definitions ────────
+    const dynamicLayers: Record<string, L.TileLayer> = {};
+    for (const layerDef of ALL_LAYERS) {
+      if (!layerDef.wmsUrl || !layerDef.wmsLayer) continue;
+      try {
+        const wmsLayer = L.tileLayer.wms(layerDef.wmsUrl, {
+          layers: layerDef.wmsLayer,
+          format: "image/png",
+          transparent: true,
+          version: "1.3.0",
+          opacity: layerDef.opacity ?? 0.5,
+          pane: "wmsPane",
+          attribution: "Geoportale Nazionale/ISPRA/MASE",
+        } as L.WMSOptions);
+        dynamicLayers[layerDef.id] = wmsLayer;
+      } catch { /* skip unsupported layers */ }
+    }
 
-    wmsLayersRef.current = { paesaggio, pai, natura };
+    wmsLayersRef.current = dynamicLayers;
     mapRef.current = map;
 
     return () => {
@@ -632,7 +630,7 @@ export function MapView({
     const catastoWms = catastoOverlayRef.current;
     const fabbricatiWms = fabbricatiOverlayRef.current;
 
-    // Catasto parcel overlay: visible when showCatasto toggle on, or in catasto/satellite_catasto modes
+    // Catasto parcel overlay: visible when catasto layer on, or in catasto/satellite_catasto modes
     if (catastoWms) {
       const shouldShow = showCatasto || activeBase === "catasto" || activeBase === "satellite_catasto";
       if (shouldShow) {
@@ -654,23 +652,22 @@ export function MapView({
     }
   }, [activeBase, showCatasto]);
 
-  // ── Toggle WMS overlays (vincoli) ──────────────────────────
+  // ── Toggle WMS overlays (vincoli) ─────────────────────────
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    const { paesaggio, pai, natura } = wmsLayersRef.current;
-
-    const toggle = (layer: L.Layer | undefined | null, active: boolean) => {
+    const toggleLayer = (layer: L.Layer | undefined | null, active: boolean) => {
       if (!layer) return;
       if (active && !map.hasLayer(layer)) map.addLayer(layer);
       if (!active && map.hasLayer(layer)) map.removeLayer(layer);
     };
 
-    toggle(paesaggio, showVincoliPaesaggistici);
-    toggle(pai, showPAI);
-    toggle(natura, showNatura2000);
-  }, [showVincoliPaesaggistici, showVincoliIdrogeologici, showNatura2000, showPAI]);
+    // Toggle all dynamic WMS layers by id
+    for (const [id, layer] of Object.entries(wmsLayersRef.current)) {
+      toggleLayer(layer, activeLayers[id] ?? false);
+    }
+  }, [activeLayers]);
 
   // ── Draw parcels ────────────────────────────────────────────
   useEffect(() => {
