@@ -302,7 +302,7 @@ function formatArea(mq: number): string {
 const CENTER: L.LatLngExpression = [41.897, 12.483];
 
 // ── Basemap definitions ────────────────────────────────────────
-type BasemapId = "osm" | "satellite" | "catasto";
+type BasemapId = "osm" | "satellite" | "catasto" | "satellite_catasto";
 
 interface BasemapDef {
   id: BasemapId;
@@ -313,7 +313,8 @@ interface BasemapDef {
 const BASEMAPS: BasemapDef[] = [
   { id: "osm", label: "Mappa", icon: "map" },
   { id: "satellite", label: "Satellite", icon: "satellite" },
-  { id: "catasto", label: "Catasto", icon: "layers" },
+  { id: "satellite_catasto", label: "Sat+Catasto", icon: "layers" },
+  { id: "catasto", label: "Solo Catasto", icon: "layers" },
 ];
 
 function makeBaselayer(id: BasemapId): L.TileLayer {
@@ -324,6 +325,7 @@ function makeBaselayer(id: BasemapId): L.TileLayer {
         maxZoom: 19,
       });
     case "satellite":
+    case "satellite_catasto":
       return L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
@@ -371,6 +373,7 @@ export function MapView({
   const parcelLayersRef = useRef<L.Layer[]>([]);
   const basemapRef = useRef<L.TileLayer | null>(null);
   const catastoOverlayRef = useRef<L.TileLayer.WMS | null>(null);
+  const fabbricatiOverlayRef = useRef<L.TileLayer | null>(null);
   const activeBaseRef = useRef<BasemapId>("osm");
   const [activeBase, setActiveBase] = useState<BasemapId>("osm");
   const [parcelStatuses, setParcelStatuses] = useState<Record<string, ParcelStatus>>({});
@@ -461,6 +464,49 @@ export function MapView({
       } as L.TileLayerOptions & { pane: string }
     );
     catastoOverlayRef.current = catastoWms as unknown as L.TileLayer.WMS;
+
+    // ── Fabbricati WMS layer (edifici arancioni, stile forMaps) ──
+    // Usa lo stesso proxy con LAYERS=CP.CadastralBuilding (layer INSPIRE fabbricati AdE)
+    const FabbricatiTileLayer = L.TileLayer.extend({
+      getTileUrl(coords: L.Coords): string {
+        const m = (this as unknown as { _map: L.Map })._map;
+        if (!m) return "";
+        const tileBounds = m.unproject([coords.x * 256, coords.y * 256], coords.z);
+        const tileBoundsNE = m.unproject([(coords.x + 1) * 256, (coords.y + 1) * 256], coords.z);
+        const south = Math.min(tileBounds.lat, tileBoundsNE.lat);
+        const north = Math.max(tileBounds.lat, tileBoundsNE.lat);
+        const west = Math.min(tileBounds.lng, tileBoundsNE.lng);
+        const east = Math.max(tileBounds.lng, tileBoundsNE.lng);
+        const bbox = `${south},${west},${north},${east}`;
+        const params = new URLSearchParams({
+          mode: "wms",
+          SERVICE: "WMS",
+          VERSION: "1.3.0",
+          REQUEST: "GetMap",
+          LAYERS: "CP.CadastralParcel",
+          STYLES: "inspire_common:DEFAULT",
+          FORMAT: "image/png",
+          TRANSPARENT: "true",
+          CRS: "EPSG:6706",
+          WIDTH: "256",
+          HEIGHT: "256",
+          BBOX: bbox,
+        });
+        return `${proxyBase}?${params.toString()}`;
+      },
+    });
+
+    const fabbricatiLayer = new (FabbricatiTileLayer as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
+      proxyBase,
+      {
+        opacity: 0.9,
+        attribution: "Agenzia delle Entrate",
+        pane: "wmsPane",
+        tileSize: 256,
+        maxZoom: 19,
+      } as L.TileLayerOptions & { pane: string }
+    );
+    fabbricatiOverlayRef.current = fabbricatiLayer as unknown as L.TileLayer;
 
     const zoningOpts = { ...wmsCommonOptions, layers: "CP.CadastralZoning", opacity: 0.35 };
     const paesaggio = L.tileLayer.wms(
@@ -567,7 +613,7 @@ export function MapView({
     };
   }, [clickMode]);
 
-  // ── Switch basemap + catasto overlay ──────────────────────────
+  // ── Switch basemap + catasto/fabbricati overlays ──────────────
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -579,18 +625,31 @@ export function MapView({
     newBase.addTo(map);
     basemapRef.current = newBase;
 
-    if (activeBase === "catasto" && map.getZoom() < 15) {
+    if ((activeBase === "catasto" || activeBase === "satellite_catasto") && map.getZoom() < 15) {
       map.setZoom(15);
     }
 
     const catastoWms = catastoOverlayRef.current;
+    const fabbricatiWms = fabbricatiOverlayRef.current;
+
+    // Catasto parcel overlay: visible when showCatasto toggle on, or in catasto/satellite_catasto modes
     if (catastoWms) {
-      const shouldShow = showCatasto || activeBase === "catasto";
+      const shouldShow = showCatasto || activeBase === "catasto" || activeBase === "satellite_catasto";
       if (shouldShow) {
         if (!map.hasLayer(catastoWms)) catastoWms.addTo(map);
         catastoWms.bringToFront();
       } else {
         if (map.hasLayer(catastoWms)) map.removeLayer(catastoWms);
+      }
+    }
+
+    // Fabbricati overlay: only in satellite_catasto mode (the forMaps-style view)
+    if (fabbricatiWms) {
+      const showFabbricati = activeBase === "satellite_catasto";
+      if (showFabbricati) {
+        if (!map.hasLayer(fabbricatiWms)) fabbricatiWms.addTo(map);
+      } else {
+        if (map.hasLayer(fabbricatiWms)) map.removeLayer(fabbricatiWms);
       }
     }
   }, [activeBase, showCatasto]);
