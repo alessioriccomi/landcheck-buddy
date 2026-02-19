@@ -331,23 +331,31 @@ serve(async (req) => {
       }
 
       const { codiceComune, regioneFile } = comuneInfo;
+      console.log(`Looking up parcel via grid search: ${comune} (${codiceComune}/${regioneFile}) Fg.${foglio} Part.${particella}`);
 
-      const coords = await lookupParticella(regioneFile, codiceComune, foglio, particella);
-      if (!coords) {
+      // Step 1: geocode commune center via Nominatim
+      const center = await geocodeViaProxy(comune);
+      if (!center) {
         return new Response(
-          JSON.stringify({
-            error: `Parcel not found: ${comune} Fg.${foglio} Part.${particella}`,
-          }),
+          JSON.stringify({ error: `Cannot geocode comune: ${comune}` }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Try increasing bbox deltas until we get features
-      let geojson: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
-      for (const delta of [0.0003, 0.001, 0.003]) {
-        geojson = await wfsQueryBbox(coords.lat, coords.lon, delta);
-        console.log(`WFS delta=${delta} → ${geojson.features.length} features`);
-        if (geojson.features.length > 0) break;
+      // Step 2: grid search WFS cells around commune center
+      const gridFeatures = await gridSearchParcel(center.lat, center.lon, foglio, particella);
+
+      let geojson: GeoJSON.FeatureCollection;
+      if (gridFeatures.length > 0) {
+        geojson = { type: "FeatureCollection", features: gridFeatures };
+      } else {
+        // Fallback: try a wider WFS bbox around commune center
+        geojson = { type: "FeatureCollection", features: [] };
+        for (const delta of [0.003, 0.01, 0.03]) {
+          geojson = await wfsQueryBbox(center.lat, center.lon, delta);
+          console.log(`Fallback WFS delta=${delta} → ${geojson.features.length} features`);
+          if (geojson.features.length > 0) break;
+        }
       }
 
       const matched = geojson.features.filter((f) =>
