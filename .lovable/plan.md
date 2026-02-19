@@ -1,118 +1,77 @@
 
-# Problema e Soluzione: Mappa Catastale + Poligoni Particelle
+## Diagnosi dei due problemi
 
-## Diagnosi del Problema
+### Problema 1: Particella sbagliata (bounding box troppo piccolo)
 
-Ci sono due problemi separati che si sommano:
+Il flusso attuale è:
+1. `geocodeComune("Montecatini Terme")` → restituisce coordinate del centro città `[43.8847, 10.7735]`
+2. `fetchParcelGeometry(lat, lng, foglio, particella, radius=0.01)` → costruisce bbox di soli ±0.01° (~1 km) intorno al centro
+3. Il WFS viene interrogato con `CQL_FILTER` su quel piccolo bbox
+4. Se non trova nulla (la particella è fuori da quel piccolo quadrato), fa fallback bbox-only e restituisce le prime 50 particelle trovate in quel punto — che sono particelle generiche del centro città, non quella richiesta
 
-**Problema 1 — WMS Catasto bloccato da CORS**
-Il servizio WMS di `wms.cartografia.agenziaentrate.gov.it` non invia le intestazioni `Access-Control-Allow-Origin` nelle risposte. Leaflet usa `L.tileLayer.wms` che, con certe configurazioni, tenta di usare `crossOrigin`, provocando il blocco. Le tile semplicemente non appaiono.
+**La causa radice**: il bbox fisso ±0.01° è troppo piccolo. Per comuni grandi, la particella richiesta può trovarsi a kmm dal centro. Serve un bbox che copra l'intero territorio comunale.
 
-**Problema 2 — Il WFS dell'Agenzia delle Entrate è irraggiungibile dal browser**
-Il servizio `wfs.cartografia.agenziaentrate.gov.it` blocca le chiamate dal browser (CORS). Quindi la geometria reale delle particelle non arriva mai, e al momento il codice mostra dei placeholder demo fissi nell'area di Roma — indipendentemente da quale comune si inserisce.
+### Problema 2: Etichette non visibili
 
-**Problema 3 — Il basemap "Catasto" è identico al "Satellite"**
-In `makeBaselayer("catasto")` viene caricata la stessa tile Esri del satellite, senza la sovrapposizione WMS catastale (che non funziona per CORS). L'utente seleziona "Catasto" e vede la stessa identica vista satellite.
-
----
-
-## Soluzioni
-
-### Per la mappa catastale (basemap)
-
-Il servizio WMS dell'Agenzia delle Entrate **funziona senza CORS** se chiamato come semplice richiesta `GetMap` (le tile WMS caricate come `<img>` non sono soggette a CORS). Il trucco è impostare `crossOrigin: false` o non impostarlo, e usare il parametro corretto.
-
-URL WMS che funziona:
-```
-https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php
-?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap
-&LAYERS=CP.CadastralParcel
-&FORMAT=image/png
-&TRANSPARENT=true
-&CRS=EPSG:3857
-&BBOX={bbox-epsg-3857}
-&WIDTH=256&HEIGHT=256
-```
-
-In Leaflet, `L.tileLayer.wms` costruisce esattamente questo URL e lo carica via `<img>`, quindi **non è soggetto a CORS**. Il problema attuale è che la pane WMS ha `zIndex: 300` ma Leaflet non applica zIndex alle pane delle tile WMS nello stesso modo.
-
-**Alternativa robusta e gratuita**: Usare **Google Maps Tile API** (satellite) + overlay WMS catasto, oppure usare il **servizio tile XYZ del Geoportale Nazionale** disponibile su:
-```
-https://servizi.protezionecivile.it/geo/geoserver/...
-```
-
-Oppure, la soluzione più semplice e affidabile: usare **OpenStreetMap** come base e sovrapporre il WMS catasto su di essa, impostando `crossOrigin: undefined` (null) in Leaflet — questo evita che il browser invii l'header CORS.
-
-### Per i poligoni delle particelle
-
-Abbandonare il tentativo di caricare i dati WFS dal browser. Invece:
-- Mantenere i **poligoni placeholder** ma renderli chiaramente visibili con stile più marcato
-- Aggiungere un **sistema di coordinate basato sul comune**: quando l'utente inserisce "Roma" il placeholder viene posizionato nell'area reale di Roma (non sempre nell'area demo fissa), usando un dizionario di coordinate comunali italiane
-- Questo renderà l'esperienza molto più utile: l'utente vedrà il placeholder nella posizione corretta della città
+Il `L.divIcon` con `iconSize: [0, 0]` e `iconAnchor: [0, 0]` crea un marker il cui "punto" è l'angolo in alto a sinistra dell'icona di dimensione zero. Il div HTML (`.leaflet-parcel-label`) viene posizionato con `left: 0; top: 0` e poi `transform: translate(-50%, -50%)`. In pratica però Leaflet aggiunge un wrapper div intorno all'html del DivIcon, quindi il posizionamento CSS non si applica correttamente e le etichette escono fuori dal poligono.
 
 ---
 
-## Modifiche Pianificate
+## Soluzione
 
-### 1. `src/components/MapView.tsx` — Riscrittura basemap e poligoni
+### Fix 1: Bbox dinamico per il comune (risolve la selezione errata)
 
-**Basemap "Catasto"**: Cambiare approccio. Invece di usare le tile Esri + WMS sovrapposto (che fallisce per CORS), usare:
-- Base: OpenStreetMap standard
-- Overlay: WMS `CP.CadastralParcel` dell'Agenzia delle Entrate con `crossOrigin: false` e la proiezione corretta `EPSG:4326` (più compatibile con il server AdE)
+**Strategia**: usare Nominatim per ottenere il `boundingbox` del comune (non solo le coordinate centrali), poi usare quel bbox per interrogare il WFS. Nominatim restituisce `[south, north, west, east]` del comune completo.
 
-**Fix pane zIndex**: Assicurarsi che `parcelsPane` venga creata correttamente e che i poligoni vengano effettivamente aggiunti ad essa. Aggiungere un log di debug visuale (badge "Stima") per confermare visivamente che il poligono esiste.
+Modifiche all'**Edge Function `wfs-proxy`**:
+- Aggiungere un nuovo parametro `mode=geocode` che accetta un nome di comune e restituisce le coordinate + bounding box del comune tramite la Nominatim API (chiamata server-side dall'edge function per evitare problemi CORS/rate limiting).
 
-**Poligoni placeholder geolocalizzati**: Aggiungere un dizionario dei capoluoghi italiani con coordinate approssimative, così il placeholder viene posizionato nella città giusta invece che sempre a Roma.
+Modifiche a **`src/components/MapView.tsx`**:
+- Rimpiazzare `geocodeComune` (che restituisce solo lat/lng) con una nuova funzione `geocodeComuneWithBbox` che chiama l'edge function in modalità `mode=geocode` e ottiene anche il bounding box del comune.
+- La `fetchParcelGeometry` userà il bbox del comune anziché il bbox fisso dal centro — così il WFS copre tutto il territorio comunale.
+- Aumentare `COUNT` da 50 a 100 nella richiesta WFS per avere più probabilità di trovare la particella.
 
-**Stile poligono migliorato**: 
-- `fillOpacity: 0.4` (era 0.55, va bene)
-- `weight: 4`
-- `color` vivace con `opacity: 1`
-- Bordo con colore bianco attorno per massimo contrasto su qualsiasi sfondo
+Flusso corretto dopo il fix:
+1. `geocodeComuneWithBbox("Montecatini Terme")` → `{ lat, lng, bbox: [43.85, 43.92, 10.73, 10.82] }`
+2. Il WFS viene interrogato con `BBOX=43.85,10.73,43.92,10.82` (intero comune) + `CQL_FILTER` per foglio/particella
+3. Se CQL_FILTER funziona → risultato corretto
+4. Se CQL_FILTER non funziona → fallback con bbox intero comune + filtraggio lato client per foglio/particella sul `nationalRef` o `label`
 
-### 2. Dizionario coordinate comuni italiani
+### Fix 2: Etichette visibili (risolve i numeri sui poligoni)
 
-Aggiungere in `MapView.tsx` un dizionario con le coordinate lat/lng dei principali capoluoghi e comuni italiani (circa 120 comuni), per posizionare correttamente i placeholder.
+Sostituire il DivIcon con approccio corretto:
+- `iconSize: [1, 1]` e `iconAnchor: [0, 0]`
+- Il div `.leaflet-parcel-label` usa `position: absolute; transform: translate(-50%, -50%); left: 0; top: 0` — questo funziona solo se il marker ha `iconAnchor` che punta al centro del div
+- **Fix corretto**: usare `iconAnchor` dinamico calcolato in base alla dimensione stimata del testo, oppure semplicemente usare `L.tooltip` con `permanent: true, direction: 'center', className: 'leaflet-parcel-label'` sul poligono stesso — Leaflet gestisce il posizionamento automaticamente
 
-### 3. Indicatore visivo placeholder vs reale
+La soluzione più robusta: usare `polygon.bindTooltip(text, { permanent: true, direction: 'center', className: 'leaflet-parcel-label', opacity: 1 })` — questo è il metodo nativo di Leaflet per etichette permanenti centrate sui layer, più affidabile del DivIcon.
 
-Aggiungere nella legenda un'icona che distingua:
-- Tratteggio = perimetro stimato (placeholder)
-- Pieno = perimetro reale (da WFS)
+Aggiornare il CSS `.leaflet-parcel-label` rimuovendo i posizionamenti che conflittano con il tooltip nativo.
 
 ---
 
-## Dettaglio Tecnico
+## File da modificare
 
-### Perché il WMS catasto non appariva
+### `supabase/functions/wfs-proxy/index.ts`
+- Aggiungere modalità `mode=geocode`: chiama Nominatim con `?q=COMUNE&format=json&limit=1&countrycodes=it` e restituisce `{ lat, lng, bbox: [south, north, west, east] }`.
+- Nella modalità WFS: il chiamante fornirà i parametri `minLat`, `minLng`, `maxLat`, `maxLng` diretti (bbox del comune) invece di `lat/lng/radius`. Mantenere backward-compat accettando entrambi.
+- Aumentare `COUNT=100`.
+- Nel fallback senza CQL_FILTER: migliorare il filtraggio lato server sul `nationalRef` cercando sia foglio che particella in AND (non OR).
 
-Il `L.tileLayer.wms` in Leaflet invia le richieste tile come elementi `<img>`, che normalmente non sono bloccati da CORS (le immagini non sono soggette alla Same-Origin Policy). **Tuttavia**, se `crossOrigin` è impostato, il browser aggiunge l'header `Origin` alla richiesta e aspetta la risposta CORS dal server — se il server non risponde con `Access-Control-Allow-Origin`, la tile viene bloccata.
+### `src/components/MapView.tsx`
+- Sostituire `geocodeComune` con `geocodeComuneWithBbox` che chiama `wfs-proxy?mode=geocode&comune=...` e ottiene lat/lng + bbox del comune.
+- Modificare `fetchParcelGeometry` per accettare bbox completo `[minLat, minLng, maxLat, maxLng]` anziché `lat/lng/radius`.
+- Sostituire `addParcelLabel` (che usa DivIcon) con `polygon.bindTooltip` con `permanent: true` — più affidabile per le etichette.
+- Aggiornare il CSS delle etichette per il tooltip permanente.
 
-La correzione: non impostare `crossOrigin` (default = non inviato), oppure impostare esplicitamente `crossOrigin: false` o `crossOrigin: undefined`.
+### `src/index.css`
+- Aggiornare `.leaflet-parcel-label` per funzionare con i tooltip permanenti Leaflet (rimuovere `position: absolute`, `transform: translate(-50%, -50%)`, `left: 0`, `top: 0` che erano per il DivIcon).
+- Aggiungere `.leaflet-tooltip.leaflet-parcel-label` con sfondo bianco, bordo, font grassetto — stile coerente col design.
 
-### Come si costruirà il basemap catastale
+---
 
-```text
-Layer "Catasto":
-  [1] Base: OpenStreetMap (visibile, cartografia stradale)
-  [2] Overlay: WMS AdE CP.CadastralParcel (transparent PNG, opacity 0.7)
-              crossOrigin non impostato → nessun blocco CORS
-              le immagini vengono caricate normalmente
-  [3] Pane: parcelsPane (zIndex 650) → poligoni vettoriali SOPRA a tutto
-```
+## Ordine di implementazione
 
-### Dizionario comuni (esempi)
-
-```text
-Roma      → [41.9028, 12.4964]
-Milano    → [45.4654, 9.1859]
-Napoli    → [40.8518, 14.2681]
-Torino    → [45.0703, 7.6869]
-Palermo   → [38.1157, 13.3615]
-Firenze   → [43.7696, 11.2558]
-Bologna   → [44.4949, 11.3426]
-Venezia   → [45.4408, 12.3155]
-... (circa 120 comuni)
-```
-
-Il placeholder verrà posizionato in prossimità del centroide del comune indicato, con un offset di ±0.002 gradi per ogni particella aggiuntiva.
+1. Aggiornare `wfs-proxy/index.ts` con `mode=geocode` e bbox-first WFS.
+2. Aggiornare `MapView.tsx` con geocoding bbox-aware e tooltip permanenti.
+3. Aggiornare `src/index.css` con stili tooltip corretti.
