@@ -366,9 +366,14 @@ export function MapView({
   const wmsLayersRef = useRef<Record<string, L.TileLayer.WMS | L.TileLayer>>({});
   const parcelLayersRef = useRef<L.Layer[]>([]);
   const basemapRef = useRef<L.TileLayer | null>(null);
-  const catastoOverlayRef = useRef<L.TileLayer | null>(null);
-  const catastoZoningRef = useRef<L.TileLayer | null>(null);
-  const catastoFabbricatiRef = useRef<L.TileLayer | null>(null);
+  // Catasto overlay refs (order: foglio → terreno → fabbricato → labels → graffe)
+  const catastoFoglioRef = useRef<L.TileLayer | null>(null);      // CP.CadastralZoning (foglio, più chiaro)
+  const catastoOverlayRef = useRef<L.TileLayer | null>(null);     // CP.CadastralParcel (terreno, arancione chiaro)
+  const catastoFabbricatiRef = useRef<L.TileLayer | null>(null);  // CP.CadastralBuilding (arancione scuro)
+  const catastoLabelsRef = useRef<L.TileLayer | null>(null);      // CP.CadastralParcel labels (numeri particella)
+  const catastoGraffeRef = useRef<L.TileLayer | null>(null);      // CP.CadastralZoning graffe subalterni
+  // Selected parcel highlight
+  const selectedParcelLayerRef = useRef<L.Layer | null>(null);
   const activeBaseRef = useRef<BasemapId>("osm");
   const [activeBase, setActiveBase] = useState<BasemapId>("osm");
   const [parcelStatuses, setParcelStatuses] = useState<Record<string, ParcelStatus>>({});
@@ -376,6 +381,7 @@ export function MapView({
   const [localAreas, setLocalAreas] = useState<Record<string, number>>({});
   const [clickLoading, setClickLoading] = useState(false);
   const [clickMode, setClickMode] = useState(false);
+  const [selectedParcelInfo, setSelectedParcelInfo] = useState<{ foglio: string; particella: string; mq: number } | null>(null);
   // Track parcel IDs already drawn/fetched to prevent redundant re-runs
   const drawnParcelIdsRef = useRef<string>("");
 
@@ -418,19 +424,22 @@ export function MapView({
     };
 
     // ── Catasto WMS overlay via proxy ────────────────────────
-    // Tre layer separati per garantire compatibilità con AdE WMS:
-    //   CP.CadastralParcel   → terreni (arancione chiaro)
-    //   CP.CadastralZoning   → graffe / link subalterni terreno-fabbricato
-    //   CP.CadastralBuilding → fabbricati (arancione scuro)
+    // Cinque layer separati con gerarchia visiva:
+    //   1. CP.CadastralZoning (foglio)       → giallo/grigio, molto trasparente
+    //   2. CP.CadastralParcel (terreno)      → arancione chiaro, semi-trasparente
+    //   3. CP.CadastralBuilding (fabbricato) → arancione scuro, più opaco
+    //   4. CP.CadastralParcel label layer    → numeri particella (alta risoluzione)
+    //   5. CP.CadastralZoning graffe         → segni di collegamento terreno-fabbricato
     const proxyBase = `${SUPABASE_URL}/functions/v1/wfs-proxy`;
 
-    const makeCatastoLayer = (wmsLayer: string, opacity: number) => {
+    const makeCatastoLayer = (wmsLayer: string, opacity: number, tileSize = 256, styles = "") => {
       const TileLayerClass = L.TileLayer.extend({
         getTileUrl(coords: L.Coords): string {
           const m = (this as unknown as { _map: L.Map })._map;
           if (!m) return "";
-          const tileBounds = m.unproject([coords.x * 256, coords.y * 256], coords.z);
-          const tileBoundsNE = m.unproject([(coords.x + 1) * 256, (coords.y + 1) * 256], coords.z);
+          const sz = tileSize;
+          const tileBounds = m.unproject([coords.x * sz, coords.y * sz], coords.z);
+          const tileBoundsNE = m.unproject([(coords.x + 1) * sz, (coords.y + 1) * sz], coords.z);
           const south = Math.min(tileBounds.lat, tileBoundsNE.lat);
           const north = Math.max(tileBounds.lat, tileBoundsNE.lat);
           const west = Math.min(tileBounds.lng, tileBoundsNE.lng);
@@ -445,26 +454,34 @@ export function MapView({
             FORMAT: "image/png",
             TRANSPARENT: "true",
             CRS: "EPSG:6706",
-            WIDTH: "256",
-            HEIGHT: "256",
+            WIDTH: String(sz),
+            HEIGHT: String(sz),
             BBOX: bbox,
+            ...(styles ? { STYLES: styles } : {}),
           });
           return `${proxyBase}?${params.toString()}`;
         },
       });
       return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
         proxyBase,
-        { opacity, attribution: "Agenzia delle Entrate", pane: "wmsPane", tileSize: 256, maxZoom: 19 } as L.TileLayerOptions & { pane: string }
+        { opacity, attribution: "Agenzia delle Entrate", pane: "wmsPane", tileSize: tileSize, maxZoom: 19 } as L.TileLayerOptions & { pane: string }
       );
     };
 
-    const catastoParcel = makeCatastoLayer("CP.CadastralParcel", 0.85);
-    const catastoZoning = makeCatastoLayer("CP.CadastralZoning", 0.75);
-    const catastoBuilding = makeCatastoLayer("CP.CadastralBuilding", 0.9);
+    // Gerarchia visiva: foglio (più chiaro) → terreno → fabbricato (più scuro)
+    const catastoFoglio    = makeCatastoLayer("CP.CadastralZoning",   0.35); // foglio: molto trasparente
+    const catastoParcel    = makeCatastoLayer("CP.CadastralParcel",   0.65); // terreno: arancione chiaro
+    const catastoBuilding  = makeCatastoLayer("CP.CadastralBuilding", 0.90); // fabbricato: arancione scuro
+    // Layer etichette particelle: risoluzione 512px per mostrare i numeri
+    const catastoLabels    = makeCatastoLayer("CP.CadastralParcel",   1.0, 512); // numeri particella
+    // Layer graffe (CP.CadastralZoning contiene anche le connessioni)
+    const catastoGraffe    = makeCatastoLayer("CP.CadastralZoning",   0.80, 512); // graffe più visibili
 
-    catastoOverlayRef.current = catastoParcel;
-    catastoZoningRef.current = catastoZoning;
+    catastoFoglioRef.current     = catastoFoglio;
+    catastoOverlayRef.current    = catastoParcel;
     catastoFabbricatiRef.current = catastoBuilding;
+    catastoLabelsRef.current     = catastoLabels;
+    catastoGraffeRef.current     = catastoGraffe;
 
 
     // ── Dynamic WMS layers from ALL_LAYERS definitions ────────
@@ -586,7 +603,95 @@ export function MapView({
     };
   }, [clickMode]);
 
-  // ── Switch basemap + catasto/fabbricati overlays ──────────────
+  // ── Catasto parcel selection (click when NOT in add-mode) ────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (clickMode) return; // add-mode handles clicks
+
+    const handleCatastoClick = async (e: L.LeafletMouseEvent) => {
+      const { lat, lng } = e.latlng;
+      const zoom = map.getZoom();
+      if (zoom < 15) return; // catasto not meaningful at low zoom
+
+      try {
+        const features = await fetchParcelGeometryByPoint(lat, lng, 0.0005);
+        if (features.length === 0) return;
+
+        const feat = features[0];
+        const props = feat.properties ?? {};
+        const label: string = props.label ?? "";
+        const localId: string = props.localId ?? "";
+
+        // Parse foglio/particella
+        let foglio = "—";
+        let particella = "—";
+        const labelParts = label.split("/");
+        if (labelParts.length === 2) {
+          foglio = labelParts[0].trim();
+          particella = labelParts[1].trim();
+        } else {
+          const idParts = localId.split("_");
+          if (idParts.length >= 2 && localId !== "unknown") {
+            foglio = idParts[idParts.length - 2] ?? "—";
+            particella = idParts[idParts.length - 1] ?? "—";
+          }
+        }
+
+        const mq = calcAreaMq(features);
+
+        // Remove previous selection highlight
+        if (selectedParcelLayerRef.current) {
+          try { map.removeLayer(selectedParcelLayerRef.current); } catch {}
+          selectedParcelLayerRef.current = null;
+        }
+
+        // Draw highlight polygon for selected parcel
+        const rings: L.LatLngExpression[][] = features
+          .filter(f => f.geometry?.type === "Polygon")
+          .flatMap(f =>
+            (f.geometry as GeoJSON.Polygon).coordinates.map(ring =>
+              ring.map(([lng2, lat2]) => [lat2, lng2] as L.LatLngExpression)
+            )
+          );
+
+        if (rings.length > 0) {
+          const highlight = L.polygon(rings, {
+            color: "#1d4ed8",
+            fillColor: "#3b82f6",
+            fillOpacity: 0.25,
+            weight: 3,
+            opacity: 1,
+            dashArray: undefined,
+            pane: "parcelsPane",
+          });
+
+          const surfaceTxt = mq > 0
+            ? `<br><span style="font-weight:600">Superficie: ${formatArea(mq)}</span>`
+            : "";
+
+          highlight.bindPopup(
+            `<strong>Particella selezionata</strong><br>` +
+            `Foglio <b>${foglio}</b> / Particella <b>${particella}</b>` +
+            surfaceTxt
+          ).openPopup();
+
+          highlight.addTo(map);
+          selectedParcelLayerRef.current = highlight;
+          setSelectedParcelInfo({ foglio, particella, mq });
+        }
+      } catch (err) {
+        console.warn("Catasto click error:", err);
+      }
+    };
+
+    map.on("click", handleCatastoClick);
+    return () => {
+      map.off("click", handleCatastoClick);
+    };
+  }, [clickMode]);
+
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -614,12 +719,12 @@ export function MapView({
       }
     };
 
-    // Terreni (arancione chiaro) — sempre visibili quando catasto è attivo
-    toggleCatastoLayer(catastoOverlayRef.current);
-    // Graffe / zoning (link subalterni terreno-fabbricato)
-    toggleCatastoLayer(catastoZoningRef.current);
-    // Fabbricati (arancione scuro) — sempre visibili quando catasto è attivo
-    toggleCatastoLayer(catastoFabbricatiRef.current);
+    // Gerarchia visiva: foglio → terreno → fabbricato → labels → graffe
+    toggleCatastoLayer(catastoFoglioRef.current);       // foglio: più trasparente, sotto tutto
+    toggleCatastoLayer(catastoOverlayRef.current);      // terreno: arancione chiaro
+    toggleCatastoLayer(catastoFabbricatiRef.current);   // fabbricato: arancione scuro
+    toggleCatastoLayer(catastoLabelsRef.current);       // numeri particella (sopra)
+    toggleCatastoLayer(catastoGraffeRef.current);       // graffe (sopra tutto)
   }, [activeBase, showCatasto]);
 
   // ── Toggle WMS overlays (vincoli) ─────────────────────────
@@ -847,6 +952,33 @@ export function MapView({
         </div>
       )}
 
+      {/* Selected parcel info panel */}
+      {selectedParcelInfo && !clickMode && (
+        <div className="absolute top-3 right-3 z-[1000] bg-card/95 backdrop-blur border border-primary/40 rounded-lg px-3 py-2 shadow-md min-w-[180px]">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className="text-xs font-semibold text-foreground">Particella selezionata</span>
+            <button
+              onClick={() => {
+                setSelectedParcelInfo(null);
+                if (selectedParcelLayerRef.current && mapRef.current) {
+                  try { mapRef.current.removeLayer(selectedParcelLayerRef.current); } catch {}
+                  selectedParcelLayerRef.current = null;
+                }
+              }}
+              className="text-muted-foreground hover:text-foreground text-xs leading-none"
+            >✕</button>
+          </div>
+          <p className="text-xs text-foreground">
+            Fg. <span className="font-mono font-bold">{selectedParcelInfo.foglio}</span>
+            {" / "}
+            Part. <span className="font-mono font-bold">{selectedParcelInfo.particella}</span>
+          </p>
+          {selectedParcelInfo.mq > 0 && (
+            <p className="text-[10px] text-muted-foreground mt-0.5">{formatArea(selectedParcelInfo.mq)}</p>
+          )}
+        </div>
+      )}
+
       {/* Click mode toggle button — positioned bottom-left above legend */}
       {onAddParticella && (
         <div className="absolute top-3 left-3 z-[1000]">
@@ -938,6 +1070,27 @@ export function MapView({
             <div className="flex items-center gap-2">
               <div className="w-4 h-0 border-t-2 border-solid border-muted-foreground/60 flex-shrink-0" />
               <span className="text-[10px] text-muted-foreground">Perimetro reale (WFS)</span>
+            </div>
+          </div>
+
+          {/* Catasto layer legend */}
+          <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
+            <p className="text-[10px] font-semibold text-muted-foreground mb-1">Catasto WMS</p>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-3 rounded-sm flex-shrink-0 border border-yellow-500/50" style={{ background: "rgba(234,179,8,0.12)" }} />
+              <span className="text-[10px] text-muted-foreground">Foglio</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-3 rounded-sm flex-shrink-0 border border-orange-400/70" style={{ background: "rgba(251,146,60,0.30)" }} />
+              <span className="text-[10px] text-muted-foreground">Terreno</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-3 rounded-sm flex-shrink-0 border border-orange-700/80" style={{ background: "rgba(194,65,12,0.55)" }} />
+              <span className="text-[10px] text-muted-foreground">Fabbricato</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-0 border-t-2 border-dashed border-orange-500/70 flex-shrink-0" />
+              <span className="text-[10px] text-muted-foreground">Graffe / subalterni</span>
             </div>
           </div>
         </div>
