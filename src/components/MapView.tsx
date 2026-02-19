@@ -314,7 +314,7 @@ const BASEMAPS: BasemapDef[] = [
   { id: "osm", label: "Mappa", icon: "map" },
   { id: "satellite", label: "Satellite", icon: "satellite" },
   { id: "satellite_catasto", label: "Sat+Catasto", icon: "layers" },
-  { id: "catasto", label: "Solo Catasto", icon: "layers" },
+  { id: "catasto", label: "Map+Catasto", icon: "layers" },
 ];
 
 function makeBaselayer(id: BasemapId): L.TileLayer {
