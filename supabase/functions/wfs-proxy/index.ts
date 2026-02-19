@@ -423,6 +423,159 @@ serve(async (req) => {
       );
     }
 
+    // ── mode=getfeatureinfo: WMS GetFeatureInfo per click preciso ──
+    if (mode === "getfeatureinfo") {
+      const lat = parseFloat(url.searchParams.get("lat") ?? "");
+      const lng = parseFloat(url.searchParams.get("lng") ?? "");
+      const zoom = parseInt(url.searchParams.get("zoom") ?? "17", 10);
+
+      if (isNaN(lat) || isNaN(lng)) {
+        return new Response(
+          JSON.stringify({ error: "Missing lat/lng" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Convert lat/lng to tile pixel coordinates for GetFeatureInfo
+      // Use a fixed 256x256 tile, compute the pixel position of the clicked point
+      const tileSize = 256;
+      // Build a small bbox centered on click point (±~25m at zoom 17)
+      const delta = 0.0003;
+      const south = lat - delta;
+      const north = lat + delta;
+      const west = lng - delta;
+      const east = lng + delta;
+
+      // Pixel position of clicked point within the bbox
+      const i = Math.round(((lng - west) / (east - west)) * tileSize);
+      const j = Math.round(((north - lat) / (north - south)) * tileSize);
+
+      const gfiParams = new URLSearchParams({
+        SERVICE: "WMS",
+        VERSION: "1.3.0",
+        REQUEST: "GetFeatureInfo",
+        LAYERS: "CP.CadastralParcel",
+        QUERY_LAYERS: "CP.CadastralParcel",
+        INFO_FORMAT: "application/json",
+        CRS: "EPSG:6706",
+        WIDTH: String(tileSize),
+        HEIGHT: String(tileSize),
+        BBOX: `${south},${west},${north},${east}`,
+        I: String(i),
+        J: String(j),
+        FEATURE_COUNT: "1",
+      });
+
+      const gfiUrl = `https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php?${gfiParams.toString()}`;
+      console.log("GetFeatureInfo URL:", gfiUrl.substring(0, 300));
+
+      const gfiResp = await fetch(gfiUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
+          Accept: "application/json, text/plain, */*",
+          Referer: "https://wms.cartografia.agenziaentrate.gov.it/",
+        },
+      });
+
+      if (!gfiResp.ok) {
+        return new Response(
+          JSON.stringify({ error: `GetFeatureInfo HTTP ${gfiResp.status}` }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const contentType = gfiResp.headers.get("Content-Type") ?? "";
+      let gfiData: { features?: { id?: string; properties?: Record<string, string> }[] } = {};
+
+      if (contentType.includes("json")) {
+        gfiData = await gfiResp.json();
+      } else {
+        // Some AdE endpoints return GML/XML even with INFO_FORMAT=application/json
+        // Try to extract localId from XML
+        const text = await gfiResp.text();
+        console.log("GFI raw response (first 500):", text.substring(0, 500));
+        const localIdMatch = text.match(/<base:localId>(.*?)<\/base:localId>/);
+        const labelMatch = text.match(/<CP:label>(.*?)<\/CP:label>/);
+        const natRefMatch = text.match(/<CP:nationalCadastralReference>(.*?)<\/CP:nationalCadastralReference>/);
+        if (localIdMatch) {
+          return new Response(
+            JSON.stringify({
+              localId: localIdMatch[1],
+              label: labelMatch ? labelMatch[1] : "",
+              nationalRef: natRefMatch ? natRefMatch[1] : "",
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        return new Response(
+          JSON.stringify({ error: "No feature found at click point", raw: text.substring(0, 200) }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const features = gfiData.features ?? [];
+      if (features.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "No feature found at click point" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const feat = features[0];
+      // GeoServer-style GFI: id is "CP.CadastralParcel.IT.AGE.PLA.XXXXX_FFF_PPP"
+      const localId: string = feat.id ?? feat.properties?.localId ?? feat.properties?.INSPIREID_LOCALID ?? "";
+      const label: string = feat.properties?.label ?? feat.properties?.CP_label ?? "";
+      const nationalRef: string = feat.properties?.nationalCadastralReference ?? feat.properties?.CP_nationalCadastralReference ?? "";
+
+      return new Response(
+        JSON.stringify({ localId, label, nationalRef }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── mode=wfs_by_id: WFS GetFeature by RESOURCEID (exact parcel geometry) ──
+    if (mode === "wfs_by_id") {
+      const resourceId = url.searchParams.get("resourceId") ?? "";
+      if (!resourceId) {
+        return new Response(
+          JSON.stringify({ error: "Missing resourceId" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const wfsUrl =
+        `https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php` +
+        `?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature` +
+        `&TYPENAMES=CP:CadastralParcel` +
+        `&SRSNAME=urn:ogc:def:crs:EPSG::6706` +
+        `&RESOURCEID=${encodeURIComponent(resourceId)}`;
+
+      console.log("WFS by RESOURCEID:", wfsUrl.substring(0, 300));
+
+      const wfsResp = await fetch(wfsUrl, {
+        headers: {
+          Accept: "application/xml, text/xml",
+          "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
+        },
+      });
+
+      if (!wfsResp.ok) {
+        return new Response(
+          JSON.stringify({ error: `WFS by ID HTTP ${wfsResp.status}` }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const gml = await wfsResp.text();
+      const geojson = gmlToGeoJSON(gml);
+      console.log(`WFS by RESOURCEID found ${geojson.features.length} features`);
+
+      return new Response(
+        JSON.stringify(geojson),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ── mode=wms ──────────────────────────────────────────────
     if (mode === "wms") {
       const wmsParams = new URLSearchParams();
