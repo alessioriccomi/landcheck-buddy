@@ -366,8 +366,9 @@ export function MapView({
   const wmsLayersRef = useRef<Record<string, L.TileLayer.WMS | L.TileLayer>>({});
   const parcelLayersRef = useRef<L.Layer[]>([]);
   const basemapRef = useRef<L.TileLayer | null>(null);
-  const catastoOverlayRef = useRef<L.TileLayer.WMS | null>(null);
-  
+  const catastoOverlayRef = useRef<L.TileLayer | null>(null);
+  const catastoZoningRef = useRef<L.TileLayer | null>(null);
+  const catastoFabbricatiRef = useRef<L.TileLayer | null>(null);
   const activeBaseRef = useRef<BasemapId>("osm");
   const [activeBase, setActiveBase] = useState<BasemapId>("osm");
   const [parcelStatuses, setParcelStatuses] = useState<Record<string, ParcelStatus>>({});
@@ -417,52 +418,53 @@ export function MapView({
     };
 
     // ── Catasto WMS overlay via proxy ────────────────────────
-    // Un unico tile combina:
-    //   CP.CadastralParcel   → terreni (arancione chiaro, stile default AdE)
+    // Tre layer separati per garantire compatibilità con AdE WMS:
+    //   CP.CadastralParcel   → terreni (arancione chiaro)
     //   CP.CadastralZoning   → graffe / link subalterni terreno-fabbricato
-    //   CP.CadastralBuilding → fabbricati (arancione scuro, stile default AdE)
+    //   CP.CadastralBuilding → fabbricati (arancione scuro)
     const proxyBase = `${SUPABASE_URL}/functions/v1/wfs-proxy`;
 
-    const CatastoTileLayer = L.TileLayer.extend({
-      getTileUrl(coords: L.Coords): string {
-        const m = (this as unknown as { _map: L.Map })._map;
-        if (!m) return "";
-        const tileBounds = m.unproject([coords.x * 256, coords.y * 256], coords.z);
-        const tileBoundsNE = m.unproject([(coords.x + 1) * 256, (coords.y + 1) * 256], coords.z);
-        const south = Math.min(tileBounds.lat, tileBoundsNE.lat);
-        const north = Math.max(tileBounds.lat, tileBoundsNE.lat);
-        const west = Math.min(tileBounds.lng, tileBoundsNE.lng);
-        const east = Math.max(tileBounds.lng, tileBoundsNE.lng);
-        const bbox = `${south},${west},${north},${east}`;
-        const params = new URLSearchParams({
-          mode: "wms",
-          SERVICE: "WMS",
-          VERSION: "1.3.0",
-          REQUEST: "GetMap",
-          LAYERS: "CP.CadastralParcel,CP.CadastralZoning,CP.CadastralBuilding",
-          STYLES: ",,",
-          FORMAT: "image/png",
-          TRANSPARENT: "true",
-          CRS: "EPSG:6706",
-          WIDTH: "256",
-          HEIGHT: "256",
-          BBOX: bbox,
-        });
-        return `${proxyBase}?${params.toString()}`;
-      },
-    });
+    const makeCatastoLayer = (wmsLayer: string, opacity: number) => {
+      const TileLayerClass = L.TileLayer.extend({
+        getTileUrl(coords: L.Coords): string {
+          const m = (this as unknown as { _map: L.Map })._map;
+          if (!m) return "";
+          const tileBounds = m.unproject([coords.x * 256, coords.y * 256], coords.z);
+          const tileBoundsNE = m.unproject([(coords.x + 1) * 256, (coords.y + 1) * 256], coords.z);
+          const south = Math.min(tileBounds.lat, tileBoundsNE.lat);
+          const north = Math.max(tileBounds.lat, tileBoundsNE.lat);
+          const west = Math.min(tileBounds.lng, tileBoundsNE.lng);
+          const east = Math.max(tileBounds.lng, tileBoundsNE.lng);
+          const bbox = `${south},${west},${north},${east}`;
+          const params = new URLSearchParams({
+            mode: "wms",
+            SERVICE: "WMS",
+            VERSION: "1.3.0",
+            REQUEST: "GetMap",
+            LAYERS: wmsLayer,
+            FORMAT: "image/png",
+            TRANSPARENT: "true",
+            CRS: "EPSG:6706",
+            WIDTH: "256",
+            HEIGHT: "256",
+            BBOX: bbox,
+          });
+          return `${proxyBase}?${params.toString()}`;
+        },
+      });
+      return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
+        proxyBase,
+        { opacity, attribution: "Agenzia delle Entrate", pane: "wmsPane", tileSize: 256, maxZoom: 19 } as L.TileLayerOptions & { pane: string }
+      );
+    };
 
-    const catastoWms = new (CatastoTileLayer as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
-      proxyBase,
-      {
-        opacity: 0.9,
-        attribution: "Agenzia delle Entrate",
-        pane: "wmsPane",
-        tileSize: 256,
-        maxZoom: 19,
-      } as L.TileLayerOptions & { pane: string }
-    );
-    catastoOverlayRef.current = catastoWms as unknown as L.TileLayer.WMS;
+    const catastoParcel = makeCatastoLayer("CP.CadastralParcel", 0.85);
+    const catastoZoning = makeCatastoLayer("CP.CadastralZoning", 0.75);
+    const catastoBuilding = makeCatastoLayer("CP.CadastralBuilding", 0.9);
+
+    catastoOverlayRef.current = catastoParcel;
+    catastoZoningRef.current = catastoZoning;
+    catastoFabbricatiRef.current = catastoBuilding;
 
 
     // ── Dynamic WMS layers from ALL_LAYERS definitions ────────
@@ -590,21 +592,24 @@ export function MapView({
       map.setZoom(15);
     }
 
-    const catastoWms = catastoOverlayRef.current;
+    const shouldShow = showCatasto || activeBase === "catasto" || activeBase === "satellite_catasto";
 
-    // Catasto parcel overlay: visible when catasto layer on, or in catasto/satellite_catasto modes
-    if (catastoWms) {
-      const shouldShow = showCatasto || activeBase === "catasto" || activeBase === "satellite_catasto";
+    const toggleCatastoLayer = (layer: L.TileLayer | null) => {
+      if (!layer) return;
       if (shouldShow) {
-        if (!map.hasLayer(catastoWms)) catastoWms.addTo(map);
-        catastoWms.bringToFront();
+        if (!map.hasLayer(layer)) layer.addTo(map);
+        layer.bringToFront();
       } else {
-        if (map.hasLayer(catastoWms)) map.removeLayer(catastoWms);
+        if (map.hasLayer(layer)) map.removeLayer(layer);
       }
-    }
+    };
 
-    // Fabbricati overlay: only in satellite_catasto mode (the forMaps-style view)
-    // Il layer fabbricati è ora integrato nel catastoWms (richiesta multi-layer)
+    // Terreni (arancione chiaro) — sempre visibili quando catasto è attivo
+    toggleCatastoLayer(catastoOverlayRef.current);
+    // Graffe / zoning (link subalterni terreno-fabbricato)
+    toggleCatastoLayer(catastoZoningRef.current);
+    // Fabbricati (arancione scuro) — sempre visibili quando catasto è attivo
+    toggleCatastoLayer(catastoFabbricatiRef.current);
   }, [activeBase, showCatasto]);
 
   // ── Toggle WMS overlays (vincoli) ─────────────────────────
