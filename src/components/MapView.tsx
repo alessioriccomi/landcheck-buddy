@@ -568,7 +568,7 @@ export function MapView({
       const { lat, lng } = e.latlng;
       setClickLoading(true);
       try {
-        const features = await fetchParcelGeometryByPoint(lat, lng, 0.001);
+        const features = await fetchParcelAtPoint(lat, lng);
         if (features.length === 0) {
           setClickLoading(false);
           return;
@@ -607,15 +607,15 @@ export function MapView({
         }
         bestComune = bestComune.charAt(0).toUpperCase() + bestComune.slice(1);
 
-        const mq = calcAreaMq(features);
+        const mq = calcAreaMq([feat]);
         const currentLen = particelleRef.current.length;
 
-        // Build GeoJSON coordinates from click features for direct drawing (skip mode=parcel)
-        const clickCoords: [number, number][][] = features
-          .filter(f => f.geometry?.type === "Polygon")
-          .flatMap(f => (f.geometry as GeoJSON.Polygon).coordinates.map(
-            ring => ring.map(([lng2, lat2]) => [lat2, lng2] as [number, number])
-          ));
+        // Build GeoJSON coordinates from the SINGLE clicked feature
+        const clickCoords: [number, number][][] = feat.geometry?.type === "Polygon"
+          ? (feat.geometry as GeoJSON.Polygon).coordinates.map(
+              ring => ring.map(([lng2, lat2]) => [lat2, lng2] as [number, number])
+            )
+          : [];
 
         const newP: Particella = {
           id: crypto.randomUUID(),
@@ -659,6 +659,7 @@ export function MapView({
         const features = await fetchParcelAtPoint(lat, lng);
         if (features.length === 0) return;
 
+        // Use ONLY the first feature — CQL INTERSECTS should return 1, but be safe
         const feat = features[0];
         const props = feat.properties ?? {};
         const label: string = props.label ?? "";
@@ -680,7 +681,7 @@ export function MapView({
           }
         }
 
-        const mq = calcAreaMq(features);
+        const mq = calcAreaMq([feat]);
 
         // Remove previous selection
         if (selectedParcelLayerRef.current) {
@@ -688,14 +689,12 @@ export function MapView({
           selectedParcelLayerRef.current = null;
         }
 
-        // Draw highlight for the single selected parcel
-        const rings: L.LatLngExpression[][] = features
-          .filter(f => f.geometry?.type === "Polygon")
-          .flatMap(f =>
-            (f.geometry as GeoJSON.Polygon).coordinates.map(ring =>
+        // Draw highlight for ONLY the single selected parcel
+        const rings: L.LatLngExpression[][] = feat.geometry?.type === "Polygon"
+          ? (feat.geometry as GeoJSON.Polygon).coordinates.map(ring =>
               ring.map(([lng2, lat2]) => [lat2, lng2] as L.LatLngExpression)
             )
-          );
+          : [];
 
         if (rings.length > 0) {
           const highlight = L.polygon(rings, {
