@@ -16,8 +16,37 @@ L.Icon.Default.mergeOptions({ iconUrl, shadowUrl: iconShadow });
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
+// Geocode a municipality via the wfs-proxy edge function (mode=geocode)
+// Returns lat, lng and full commune bounding box from Nominatim (server-side)
+async function geocodeComuneWithBbox(comune: string): Promise<{
+  lat: number;
+  lng: number;
+  bbox: [number, number, number, number]; // [south, north, west, east]
+}> {
+  try {
+    const params = new URLSearchParams({ mode: "geocode", comune });
+    const url = `${SUPABASE_URL}/functions/v1/wfs-proxy?${params.toString()}`;
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.lat && data.lng && data.bbox) {
+        console.log(`Geocoded "${comune}" →`, data.lat, data.lng, "bbox:", data.bbox);
+        return { lat: data.lat, lng: data.lng, bbox: data.bbox };
+      }
+    }
+  } catch (e) {
+    console.warn("Geocode via proxy failed:", e);
+  }
+  // Fallback: center of Italy with a ~50km bbox
+  console.warn(`Could not geocode "${comune}", using Italy center`);
+  return { lat: 42.8333, lng: 12.8333, bbox: [42.33, 43.33, 12.33, 13.33] };
+}
+
 // ──────────────────────────────────────────────────────────────
 // Dizionario coordinate capoluoghi e comuni italiani principali
+// (mantenuto solo per compatibilità con la modalità click-mappa)
 // ──────────────────────────────────────────────────────────────
 const COMUNI_COORDS: Record<string, [number, number]> = {
   "roma": [41.9028, 12.4964],
@@ -197,35 +226,6 @@ function getComuneCoords(comune: string): [number, number] | null {
   return COMUNI_COORDS[key] ?? null;
 }
 
-// Geocode a municipality via Nominatim (OpenStreetMap) as fallback
-async function geocodeComune(comune: string): Promise<[number, number]> {
-  const known = getComuneCoords(comune);
-  if (known) return known;
-
-  try {
-    const q = encodeURIComponent(`${comune}, Italy`);
-    const resp = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=it`,
-      { headers: { "User-Agent": "GeoVincoli/1.0" } }
-    );
-    if (resp.ok) {
-      const data = await resp.json();
-      if (data.length > 0) {
-        const lat = parseFloat(data[0].lat);
-        const lon = parseFloat(data[0].lon);
-        if (!isNaN(lat) && !isNaN(lon)) {
-          console.log(`Geocoded "${comune}" via Nominatim →`, lat, lon);
-          return [lat, lon];
-        }
-      }
-    }
-  } catch (e) {
-    console.warn("Nominatim geocoding failed:", e);
-  }
-  // Ultimate fallback: center of Italy
-  console.warn(`Could not geocode "${comune}", using Italy center`);
-  return [42.8333, 12.8333];
-}
 
 // Generate a placeholder polygon near the given center
 function makePlaceholderPolygon(
@@ -246,18 +246,18 @@ function makePlaceholderPolygon(
 }
 
 // Fetch real parcel geometries from the WFS proxy edge function
-// Pass foglio/particella for server-side filtering
+// Uses the full commune bbox for accurate searching across the entire territory
 async function fetchParcelGeometry(
-  lat: number,
-  lng: number,
+  bbox: [number, number, number, number], // [south, north, west, east]
   foglio: string,
   particella: string,
-  radius = 0.005
 ): Promise<GeoJSON.Feature[]> {
+  const [minLat, maxLat, minLng, maxLng] = bbox;
   const params = new URLSearchParams({
-    lat: String(lat),
-    lng: String(lng),
-    radius: String(radius),
+    minLat: String(minLat),
+    maxLat: String(maxLat),
+    minLng: String(minLng),
+    maxLng: String(maxLng),
     foglio,
     particella,
   });
@@ -269,6 +269,24 @@ async function fetchParcelGeometry(
     },
   });
 
+  if (!resp.ok) throw new Error(`WFS proxy error: ${resp.status}`);
+  const geojson: GeoJSON.FeatureCollection = await resp.json();
+  return geojson.features ?? [];
+}
+
+// Legacy fetchParcelGeometry for click mode (uses lat/lng/radius, no specific parcel)
+async function fetchParcelGeometryByPoint(
+  lat: number,
+  lng: number,
+  radius = 0.001
+): Promise<GeoJSON.Feature[]> {
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lng: String(lng),
+    radius: String(radius),
+  });
+  const url = `${SUPABASE_URL}/functions/v1/wfs-proxy?${params.toString()}`;
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` } });
   if (!resp.ok) throw new Error(`WFS proxy error: ${resp.status}`);
   const geojson: GeoJSON.FeatureCollection = await resp.json();
   return geojson.features ?? [];
@@ -509,7 +527,7 @@ export function MapView({
       const { lat, lng } = e.latlng;
       setClickLoading(true);
       try {
-        const features = await fetchParcelGeometry(lat, lng, "", "", 0.001);
+        const features = await fetchParcelGeometryByPoint(lat, lng, 0.001);
         if (features.length === 0) {
           setClickLoading(false);
           return;
@@ -647,20 +665,21 @@ export function MapView({
     particelle.forEach(p => { loadingStatuses[p.id] = "loading"; });
     setParcelStatuses(loadingStatuses);
 
-    // Process each parcel: geocode → placeholder → WFS fetch → real polygon
+    // Process each parcel: geocode (bbox-aware) → placeholder → WFS fetch → real polygon
     particelle.forEach(async (p, idx) => {
       const color = p.color || "#3b82f6";
 
-      // 1. Geocode the municipality (local dict + Nominatim fallback)
-      let center: [number, number];
+      // 1. Geocode the municipality via proxy (gets full commune bbox from Nominatim)
+      let geocodeResult: { lat: number; lng: number; bbox: [number, number, number, number] };
       try {
-        center = await geocodeComune(p.comune);
+        geocodeResult = await geocodeComuneWithBbox(p.comune);
       } catch {
-        center = [42.8333, 12.8333];
+        geocodeResult = { lat: 42.8333, lng: 12.8333, bbox: [42.33, 43.33, 12.33, 13.33] };
       }
-      const [lat, lng] = center;
+      const { lat, lng, bbox } = geocodeResult;
+      const center: [number, number] = [lat, lng];
 
-      // 2. Draw placeholder polygon immediately
+      // 2. Draw placeholder polygon immediately (near commune center)
       const rawCoords = makePlaceholderPolygon(center, idx);
       const coords: L.LatLngExpression[][] = [
         rawCoords.map(([plat, plng]) => [plat, plng] as L.LatLngExpression),
@@ -682,16 +701,15 @@ export function MapView({
         `<em style="font-size:10px;opacity:0.6">⚠ Perimetro stimato</em>`
       );
 
+      // Placeholder tooltip (permanent label)
+      placeholderPoly.bindTooltip(
+        `Fg.${p.foglio} / ${p.particella}`,
+        { permanent: true, direction: "center", className: "leaflet-parcel-label", opacity: 1 }
+      );
+
       placeholderPoly.addTo(map);
       geometries[p.id] = coords;
       parcelLayersRef.current.push(placeholderPoly);
-
-      // Placeholder label
-      const placeholderLabel = addParcelLabel(
-        map, placeholderPoly,
-        `Fg.${p.foglio} / ${p.particella}`, "parcelsPane"
-      );
-      parcelLayersRef.current.push(placeholderLabel);
 
       // Center map on first parcel placeholder
       if (idx === 0) {
@@ -700,35 +718,22 @@ export function MapView({
 
       onParcelGeometries?.(geometries);
 
-      // 3. Fetch real geometry from WFS with foglio/particella filter
+      // 3. Fetch real geometry from WFS using full commune bbox for precise search
       try {
-        const features = await fetchParcelGeometry(lat, lng, p.foglio, p.particella, 0.01);
+        const features = await fetchParcelGeometry(bbox, p.foglio, p.particella);
 
         if (features.length === 0) throw new Error("No features returned");
 
         // Remove placeholder
         try { map.removeLayer(placeholderPoly); } catch {}
-        try { map.removeLayer(placeholderLabel); } catch {}
-        parcelLayersRef.current = parcelLayersRef.current.filter(
-          l => l !== placeholderPoly && l !== placeholderLabel
-        );
+        parcelLayersRef.current = parcelLayersRef.current.filter(l => l !== placeholderPoly);
 
         const realCoords: L.LatLngExpression[][] = [];
         let totalMq = 0;
         let firstPoly: L.Polygon | null = null;
 
-        // Use only features that best match foglio/particella
-        // The server may return multiple features; prefer exact match
-        const particellaNum = parseInt(p.particella, 10).toString();
-        const foglioNum = parseInt(p.foglio, 10).toString();
-        const exactMatch = features.filter(f => {
-          const lbl: string = f.properties?.label ?? "";
-          const ref: string = f.properties?.nationalRef ?? f.properties?.localId ?? "";
-          return lbl.includes(particellaNum) || ref.includes(particellaNum);
-        });
-        const toRender = exactMatch.length > 0 ? exactMatch : [features[0]];
-
-        toRender.forEach(feat => {
+        // The server already filtered by foglio+particella; render all returned features
+        features.forEach(feat => {
           if (!feat.geometry || feat.geometry.type !== "Polygon") return;
           const rings = (feat.geometry as GeoJSON.Polygon).coordinates;
 
@@ -759,19 +764,21 @@ export function MapView({
             `<em style="font-size:10px;color:#16a34a">✓ Perimetro reale (WFS)</em>`
           );
 
+          // Permanent label via Leaflet tooltip (centered, no arrow)
+          poly.bindTooltip(
+            `Fg.${p.foglio} / ${p.particella}`,
+            { permanent: true, direction: "center", className: "leaflet-parcel-label", opacity: 1 }
+          );
+
           poly.addTo(map);
           parcelLayersRef.current.push(poly);
           if (!firstPoly) firstPoly = poly;
         });
 
-        // Add label on first real polygon
+        // Fly to real polygon
         if (firstPoly) {
-          const lm = addParcelLabel(map, firstPoly, `Fg.${p.foglio} / ${p.particella}`, "parcelsPane");
-          parcelLayersRef.current.push(lm);
-
-          // Fly to real polygon
           try {
-            const b = firstPoly.getBounds();
+            const b = (firstPoly as L.Polygon).getBounds();
             if (b.isValid()) map.flyToBounds(b, { padding: [80, 80], maxZoom: 17, duration: 0.8 });
           } catch {}
         }
