@@ -3,7 +3,7 @@ import { Search, FileSearch, RotateCcw, AlertCircle, ChevronLeft, ChevronRight, 
 import { Button } from "@/components/ui/button";
 import { ParcelInput } from "@/components/ParcelInput";
 import { ConstraintPanel } from "@/components/ConstraintPanel";
-import { LayerControl } from "@/components/LayerControl";
+import { LayerControl, ALL_LAYERS } from "@/components/LayerControl";
 import { MapView } from "@/components/MapView";
 import { Particella, AnalisiVincolistica } from "@/types/vincoli";
 import { runAnalisiVincolistica } from "@/lib/analisiVincoli";
@@ -18,13 +18,9 @@ export default function Index() {
   const [analisi, setAnalisi] = useState<AnalisiVincolistica | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [layerState, setLayerState] = useState({
-    catasto: true,
-    paesaggistici: true,
-    idrogeologici: false,
-    natura2000: false,
-    pai: false,
-  });
+  const [layerState, setLayerState] = useState<Record<string, boolean>>(
+    Object.fromEntries(ALL_LAYERS.map(l => [l.id, l.defaultOn]))
+  );
 
   // Called by MapView to propagate real WFS area back to the parcel list
   const handleParcelAreaUpdate = useCallback((id: string, mq: number) => {
@@ -241,11 +237,7 @@ export default function Index() {
         <main className="flex-1 relative overflow-hidden">
           <MapView
             particelle={particelle}
-            showCatasto={layerState.catasto}
-            showVincoliPaesaggistici={layerState.paesaggistici}
-            showVincoliIdrogeologici={layerState.idrogeologici}
-            showNatura2000={layerState.natura2000}
-            showPAI={layerState.pai}
+            activeLayers={layerState}
             onParcelAreaUpdate={handleParcelAreaUpdate}
             onAddParticella={(p) => {
               if (step === "input") setParticelle(prev => [...prev, p]);
