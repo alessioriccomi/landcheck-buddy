@@ -149,14 +149,20 @@ export default function Index() {
                   </p>
                 </div>
                 <div className="w-full space-y-1.5 text-left bg-muted/30 rounded-lg p-3">
-                  {[
+                {[
                     "Catasto WFS — Agenzia delle Entrate",
-                    "Geoportale Nazionale (MiC)",
-                    "ISPRA — Banca dati PAI",
-                    "Rete Natura 2000 (MASE)",
-                    "Catasto Vincolo Idrogeologico",
-                    "PGRA — Rischio alluvioni",
-                    "Mappe servitù reti",
+                    "Geoportale Nazionale — MiC/Vincoli in Rete",
+                    "ISPRA — PAI · Frane · Alluvioni (PGRA)",
+                    "Rete Natura 2000 — ZSC/ZPS (MASE)",
+                    "Catasto Vincolo Idrogeologico (R.D. 3267/1923)",
+                    "Aree idonee FV/Agrivoltaico (D.Lgs. 199/2021)",
+                    "Vincoli agricoli — LCC · DOC · Olivi monumentali",
+                    "Aree non idonee regionali — art. 20",
+                    "Normativa agrivoltaico DM 22/2022 (GSE)",
+                    "Connessione rete — Terna/Distributori",
+                    "Militari/Radar — ENAC/ENAV · Difesa",
+                    "Usi civici · Catasto · Proprietà",
+                    "Vincoli forestali · Sismici · Servitù reti",
                   ].map((s, i) => (
                     <div key={s} className="flex items-center gap-2">
                       <Loader2

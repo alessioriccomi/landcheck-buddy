@@ -53,17 +53,16 @@ export function exportReportPDF(analisi: AnalisiVincolistica) {
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
-  doc.text("Analisi Vincolistica dei Terreni", margin, 22);
+  doc.text("Analisi Vincolistica per Impianti Agrivoltaici", margin, 22);
 
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
   doc.setTextColor(180, 200, 230);
   doc.text(
-    "D.Lgs. 42/2004  ·  D.Lgs. 152/2006  ·  R.D. 3267/1923  ·  D.L. 180/1998",
+    "D.Lgs. 42/2004 · D.Lgs. 152/2006 · R.D. 3267/1923 · D.Lgs. 199/2021 · D.M. 22/12/2022",
     margin,
     30
   );
 
-  // Date top-right
   doc.setTextColor(180, 200, 230);
   doc.setFontSize(8);
   doc.text(`Data analisi: ${analisi.dataAnalisi}`, pageW - margin, 14, { align: "right" });
@@ -84,16 +83,17 @@ export function exportReportPDF(analisi: AnalisiVincolistica) {
     p.foglio,
     p.particella,
     p.subalterno || "—",
+    p.superficieMq ? `${(p.superficieMq / 10000).toFixed(4)} ha` : "—",
   ]);
 
   autoTable(doc, {
     startY: y,
-    head: [["#", "Comune", "Prov.", "Foglio", "Particella", "Sub."]],
+    head: [["#", "Comune", "Prov.", "Foglio", "Particella", "Sub.", "Superficie"]],
     body: parcelRows,
     theme: "grid",
     headStyles: { fillColor: [22, 47, 99], textColor: 255, fontSize: 8, fontStyle: "bold" },
     bodyStyles: { fontSize: 8 },
-    columnStyles: { 0: { cellWidth: 8 }, 2: { cellWidth: 14 }, 3: { cellWidth: 18 }, 4: { cellWidth: 22 }, 5: { cellWidth: 14 } },
+    columnStyles: { 0: { cellWidth: 8 }, 2: { cellWidth: 12 }, 3: { cellWidth: 16 }, 4: { cellWidth: 20 }, 5: { cellWidth: 12 } },
     margin: { left: margin, right: margin },
   });
 
@@ -107,20 +107,19 @@ export function exportReportPDF(analisi: AnalisiVincolistica) {
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
   doc.text(
-    `Rischio complessivo: ${RISCHIO_LABEL[analisi.rischioComplessivo] || "—"}`,
+    `Rischio autorizzativo complessivo: ${RISCHIO_LABEL[analisi.rischioComplessivo] || "—"}`,
     margin + 5,
     y + 9
   );
 
-  // count totals
   const allVincoli = [
-    ...analisi.vincoliCulturali,
-    ...analisi.vincoliPaesaggistici,
-    ...analisi.vincoliIdrogeologici,
-    ...analisi.vincoliAmbientali,
-    ...analisi.rischioIdrico,
-    ...analisi.serviziReti,
-    ...analisi.altriVincoli,
+    ...analisi.vincoliCulturali, ...analisi.vincoliPaesaggistici,
+    ...analisi.vincoliIdrogeologici, ...analisi.vincoliAmbientali,
+    ...analisi.rischioIdrico, ...analisi.serviziReti, ...analisi.altriVincoli,
+    ...analisi.vincoliAgricoli, ...analisi.vincoliMilitariRadar,
+    ...analisi.vincoliForestali, ...analisi.vincoliSismici,
+    ...analisi.vincoliCatastali, ...analisi.compatibilitaConnessione,
+    ...analisi.areeIdonee, ...analisi.normativaAgrivoltaico,
   ];
   const totPresenti = allVincoli.filter(v => v.presenza === "presente").length;
   const totVerifica = allVincoli.filter(v => v.presenza === "verifica").length;
@@ -128,7 +127,7 @@ export function exportReportPDF(analisi: AnalisiVincolistica) {
 
   doc.setFontSize(8);
   doc.text(
-    `Presenti: ${totPresenti}   Da verificare: ${totVerifica}   Assenti: ${totAssenti}   Totale: ${allVincoli.length}`,
+    `Presenti: ${totPresenti}   Da verificare: ${totVerifica}   Assenti: ${totAssenti}   Tot. controlli: ${allVincoli.length}`,
     pageW - margin,
     y + 9,
     { align: "right" }
@@ -138,7 +137,7 @@ export function exportReportPDF(analisi: AnalisiVincolistica) {
 
   // ── Section helper ────────────────────────────────────────
   const addSection = (title: string, emoji: string, items: typeof analisi.vincoliCulturali) => {
-    // Check remaining space
+    if (items.length === 0) return;
     if (y > pageH - 50) {
       doc.addPage();
       y = margin;
@@ -159,7 +158,7 @@ export function exportReportPDF(analisi: AnalisiVincolistica) {
 
     autoTable(doc, {
       startY: y,
-      head: [["Vincolo", "Presenza", "Normativa", "Note"]],
+      head: [["Vincolo / Requisito", "Presenza", "Normativa", "Note"]],
       body: rows,
       theme: "striped",
       headStyles: { fillColor: [40, 70, 130], textColor: 255, fontSize: 7, fontStyle: "bold" },
@@ -190,23 +189,44 @@ export function exportReportPDF(analisi: AnalisiVincolistica) {
     y = (doc as any).lastAutoTable.finalY + 8;
   };
 
-  addSection("Beni Culturali", "🏛", analisi.vincoliCulturali);
+  // ── Sezioni principali ────────────────────────────────────
+  addSection("Beni Culturali e Archeologia", "🏛", analisi.vincoliCulturali);
   addSection("Vincoli Paesaggistici", "🌄", analisi.vincoliPaesaggistici);
   addSection("Vincoli Idrogeologici", "⛰️", analisi.vincoliIdrogeologici);
-  addSection("Rischio Idrico", "💧", analisi.rischioIdrico);
-  addSection("Vincoli Ambientali", "🌿", analisi.vincoliAmbientali);
+  addSection("Rischio Idrico (PAI/PGRA)", "💧", analisi.rischioIdrico);
+  addSection("Vincoli Ambientali e Natura 2000", "🌿", analisi.vincoliAmbientali);
   addSection("Servizi e Reti (servitù)", "⚡", analisi.serviziReti);
-  addSection("Altri Vincoli Urbanistici", "📋", analisi.altriVincoli);
+  addSection("Urbanistica e Altri Vincoli", "📋", analisi.altriVincoli);
+
+  // ── Sezioni agrivoltaico ──────────────────────────────────
+  // Separator
+  if (y > pageH - 40) { doc.addPage(); y = margin; }
+  doc.setFillColor(22, 47, 99);
+  doc.rect(margin, y, pageW - margin * 2, 8, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.text("VINCOLI SPECIFICI AGRIVOLTAICO", pageW / 2, y + 5.5, { align: "center" });
+  y += 13;
+
+  addSection("Vincoli Agricoli", "🌾", analisi.vincoliAgricoli);
+  addSection("Aree Idonee FV/Agrivoltaico (D.Lgs. 199/2021)", "☀️", analisi.areeIdonee);
+  addSection("Normativa Agrivoltaico (DM 22/2022)", "📐", analisi.normativaAgrivoltaico);
+  addSection("Compatibilità Connessione Rete", "🔌", analisi.compatibilitaConnessione);
+  addSection("Vincoli Catastali, Usi Civici e Proprietà", "📜", analisi.vincoliCatastali);
+  addSection("Vincoli Forestali e Incendi Boschivi", "🌲", analisi.vincoliForestali);
+  addSection("Vincoli Sismici", "〰️", analisi.vincoliSismici);
+  addSection("Vincoli Militari e Radar", "📡", analisi.vincoliMilitariRadar);
 
   // ── Disclaimer ────────────────────────────────────────────
-  if (y > pageH - 30) {
+  if (y > pageH - 35) {
     doc.addPage();
     y = margin;
   }
 
   doc.setFillColor(255, 251, 235);
   doc.setDrawColor(217, 119, 6);
-  doc.rect(margin, y, pageW - margin * 2, 22, "FD");
+  doc.rect(margin, y, pageW - margin * 2, 28, "FD");
   doc.setTextColor(100, 60, 0);
   doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
@@ -215,12 +235,14 @@ export function exportReportPDF(analisi: AnalisiVincolistica) {
   const disclaimer =
     "I risultati del presente report hanno carattere esclusivamente indicativo e non costituiscono parere legale o tecnico. " +
     "L'analisi è prodotta sulla base di banche dati pubbliche e potrebbe non rispecchiare aggiornamenti recenti degli enti competenti. " +
-    "È indispensabile verificare i vincoli presso gli uffici tecnici comunali, la Soprintendenza, l'Autorità di Bacino e gli altri enti " +
-    "competenti, nonché acquisire il parere di un professionista abilitato prima di qualsiasi intervento sul terreno.";
+    "Per un impianto agrivoltaico è indispensabile: (1) verificare i vincoli presso gli uffici tecnici comunali, la Soprintendenza, " +
+    "l'Autorità di Bacino, ENAC/ENAV, il Commissariato Usi Civici e gli altri enti competenti; (2) effettuare una due diligence " +
+    "cartografica completa con strumenti GIS (QGIS/ArcGIS) sui SIT regionali; (3) acquisire il parere di un professionista abilitato " +
+    "prima di qualsiasi impegno o investimento sul terreno.";
   const lines = doc.splitTextToSize(disclaimer, pageW - margin * 2 - 6);
-  doc.text(lines, margin + 3, y + 10);
+  doc.text(lines, margin + 3, y + 11);
 
-  y += 28;
+  y += 34;
 
   // ── Footer on all pages ───────────────────────────────────
   const pageCount = (doc.internal as any).getNumberOfPages();
@@ -231,11 +253,10 @@ export function exportReportPDF(analisi: AnalisiVincolistica) {
     doc.setTextColor(160, 190, 230);
     doc.setFontSize(6.5);
     doc.setFont("helvetica", "normal");
-    doc.text("GeoVincoli — Analisi Vincolistica Terreni", margin, pageH - 4);
+    doc.text("GeoVincoli — Analisi Vincolistica Agrivoltaico · Tuscany Engineering", margin, pageH - 4);
     doc.text(`Pag. ${i} di ${pageCount}`, pageW - margin, pageH - 4, { align: "right" });
   }
 
-  // Save
   const safeComune = analisi.particelle[0]?.comune?.replace(/\s+/g, "_") || "terreno";
   doc.save(`GeoVincoli_${safeComune}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
