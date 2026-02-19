@@ -526,7 +526,7 @@ export function MapView({
         // Parse foglio e particella dal localId (formato: IT.AGE.PLA.XXXXX_FFF_PPPPP)
         // oppure dall'etichetta, es. "123/456"
         let foglio = "";
-        let particella = label || (localId.split("_").pop() ?? "");
+        let particella = "";
 
         // Cerca di estrarre foglio dal localId o dal label
         const labelParts = label.split("/");
@@ -535,7 +535,7 @@ export function MapView({
           particella = labelParts[1].trim();
         } else {
           const idParts = localId.split("_");
-          if (idParts.length >= 2) {
+          if (idParts.length >= 2 && localId !== "unknown") {
             foglio = idParts[idParts.length - 2] ?? "";
             particella = idParts[idParts.length - 1] ?? "";
           }
@@ -550,17 +550,27 @@ export function MapView({
         }
         bestComune = bestComune.charAt(0).toUpperCase() + bestComune.slice(1);
 
-      const mq = calcAreaMq(features);
+        const mq = calcAreaMq(features);
         const currentLen = particelleRef.current.length;
+
+        // Build GeoJSON coordinates from click features for direct drawing (skip mode=parcel)
+        const clickCoords: [number, number][][] = features
+          .filter(f => f.geometry?.type === "Polygon")
+          .flatMap(f => (f.geometry as GeoJSON.Polygon).coordinates.map(
+            ring => ring.map(([lng2, lat2]) => [lat2, lng2] as [number, number])
+          ));
+
         const newP: Particella = {
           id: crypto.randomUUID(),
           comune: bestComune,
           provincia: "",
-          foglio,
-          particella,
+          foglio: foglio || "—",
+          particella: particella || "—",
           color: PARCEL_COLORS[currentLen % PARCEL_COLORS.length],
           superficieMq: mq > 0 ? mq : undefined,
-        } as Particella;
+          // Store click-derived geometry so the draw loop doesn't re-fetch via mode=parcel
+          _clickGeometry: clickCoords.length > 0 ? clickCoords : undefined,
+        } as Particella & { _clickGeometry?: [number, number][][] };
         onAddParticellaRef.current(newP);
       } catch (err) {
         console.warn("Click WFS error:", err);
@@ -659,6 +669,37 @@ export function MapView({
     // Process each parcel: geocode center → placeholder → mode=parcel lookup → real polygon
     particelle.forEach(async (p, idx) => {
       const color = p.color || "#3b82f6";
+      const pAny = p as Particella & { _clickGeometry?: [number, number][][] };
+
+      // If parcel was added by map click and already has geometry, draw it directly
+      if (pAny._clickGeometry && pAny._clickGeometry.length > 0) {
+        const rings: L.LatLngExpression[][] = pAny._clickGeometry.map(
+          ring => ring.map(([lat2, lng2]) => [lat2, lng2] as L.LatLngExpression)
+        );
+        const poly = L.polygon(rings, {
+          color, fillColor: color, fillOpacity: 0.4, weight: 3, opacity: 1, pane: "parcelsPane",
+        });
+        const mq = p.superficieMq ?? 0;
+        poly.bindPopup(
+          `<strong>${p.comune}</strong><br>` +
+          `Foglio <b>${p.foglio}</b> / Particella <b>${p.particella}</b><br>` +
+          (mq > 0 ? `<span style="font-weight:600;color:hsl(142,60%,35%)">Superficie: ${formatArea(mq)}</span><br>` : "") +
+          `<em style="font-size:11px;color:hsl(142,60%,35%)">✓ Perimetro reale (WFS)</em>`
+        );
+        poly.addTo(map);
+        parcelLayersRef.current.push(poly);
+        geometries[p.id] = rings;
+        onParcelGeometries?.(geometries);
+        if (mq > 0) {
+          setLocalAreas(prev => ({ ...prev, [p.id]: mq }));
+          onParcelAreaUpdate?.(p.id, mq);
+        }
+        setParcelStatuses(prev => ({ ...prev, [p.id]: "real" }));
+        if (idx === 0) {
+          try { map.flyToBounds(poly.getBounds(), { padding: [80, 80], maxZoom: 17, duration: 0.8 }); } catch {}
+        }
+        return;
+      }
 
       // 1. Geocode just for map centering + placeholder position
       let center: [number, number] = [42.8333, 12.8333];
@@ -702,6 +743,13 @@ export function MapView({
       }
 
       onParcelGeometries?.(geometries);
+
+      // Skip mode=parcel if foglio/particella are invalid (e.g. from click with no metadata)
+      const hasBadData = !p.foglio || p.foglio === "—" || !p.particella || p.particella === "—";
+      if (hasBadData) {
+        setParcelStatuses(prev => ({ ...prev, [p.id]: "placeholder" }));
+        return;
+      }
 
       // 3. Fetch real geometry via Parquet lookup + tiny WFS bbox (mode=parcel)
       try {
