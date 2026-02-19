@@ -266,7 +266,38 @@ async function searchParcelByAttribute(
   return geojson.features ?? [];
 }
 
-// Legacy fetchParcelGeometry for click mode (uses lat/lng/radius, no specific parcel)
+// GetFeatureInfo: returns {localId, label, nationalRef} for the exact pixel clicked
+async function getFeatureInfoAtPoint(lat: number, lng: number, zoom: number): Promise<{
+  localId: string;
+  label: string;
+  nationalRef: string;
+} | null> {
+  const params = new URLSearchParams({
+    mode: "getfeatureinfo",
+    lat: String(lat),
+    lng: String(lng),
+    zoom: String(zoom),
+  });
+  const url = `${SUPABASE_URL}/functions/v1/wfs-proxy?${params.toString()}`;
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` } });
+  if (resp.status === 404) return null;
+  if (!resp.ok) throw new Error(`GetFeatureInfo error: ${resp.status}`);
+  const data = await resp.json();
+  if (data.error) return null;
+  return data as { localId: string; label: string; nationalRef: string };
+}
+
+// WFS by RESOURCEID: fetches exact geometry of a single parcel
+async function fetchParcelGeometryById(resourceId: string): Promise<GeoJSON.Feature[]> {
+  const params = new URLSearchParams({ mode: "wfs_by_id", resourceId });
+  const url = `${SUPABASE_URL}/functions/v1/wfs-proxy?${params.toString()}`;
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` } });
+  if (!resp.ok) throw new Error(`WFS by ID error: ${resp.status}`);
+  const geojson: GeoJSON.FeatureCollection = await resp.json();
+  return geojson.features ?? [];
+}
+
+// Fallback: bbox WFS query (used when RESOURCEID fails)
 async function fetchParcelGeometryByPoint(
   lat: number,
   lng: number,
@@ -611,18 +642,17 @@ export function MapView({
     const handleCatastoClick = async (e: L.LeafletMouseEvent) => {
       const { lat, lng } = e.latlng;
       const zoom = map.getZoom();
-      if (zoom < 15) return; // catasto not meaningful at low zoom
+      if (zoom < 15) return;
 
       try {
-        const features = await fetchParcelGeometryByPoint(lat, lng, 0.0005);
-        if (features.length === 0) return;
+        // Step 1: GetFeatureInfo – identifica la particella esatta sotto il click
+        const info = await getFeatureInfoAtPoint(lat, lng, zoom);
+        if (!info) return;
 
-        const feat = features[0];
-        const props = feat.properties ?? {};
-        const label: string = props.label ?? "";
-        const localId: string = props.localId ?? "";
+        const { localId, label, nationalRef } = info;
+        console.log("GFI result:", { localId, label, nationalRef });
 
-        // Parse foglio/particella
+        // Parse foglio/particella da label (es "12/345") o da nationalRef / localId
         let foglio = "—";
         let particella = "—";
         const labelParts = label.split("/");
@@ -630,22 +660,58 @@ export function MapView({
           foglio = labelParts[0].trim();
           particella = labelParts[1].trim();
         } else {
-          const idParts = localId.split("_");
-          if (idParts.length >= 2 && localId !== "unknown") {
-            foglio = idParts[idParts.length - 2] ?? "—";
-            particella = idParts[idParts.length - 1] ?? "—";
+          const refParts = (nationalRef || localId).split("_");
+          if (refParts.length >= 2) {
+            foglio = refParts[refParts.length - 2] ?? "—";
+            particella = refParts[refParts.length - 1] ?? "—";
           }
         }
 
+        // Step 2: recupera la geometria esatta tramite RESOURCEID (o fallback bbox+filtro)
+        let features: GeoJSON.Feature[] = [];
+
+        // Prova prima con RESOURCEID (richiede l'id completo nel formato WFS)
+        // Il localId dal GFI può essere già il RESOURCEID oppure "IT.AGE.PLA.XXXXX_FF_PP"
+        if (localId && localId !== "unknown") {
+          try {
+            // Il RESOURCEID per il WFS AdE è "CP.CadastralParcel.<localId>"
+            const resourceId = localId.startsWith("CP.") ? localId : `CP.CadastralParcel.${localId}`;
+            features = await fetchParcelGeometryById(resourceId);
+          } catch {
+            console.warn("RESOURCEID lookup failed, falling back to bbox+filter");
+          }
+        }
+
+        // Fallback: bbox stretto attorno al click + filtro foglio/particella
+        if (features.length === 0 && foglio !== "—" && particella !== "—") {
+          const allFeatures = await fetchParcelGeometryByPoint(lat, lng, 0.0003);
+          // Trova la feature che corrisponde esattamente a foglio+particella
+          features = allFeatures.filter(f => {
+            const lbl: string = f.properties?.label ?? "";
+            const parts = lbl.split("/");
+            if (parts.length === 2) {
+              return parseInt(parts[0], 10) === parseInt(foglio, 10) &&
+                     parseInt(parts[1], 10) === parseInt(particella, 10);
+            }
+            return false;
+          });
+          // Se ancora vuoto, usa la feature più piccola (più probabile = quella cliccata)
+          if (features.length === 0 && allFeatures.length > 0) {
+            features = allFeatures.sort((a, b) => calcAreaMq([a]) - calcAreaMq([b])).slice(0, 1);
+          }
+        }
+
+        if (features.length === 0) return;
+
         const mq = calcAreaMq(features);
 
-        // Remove previous selection highlight
+        // Remove previous selection
         if (selectedParcelLayerRef.current) {
           try { map.removeLayer(selectedParcelLayerRef.current); } catch {}
           selectedParcelLayerRef.current = null;
         }
 
-        // Draw highlight polygon for selected parcel
+        // Draw highlight
         const rings: L.LatLngExpression[][] = features
           .filter(f => f.geometry?.type === "Polygon")
           .flatMap(f =>
@@ -658,21 +724,16 @@ export function MapView({
           const highlight = L.polygon(rings, {
             color: "#1d4ed8",
             fillColor: "#3b82f6",
-            fillOpacity: 0.25,
-            weight: 3,
+            fillOpacity: 0.3,
+            weight: 2.5,
             opacity: 1,
-            dashArray: undefined,
             pane: "parcelsPane",
           });
-
-          const surfaceTxt = mq > 0
-            ? `<br><span style="font-weight:600">Superficie: ${formatArea(mq)}</span>`
-            : "";
 
           highlight.bindPopup(
             `<strong>Particella selezionata</strong><br>` +
             `Foglio <b>${foglio}</b> / Particella <b>${particella}</b>` +
-            surfaceTxt
+            (mq > 0 ? `<br><span style="font-weight:600">Superficie: ${formatArea(mq)}</span>` : "")
           ).openPopup();
 
           highlight.addTo(map);
