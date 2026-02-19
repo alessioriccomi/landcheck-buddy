@@ -12,6 +12,7 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as strin
 interface GeocodeSuggestion {
   displayName: string;
   shortName: string;
+  provincia: string; // 2-letter province code
   lat: number;
   lng: number;
 }
@@ -70,8 +71,8 @@ export function ParcelInput({ particelle, onChange }: ParcelInputProps) {
           .slice(0, 6)
           .map((r: any) => ({
             displayName: r.display_name,
-            // Build short label: "Comune (Provincia)" from address details
             shortName: buildShortName(r),
+            provincia: extractProvincia(r),
             lat: parseFloat(r.lat),
             lng: parseFloat(r.lon),
           }));
@@ -90,6 +91,14 @@ export function ParcelInput({ particelle, onChange }: ParcelInputProps) {
     fetchSuggestions();
     return () => { cancelled = true; };
   }, [debouncedComune]);
+
+  function extractProvincia(r: any): string {
+    const addr = r.address ?? {};
+    // ISO3166-2-lvl6 is "IT-PT" → extract "PT"
+    const iso = addr["ISO3166-2-lvl6"] as string | undefined;
+    if (iso) return iso.replace("IT-", "").toUpperCase();
+    return "";
+  }
 
   function buildShortName(r: any): string {
     const addr = r.address ?? {};
@@ -116,14 +125,13 @@ export function ParcelInput({ particelle, onChange }: ParcelInputProps) {
   }, []);
 
   const selectSuggestion = (s: GeocodeSuggestion) => {
-    // Extract just the city name (first part before —)
     const cityName = s.shortName.split("—")[0].trim();
-    setForm(f => ({ ...f, comune: cityName }));
+    setForm(f => ({ ...f, comune: cityName, provincia: s.provincia }));
     setSuggestions([]);
     setSuggestionsOpen(false);
-    // Focus next field
+    // Focus foglio (provincia already filled)
     setTimeout(() => {
-      const next = document.querySelector<HTMLInputElement>('[data-field="provincia"]');
+      const next = document.querySelector<HTMLInputElement>('[data-field="foglio"]');
       next?.focus();
     }, 50);
   };
@@ -245,6 +253,7 @@ export function ParcelInput({ particelle, onChange }: ParcelInputProps) {
           <div>
             <Label className="text-xs text-muted-foreground mb-1 block">Foglio *</Label>
             <Input
+              data-field="foglio"
               placeholder="es. 1"
               value={form.foglio}
               onChange={e => setForm(f => ({ ...f, foglio: e.target.value }))}
