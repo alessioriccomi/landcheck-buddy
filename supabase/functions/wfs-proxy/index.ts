@@ -272,7 +272,41 @@ function featureMatchesFoglioParticella(
   return false;
 }
 
-// ── WFS query with tiny bbox ──────────────────────────────────
+// ── WFS query with CQL INTERSECTS (exact point → single parcel) ──
+// This is the correct approach for click-based parcel selection.
+// CQL_FILTER=INTERSECTS(geometry, POINT(lon lat)) returns only the parcel
+// whose polygon geometry contains the clicked point.
+async function wfsQueryPoint(
+  lat: number,
+  lon: number
+): Promise<GeoJSON.FeatureCollection> {
+  // CQL POINT uses X=lon, Y=lat (geographic convention)
+  const cqlFilter = `INTERSECTS(geometry,POINT(${lon} ${lat}))`;
+  const wfsUrl =
+    `https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php` +
+    `?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature` +
+    `&TYPENAMES=CP:CadastralParcel` +
+    `&SRSNAME=urn:ogc:def:crs:EPSG::6706` +
+    `&CQL_FILTER=${encodeURIComponent(cqlFilter)}` +
+    `&COUNT=1`;
+
+  console.log("WFS INTERSECTS point query:", wfsUrl.substring(0, 300));
+
+  const resp = await fetch(wfsUrl, {
+    headers: {
+      Accept: "application/xml, text/xml",
+      "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
+    },
+  });
+
+  if (!resp.ok) throw new Error(`WFS point ${resp.status}`);
+  const gml = await resp.text();
+  const fc = gmlToGeoJSON(gml);
+  console.log(`WFS INTERSECTS → ${fc.features.length} feature(s)`);
+  return fc;
+}
+
+// ── WFS query with tiny bbox (used for grid search, NOT for click) ──
 async function wfsQueryBbox(
   lat: number,
   lon: number,
@@ -285,8 +319,6 @@ async function wfsQueryBbox(
     `&SRSNAME=urn:ogc:def:crs:EPSG::6706` +
     `&BBOX=${lat - delta},${lon - delta},${lat + delta},${lon + delta}` +
     `&COUNT=50`;
-
-  console.log("WFS tiny bbox:", wfsUrl.substring(0, 200));
 
   const resp = await fetch(wfsUrl, {
     headers: {
@@ -421,6 +453,49 @@ serve(async (req) => {
         JSON.stringify({ lat, lng: lon, bbox, displayName: best.display_name }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // ── mode=wfs_point: WFS INTERSECTS per selezione precisa da click ──
+    if (mode === "wfs_point") {
+      const lat = parseFloat(url.searchParams.get("lat") ?? "");
+      const lng = parseFloat(url.searchParams.get("lng") ?? "");
+      if (isNaN(lat) || isNaN(lng)) {
+        return new Response(
+          JSON.stringify({ error: "Missing lat/lng" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      try {
+        const fc = await wfsQueryPoint(lat, lng);
+        return new Response(
+          JSON.stringify(fc),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (err) {
+        // Fallback to tiny bbox if CQL not supported
+        console.warn("CQL INTERSECTS failed, fallback to tiny bbox:", err);
+        try {
+          const fc = await wfsQueryBbox(lat, lng, 0.00005);
+          // Return only the first (smallest?) feature to approximate point selection
+          const sorted = fc.features.sort((a, b) => {
+            const aArea = a.geometry?.type === "Polygon"
+              ? (a.geometry as GeoJSON.Polygon).coordinates[0].length : 999;
+            const bArea = b.geometry?.type === "Polygon"
+              ? (b.geometry as GeoJSON.Polygon).coordinates[0].length : 999;
+            return aArea - bArea;
+          });
+          return new Response(
+            JSON.stringify({ type: "FeatureCollection", features: sorted.slice(0, 1) }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } catch (err2) {
+          return new Response(
+            JSON.stringify({ error: String(err2) }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
     }
 
     // ── mode=getfeatureinfo: WMS GetFeatureInfo per click preciso ──

@@ -266,6 +266,16 @@ async function searchParcelByAttribute(
   return geojson.features ?? [];
 }
 
+// WFS INTERSECTS point query: returns ONLY the parcel containing the click point
+async function fetchParcelAtPoint(lat: number, lng: number): Promise<GeoJSON.Feature[]> {
+  const params = new URLSearchParams({ mode: "wfs_point", lat: String(lat), lng: String(lng) });
+  const url = `${SUPABASE_URL}/functions/v1/wfs-proxy?${params.toString()}`;
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` } });
+  if (!resp.ok) throw new Error(`WFS point error: ${resp.status}`);
+  const geojson: GeoJSON.FeatureCollection = await resp.json();
+  return geojson.features ?? [];
+}
+
 // GetFeatureInfo: returns {localId, label, nationalRef} for the exact pixel clicked
 async function getFeatureInfoAtPoint(lat: number, lng: number, zoom: number): Promise<{
   localId: string;
@@ -297,7 +307,7 @@ async function fetchParcelGeometryById(resourceId: string): Promise<GeoJSON.Feat
   return geojson.features ?? [];
 }
 
-// Fallback: bbox WFS query (used when RESOURCEID fails)
+// Fallback: bbox WFS query (used only for parcel lookup by attribute, not for click)
 async function fetchParcelGeometryByPoint(
   lat: number,
   lng: number,
@@ -645,14 +655,17 @@ export function MapView({
       if (zoom < 15) return;
 
       try {
-        // Step 1: GetFeatureInfo – identifica la particella esatta sotto il click
-        const info = await getFeatureInfoAtPoint(lat, lng, zoom);
-        if (!info) return;
+        // CQL INTERSECTS: restituisce SOLO la particella che contiene il punto cliccato
+        const features = await fetchParcelAtPoint(lat, lng);
+        if (features.length === 0) return;
 
-        const { localId, label, nationalRef } = info;
-        console.log("GFI result:", { localId, label, nationalRef });
+        const feat = features[0];
+        const props = feat.properties ?? {};
+        const label: string = props.label ?? "";
+        const localId: string = props.localId ?? "";
+        const nationalRef: string = props.nationalRef ?? "";
 
-        // Parse foglio/particella da label (es "12/345") o da nationalRef / localId
+        // Parse foglio/particella
         let foglio = "—";
         let particella = "—";
         const labelParts = label.split("/");
@@ -667,42 +680,6 @@ export function MapView({
           }
         }
 
-        // Step 2: recupera la geometria esatta tramite RESOURCEID (o fallback bbox+filtro)
-        let features: GeoJSON.Feature[] = [];
-
-        // Prova prima con RESOURCEID (richiede l'id completo nel formato WFS)
-        // Il localId dal GFI può essere già il RESOURCEID oppure "IT.AGE.PLA.XXXXX_FF_PP"
-        if (localId && localId !== "unknown") {
-          try {
-            // Il RESOURCEID per il WFS AdE è "CP.CadastralParcel.<localId>"
-            const resourceId = localId.startsWith("CP.") ? localId : `CP.CadastralParcel.${localId}`;
-            features = await fetchParcelGeometryById(resourceId);
-          } catch {
-            console.warn("RESOURCEID lookup failed, falling back to bbox+filter");
-          }
-        }
-
-        // Fallback: bbox stretto attorno al click + filtro foglio/particella
-        if (features.length === 0 && foglio !== "—" && particella !== "—") {
-          const allFeatures = await fetchParcelGeometryByPoint(lat, lng, 0.0003);
-          // Trova la feature che corrisponde esattamente a foglio+particella
-          features = allFeatures.filter(f => {
-            const lbl: string = f.properties?.label ?? "";
-            const parts = lbl.split("/");
-            if (parts.length === 2) {
-              return parseInt(parts[0], 10) === parseInt(foglio, 10) &&
-                     parseInt(parts[1], 10) === parseInt(particella, 10);
-            }
-            return false;
-          });
-          // Se ancora vuoto, usa la feature più piccola (più probabile = quella cliccata)
-          if (features.length === 0 && allFeatures.length > 0) {
-            features = allFeatures.sort((a, b) => calcAreaMq([a]) - calcAreaMq([b])).slice(0, 1);
-          }
-        }
-
-        if (features.length === 0) return;
-
         const mq = calcAreaMq(features);
 
         // Remove previous selection
@@ -711,7 +688,7 @@ export function MapView({
           selectedParcelLayerRef.current = null;
         }
 
-        // Draw highlight
+        // Draw highlight for the single selected parcel
         const rings: L.LatLngExpression[][] = features
           .filter(f => f.geometry?.type === "Polygon")
           .flatMap(f =>
