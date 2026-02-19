@@ -367,7 +367,7 @@ export function MapView({
   const parcelLayersRef = useRef<L.Layer[]>([]);
   const basemapRef = useRef<L.TileLayer | null>(null);
   const catastoOverlayRef = useRef<L.TileLayer.WMS | null>(null);
-  const fabbricatiOverlayRef = useRef<L.TileLayer | null>(null);
+  
   const activeBaseRef = useRef<BasemapId>("osm");
   const [activeBase, setActiveBase] = useState<BasemapId>("osm");
   const [parcelStatuses, setParcelStatuses] = useState<Record<string, ParcelStatus>>({});
@@ -417,6 +417,10 @@ export function MapView({
     };
 
     // ── Catasto WMS overlay via proxy ────────────────────────
+    // Un unico tile combina:
+    //   CP.CadastralParcel   → terreni (arancione chiaro, stile default AdE)
+    //   CP.CadastralZoning   → graffe / link subalterni terreno-fabbricato
+    //   CP.CadastralBuilding → fabbricati (arancione scuro, stile default AdE)
     const proxyBase = `${SUPABASE_URL}/functions/v1/wfs-proxy`;
 
     const CatastoTileLayer = L.TileLayer.extend({
@@ -435,7 +439,8 @@ export function MapView({
           SERVICE: "WMS",
           VERSION: "1.3.0",
           REQUEST: "GetMap",
-          LAYERS: "CP.CadastralParcel",
+          LAYERS: "CP.CadastralParcel,CP.CadastralZoning,CP.CadastralBuilding",
+          STYLES: ",,",
           FORMAT: "image/png",
           TRANSPARENT: "true",
           CRS: "EPSG:6706",
@@ -450,7 +455,7 @@ export function MapView({
     const catastoWms = new (CatastoTileLayer as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
       proxyBase,
       {
-        opacity: 0.85,
+        opacity: 0.9,
         attribution: "Agenzia delle Entrate",
         pane: "wmsPane",
         tileSize: 256,
@@ -459,48 +464,6 @@ export function MapView({
     );
     catastoOverlayRef.current = catastoWms as unknown as L.TileLayer.WMS;
 
-    // ── Fabbricati WMS layer (edifici arancioni, stile forMaps) ──
-    // Usa lo stesso proxy con LAYERS=CP.CadastralBuilding (layer INSPIRE fabbricati AdE)
-    const FabbricatiTileLayer = L.TileLayer.extend({
-      getTileUrl(coords: L.Coords): string {
-        const m = (this as unknown as { _map: L.Map })._map;
-        if (!m) return "";
-        const tileBounds = m.unproject([coords.x * 256, coords.y * 256], coords.z);
-        const tileBoundsNE = m.unproject([(coords.x + 1) * 256, (coords.y + 1) * 256], coords.z);
-        const south = Math.min(tileBounds.lat, tileBoundsNE.lat);
-        const north = Math.max(tileBounds.lat, tileBoundsNE.lat);
-        const west = Math.min(tileBounds.lng, tileBoundsNE.lng);
-        const east = Math.max(tileBounds.lng, tileBoundsNE.lng);
-        const bbox = `${south},${west},${north},${east}`;
-        const params = new URLSearchParams({
-          mode: "wms",
-          SERVICE: "WMS",
-          VERSION: "1.3.0",
-          REQUEST: "GetMap",
-          LAYERS: "CP.CadastralParcel",
-          STYLES: "inspire_common:DEFAULT",
-          FORMAT: "image/png",
-          TRANSPARENT: "true",
-          CRS: "EPSG:6706",
-          WIDTH: "256",
-          HEIGHT: "256",
-          BBOX: bbox,
-        });
-        return `${proxyBase}?${params.toString()}`;
-      },
-    });
-
-    const fabbricatiLayer = new (FabbricatiTileLayer as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
-      proxyBase,
-      {
-        opacity: 0.9,
-        attribution: "Agenzia delle Entrate",
-        pane: "wmsPane",
-        tileSize: 256,
-        maxZoom: 19,
-      } as L.TileLayerOptions & { pane: string }
-    );
-    fabbricatiOverlayRef.current = fabbricatiLayer as unknown as L.TileLayer;
 
     // ── Dynamic WMS layers from ALL_LAYERS definitions ────────
     const dynamicLayers: Record<string, L.TileLayer> = {};
@@ -628,7 +591,6 @@ export function MapView({
     }
 
     const catastoWms = catastoOverlayRef.current;
-    const fabbricatiWms = fabbricatiOverlayRef.current;
 
     // Catasto parcel overlay: visible when catasto layer on, or in catasto/satellite_catasto modes
     if (catastoWms) {
@@ -642,14 +604,7 @@ export function MapView({
     }
 
     // Fabbricati overlay: only in satellite_catasto mode (the forMaps-style view)
-    if (fabbricatiWms) {
-      const showFabbricati = activeBase === "satellite_catasto";
-      if (showFabbricati) {
-        if (!map.hasLayer(fabbricatiWms)) fabbricatiWms.addTo(map);
-      } else {
-        if (map.hasLayer(fabbricatiWms)) map.removeLayer(fabbricatiWms);
-      }
-    }
+    // Il layer fabbricati è ora integrato nel catastoWms (richiesta multi-layer)
   }, [activeBase, showCatasto]);
 
   // ── Toggle WMS overlays (vincoli) ─────────────────────────
