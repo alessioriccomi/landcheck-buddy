@@ -468,14 +468,13 @@ export function MapView({
       );
     };
 
-    // Gerarchia visiva: foglio (più chiaro) → terreno → fabbricato (più scuro)
-    const catastoFoglio    = makeCatastoLayer("CP.CadastralZoning",   0.35); // foglio: molto trasparente
-    const catastoParcel    = makeCatastoLayer("CP.CadastralParcel",   0.65); // terreno: arancione chiaro
-    const catastoBuilding  = makeCatastoLayer("CP.CadastralBuilding", 0.90); // fabbricato: arancione scuro
-    // Layer etichette particelle: risoluzione 512px per mostrare i numeri
-    const catastoLabels    = makeCatastoLayer("CP.CadastralParcel",   1.0, 512); // numeri particella
-    // Layer graffe (CP.CadastralZoning contiene anche le connessioni)
-    const catastoGraffe    = makeCatastoLayer("CP.CadastralZoning",   0.80, 512); // graffe più visibili
+    // Gerarchia visiva: foglio (più chiaro) → terreno → fabbricato (più scuro) → etichette → graffe
+    // Nomi layer esatti dal GetCapabilities AdE WMS:
+    const catastoFoglio    = makeCatastoLayer("CP.CadastralZoning", 0.35);       // Mappe (fogli)
+    const catastoParcel    = makeCatastoLayer("CP.CadastralParcel", 0.65);       // Particelle (arancione chiaro)
+    const catastoBuilding  = makeCatastoLayer("fabbricati",         0.90);       // Fabbricati (arancione scuro)
+    const catastoLabels    = makeCatastoLayer("codice_plla",        1.0,  512);  // Numeri particella
+    const catastoGraffe    = makeCatastoLayer("simbolo_graffa",     0.90, 512);  // Simbolo Graffa
 
     catastoFoglioRef.current     = catastoFoglio;
     catastoOverlayRef.current    = catastoParcel;
