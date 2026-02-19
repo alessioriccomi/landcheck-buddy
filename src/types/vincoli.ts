@@ -33,6 +33,15 @@ export interface AnalisiVincolistica {
   rischioIdrico: VincoloItem[];
   serviziReti: VincoloItem[];
   altriVincoli: VincoloItem[];
+  // Nuove sezioni agrivoltaico
+  vincoliAgricoli: VincoloItem[];
+  vincoliMilitariRadar: VincoloItem[];
+  vincoliForestali: VincoloItem[];
+  vincoliSismici: VincoloItem[];
+  vincoliCatastali: VincoloItem[];
+  compatibilitaConnessione: VincoloItem[];
+  areeIdonee: VincoloItem[];
+  normativaAgrivoltaico: VincoloItem[];
   rischioComplessivo: RischioLevel;
 }
 

@@ -145,12 +145,19 @@ export function ConstraintPanel({ analisi }: ConstraintPanelProps) {
     ...analisi.vincoliCulturali, ...analisi.vincoliPaesaggistici,
     ...analisi.vincoliIdrogeologici, ...analisi.vincoliAmbientali,
     ...analisi.rischioIdrico, ...analisi.serviziReti, ...analisi.altriVincoli,
+    ...analisi.vincoliAgricoli, ...analisi.vincoliMilitariRadar,
+    ...analisi.vincoliForestali, ...analisi.vincoliSismici,
+    ...analisi.vincoliCatastali, ...analisi.compatibilitaConnessione,
+    ...analisi.areeIdonee, ...analisi.normativaAgrivoltaico,
   ];
   const totPresenti = allVincoli.filter(v => v.presenza === "presente").length;
   const totVerifica = allVincoli.filter(v => v.presenza === "verifica").length;
 
+  // Check if Puglia (for olive badge)
+  const hasPugliaOlives = analisi.vincoliAgricoli.some(v => v.id === "ag_06");
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Header risultati */}
       <div className="bg-card border border-border rounded-xl p-4">
         <div className="flex items-start justify-between mb-3">
@@ -192,46 +199,41 @@ export function ConstraintPanel({ analisi }: ConstraintPanelProps) {
             <p className="text-xs text-muted-foreground leading-tight">Assenti /<br />OK</p>
           </div>
         </div>
+
+        {/* Alert olivi monumentali Puglia */}
+        {hasPugliaOlives && (
+          <div className="mt-3 flex items-start gap-2 p-2.5 bg-amber-light border border-amber/40 rounded-lg">
+            <span className="text-base">🌳</span>
+            <p className="text-xs text-amber-foreground font-medium">
+              Area in Puglia: verifica obbligatoria presenza olivi monumentali (L. 168/2017)
+            </p>
+          </div>
+        )}
+
+        <p className="text-xs text-muted-foreground mt-2.5">{allVincoli.length} controlli totali · Analisi agrivoltaico completa</p>
       </div>
 
-      {/* Sezioni per categoria */}
-      <CategorySection
-        title="Beni Culturali"
-        icon={<span className="text-base">🏛️</span>}
-        items={analisi.vincoliCulturali}
-        defaultOpen={true}
-      />
-      <CategorySection
-        title="Vincoli Paesaggistici"
-        icon={<span className="text-base">🌄</span>}
-        items={analisi.vincoliPaesaggistici}
-        defaultOpen={true}
-      />
-      <CategorySection
-        title="Vincoli Idrogeologici"
-        icon={<span className="text-base">⛰️</span>}
-        items={analisi.vincoliIdrogeologici}
-      />
-      <CategorySection
-        title="Rischio Idrico"
-        icon={<span className="text-base">💧</span>}
-        items={analisi.rischioIdrico}
-      />
-      <CategorySection
-        title="Vincoli Ambientali"
-        icon={<span className="text-base">🌿</span>}
-        items={analisi.vincoliAmbientali}
-      />
-      <CategorySection
-        title="Servizi e Reti (servitù)"
-        icon={<span className="text-base">⚡</span>}
-        items={analisi.serviziReti}
-      />
-      <CategorySection
-        title="Altri Vincoli Urbanistici"
-        icon={<span className="text-base">📋</span>}
-        items={analisi.altriVincoli}
-      />
+      {/* ── SEZIONI PRINCIPALI ── */}
+      <CategorySection title="Beni Culturali e Archeologia" icon={<span className="text-base">🏛️</span>} items={analisi.vincoliCulturali} defaultOpen={true} />
+      <CategorySection title="Vincoli Paesaggistici" icon={<span className="text-base">🌄</span>} items={analisi.vincoliPaesaggistici} defaultOpen={true} />
+      <CategorySection title="Vincoli Idrogeologici" icon={<span className="text-base">⛰️</span>} items={analisi.vincoliIdrogeologici} />
+      <CategorySection title="Rischio Idrico (PAI/PGRA)" icon={<span className="text-base">💧</span>} items={analisi.rischioIdrico} />
+      <CategorySection title="Vincoli Ambientali e Natura 2000" icon={<span className="text-base">🌿</span>} items={analisi.vincoliAmbientali} />
+      <CategorySection title="Servizi e Reti (servitù)" icon={<span className="text-base">⚡</span>} items={analisi.serviziReti} />
+      <CategorySection title="Urbanistica e Altri Vincoli" icon={<span className="text-base">📋</span>} items={analisi.altriVincoli} />
+
+      {/* ── SEZIONI AGRIVOLTAICO ── */}
+      <div className="pt-1">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-2">Vincoli specifici agrivoltaico</p>
+      </div>
+      <CategorySection title="Vincoli Agricoli" icon={<span className="text-base">🌾</span>} items={analisi.vincoliAgricoli} defaultOpen={true} />
+      <CategorySection title="Aree Idonee FV/Agrivoltaico" icon={<span className="text-base">☀️</span>} items={analisi.areeIdonee} defaultOpen={true} />
+      <CategorySection title="Normativa Agrivoltaico (DM 22/2022)" icon={<span className="text-base">📐</span>} items={analisi.normativaAgrivoltaico} />
+      <CategorySection title="Compatibilità Connessione Rete" icon={<span className="text-base">🔌</span>} items={analisi.compatibilitaConnessione} />
+      <CategorySection title="Vincoli Catastali e Proprietà" icon={<span className="text-base">📜</span>} items={analisi.vincoliCatastali} />
+      <CategorySection title="Vincoli Forestali e Incendi" icon={<span className="text-base">🌲</span>} items={analisi.vincoliForestali} />
+      <CategorySection title="Vincoli Sismici" icon={<span className="text-base">〰️</span>} items={analisi.vincoliSismici} />
+      <CategorySection title="Vincoli Militari e Radar" icon={<span className="text-base">📡</span>} items={analisi.vincoliMilitariRadar} />
     </div>
   );
 }
