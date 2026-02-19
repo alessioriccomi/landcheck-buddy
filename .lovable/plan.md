@@ -1,77 +1,94 @@
 
-## Diagnosi dei due problemi
+## La risposta alla tua domanda: come funziona realmente
 
-### Problema 1: Particella sbagliata (bounding box troppo piccolo)
+L'Agenzia delle Entrate ha confermato ufficialmente (risposta scritta a onData) che **il CQL_FILTER per attributi non e' abilitato** sul WFS pubblico. Sono abilitate solo le richieste spaziali per bounding box. Questo e' il motivo per cui tutto quello che abbiamo tentato finora non funzionava: non e' un problema del nostro codice.
 
-Il flusso attuale è:
-1. `geocodeComune("Montecatini Terme")` → restituisce coordinate del centro città `[43.8847, 10.7735]`
-2. `fetchParcelGeometry(lat, lng, foglio, particella, radius=0.01)` → costruisce bbox di soli ±0.01° (~1 km) intorno al centro
-3. Il WFS viene interrogato con `CQL_FILTER` su quel piccolo bbox
-4. Se non trova nulla (la particella è fuori da quel piccolo quadrato), fa fallback bbox-only e restituisce le prime 50 particelle trovate in quel punto — che sono particelle generiche del centro città, non quella richiesta
+Il segreto di strumenti come forMaps e il tool QGIS di pigreco e' un **database di coordinate pre-calcolate** pubblicato dall'associazione onData su GitHub (licenza CC BY 4.0, uso libero). Per ogni particella catastale italiana e' stata precalcolata una coordinata interna (via `ST_PointOnSurface`) e salvata in file Parquet per regione.
 
-**La causa radice**: il bbox fisso ±0.01° è troppo piccolo. Per comuni grandi, la particella richiesta può trovarsi a kmm dal centro. Serve un bbox che copra l'intero territorio comunale.
+### Il flusso corretto (quello che usano tutti)
 
-### Problema 2: Etichette non visibili
+```text
+1. Utente inserisce: Comune="Montecatini Terme", Foglio=1, Particella=1
 
-Il `L.divIcon` con `iconSize: [0, 0]` e `iconAnchor: [0, 0]` crea un marker il cui "punto" è l'angolo in alto a sinistra dell'icona di dimensione zero. Il div HTML (`.leaflet-parcel-label`) viene posizionato con `left: 0; top: 0` e poi `transform: translate(-50%, -50%)`. In pratica però Leaflet aggiunge un wrapper div intorno all'html del DivIcon, quindi il posizionamento CSS non si applica correttamente e le etichette escono fuori dal poligono.
+2. Query su index.parquet (raw GitHub):
+   WHERE DENOMINAZIONE_IT LIKE 'MONTECATINI TERME'
+   → codice_comune = "F445", file = "09_Toscana.parquet"
 
----
+3. Query su 09_Toscana.parquet:
+   WHERE comune='F445' AND foglio='0001' AND particella='1'
+   → x=10773210, y=43882100
+   → lon=10.773210, lat=43.882100
 
-## Soluzione
+4. WFS con bbox minuscolo (±0.0001°) attorno a quel punto:
+   BBOX=43.8820,10.7731,43.8822,10.7733
+   → Restituisce geometria con properties complete (nationalRef, label)
 
-### Fix 1: Bbox dinamico per il comune (risolve la selezione errata)
-
-**Strategia**: usare Nominatim per ottenere il `boundingbox` del comune (non solo le coordinate centrali), poi usare quel bbox per interrogare il WFS. Nominatim restituisce `[south, north, west, east]` del comune completo.
-
-Modifiche all'**Edge Function `wfs-proxy`**:
-- Aggiungere un nuovo parametro `mode=geocode` che accetta un nome di comune e restituisce le coordinate + bounding box del comune tramite la Nominatim API (chiamata server-side dall'edge function per evitare problemi CORS/rate limiting).
-
-Modifiche a **`src/components/MapView.tsx`**:
-- Rimpiazzare `geocodeComune` (che restituisce solo lat/lng) con una nuova funzione `geocodeComuneWithBbox` che chiama l'edge function in modalità `mode=geocode` e ottiene anche il bounding box del comune.
-- La `fetchParcelGeometry` userà il bbox del comune anziché il bbox fisso dal centro — così il WFS copre tutto il territorio comunale.
-- Aumentare `COUNT` da 50 a 100 nella richiesta WFS per avere più probabilità di trovare la particella.
-
-Flusso corretto dopo il fix:
-1. `geocodeComuneWithBbox("Montecatini Terme")` → `{ lat, lng, bbox: [43.85, 43.92, 10.73, 10.82] }`
-2. Il WFS viene interrogato con `BBOX=43.85,10.73,43.92,10.82` (intero comune) + `CQL_FILTER` per foglio/particella
-3. Se CQL_FILTER funziona → risultato corretto
-4. Se CQL_FILTER non funziona → fallback con bbox intero comune + filtraggio lato client per foglio/particella sul `nationalRef` o `label`
-
-### Fix 2: Etichette visibili (risolve i numeri sui poligoni)
-
-Sostituire il DivIcon con approccio corretto:
-- `iconSize: [1, 1]` e `iconAnchor: [0, 0]`
-- Il div `.leaflet-parcel-label` usa `position: absolute; transform: translate(-50%, -50%); left: 0; top: 0` — questo funziona solo se il marker ha `iconAnchor` che punta al centro del div
-- **Fix corretto**: usare `iconAnchor` dinamico calcolato in base alla dimensione stimata del testo, oppure semplicemente usare `L.tooltip` con `permanent: true, direction: 'center', className: 'leaflet-parcel-label'` sul poligono stesso — Leaflet gestisce il posizionamento automaticamente
-
-La soluzione più robusta: usare `polygon.bindTooltip(text, { permanent: true, direction: 'center', className: 'leaflet-parcel-label', opacity: 1 })` — questo è il metodo nativo di Leaflet per etichette permanenti centrate sui layer, più affidabile del DivIcon.
-
-Aggiornare il CSS `.leaflet-parcel-label` rimuovendo i posizionamenti che conflittano con il tooltip nativo.
+5. Poligono disegnato sulla mappa + popup al click con foglio/particella
+```
 
 ---
 
-## File da modificare
+## Modifiche tecniche
 
-### `supabase/functions/wfs-proxy/index.ts`
-- Aggiungere modalità `mode=geocode`: chiama Nominatim con `?q=COMUNE&format=json&limit=1&countrycodes=it` e restituisce `{ lat, lng, bbox: [south, north, west, east] }`.
-- Nella modalità WFS: il chiamante fornirà i parametri `minLat`, `minLng`, `maxLat`, `maxLng` diretti (bbox del comune) invece di `lat/lng/radius`. Mantenere backward-compat accettando entrambi.
-- Aumentare `COUNT=100`.
-- Nel fallback senza CQL_FILTER: migliorare il filtraggio lato server sul `nationalRef` cercando sia foglio che particella in AND (non OR).
+### `supabase/functions/wfs-proxy/index.ts` — Nuova modalita' `mode=parcel`
+
+Aggiungere la modalita' `mode=parcel` che accetta `comune` (nome), `foglio`, `particella` e:
+
+1. Chiama `index.parquet` su raw.githubusercontent.com via fetch HTTP (il parquet e' interrogabile direttamente con una semplice GET range request tramite la libreria Apache Arrow/Parquet in Deno, oppure tramite un endpoint REST intermedio). Siccome Deno nell'edge function non ha DuckDB, si usera' l'approccio piu' semplice: **un'API REST gia' pronta che espone i dati parquet** — sql.js-httpvfs o direttamente `https://data.datasette.io` oppure, ancora piu' semplicemente, i file parquet possono essere letti in Deno tramite `fetch` parziale con il modulo `hyparquet` (parser parquet puro JS/TS senza dipendenze native).
+
+   In alternativa piu' robusta: pubblicare una piccola **Cloud Function** (o usare l'edge function stessa) che scarica il parquet rilevante la prima volta e lo cachea, poi interroga con logica JS nativa.
+
+   La soluzione piu' pragmatica per l'edge function Deno: **fetch il file parquet intero** (09_Toscana.parquet e' circa 2-5 MB, accettabile) e parsarlo con `hyparquet` (libreria TypeScript/Deno compatibile, nessuna dipendenza nativa). Questa operazione viene fatta solo al momento della ricerca, non su ogni richiesta di mappa.
+
+2. Con le coordinate trovate, costruisce un bbox di ±0.0001° e chiama il WFS.
+
+3. Restituisce le feature GeoJSON con geometria e properties complete.
 
 ### `src/components/MapView.tsx`
-- Sostituire `geocodeComune` con `geocodeComuneWithBbox` che chiama `wfs-proxy?mode=geocode&comune=...` e ottiene lat/lng + bbox del comune.
-- Modificare `fetchParcelGeometry` per accettare bbox completo `[minLat, minLng, maxLat, maxLng]` anziché `lat/lng/radius`.
-- Sostituire `addParcelLabel` (che usa DivIcon) con `polygon.bindTooltip` con `permanent: true` — più affidabile per le etichette.
-- Aggiornare il CSS delle etichette per il tooltip permanente.
 
-### `src/index.css`
-- Aggiornare `.leaflet-parcel-label` per funzionare con i tooltip permanenti Leaflet (rimuovere `position: absolute`, `transform: translate(-50%, -50%)`, `left: 0`, `top: 0` che erano per il DivIcon).
-- Aggiungere `.leaflet-tooltip.leaflet-parcel-label` con sfondo bianco, bordo, font grassetto — stile coerente col design.
+- Sostituire `fetchParcelGeometry` (che usava bbox del comune intero) con una chiamata a `mode=parcel`.
+- Mantenere la modalita' click sulla mappa (gia' funzionante a zoom alto con bbox piccolo).
+- I poligoni vengono disegnati con `bindPopup` al click (foglio, particella, comune, superficie) — nessuna etichetta permanente, come concordato.
+
+### Parsing del Parquet nell'edge function
+
+I file parquet di onData sono file binari standard. In Deno si puo' usare `hyparquet` importato via esm.sh:
+
+```typescript
+import { parquetRead, parquetMetadata } from 'https://esm.sh/hyparquet@1.9.1'
+```
+
+Il file `index.parquet` (~150KB) viene fetchato una volta, parsato in memoria per trovare `codice_comune` e `file_regione`. Poi il file regionale (es. `09_Toscana.parquet`, ~3-5MB) viene fetchato e filtrato per trovare `x` e `y`.
+
+L'edge function cachera' i file parquet con un semplice Map in-memory (persiste per la durata della warm instance).
 
 ---
 
-## Ordine di implementazione
+## Struttura del piano
 
-1. Aggiornare `wfs-proxy/index.ts` con `mode=geocode` e bbox-first WFS.
-2. Aggiornare `MapView.tsx` con geocoding bbox-aware e tooltip permanenti.
-3. Aggiornare `src/index.css` con stili tooltip corretti.
+### Step 1 — Edge Function `wfs-proxy/index.ts`
+- Aggiungere `mode=parcel` con:
+  - Lookup `index.parquet` → codice comune + file regionale
+  - Lookup file regionale → x, y della particella
+  - WFS con bbox ±0.0001° attorno al punto trovato
+  - Restituzione GeoJSON
+
+### Step 2 — `src/components/MapView.tsx`
+- Aggiungere `searchParcelByAttribute(comune, foglio, particella)` → chiama `mode=parcel`
+- Rimpiazza la vecchia logica bbox-del-comune
+- Popup al click con i dati della particella
+
+### Step 3 — `src/index.css`
+- Aggiornare stili popup Leaflet (bianco, bordo navy, font)
+- Rimuovere stili obsoleti per tooltip permanenti
+
+---
+
+## Vantaggi di questo approccio
+
+- Funziona sempre: le coordinate sono pre-calcolate offline da dati ufficiali AdE
+- Veloce: ~1-2 secondi totali (due fetch parquet + una WFS piccola)
+- Preciso: il bbox WFS e' di ±0.0001° (circa 10 metri), garantisce properties complete
+- Open data: dati onData con licenza CC BY 4.0, citabili in footer
+- Nessuna API a pagamento, nessuna chiave segreta necessaria
+
