@@ -156,46 +156,170 @@ async function geocodeViaProxy(comuneName: string): Promise<{ lat: number; lon: 
   return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
 }
 
-// ── Grid search: scan small WFS cells until we find the parcel ──
-// Splits the commune into 0.006° × 0.006° cells (properties are populated at this scale)
-async function gridSearchParcel(
+// ── Progressive search: Comune center → Foglio (CadastralZoning) → Particella ──
+// Step 1: WFS CadastralZoning around comune center to find the specific foglio sheet
+// Step 2: Use foglio bbox to search CadastralParcel for the target particella
+async function wfsQueryZoning(
+  lat: number,
+  lon: number,
+  delta: number
+): Promise<GeoJSON.Feature[]> {
+  const wfsUrl =
+    `https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php` +
+    `?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature` +
+    `&TYPENAMES=CP:CadastralZoning` +
+    `&SRSNAME=urn:ogc:def:crs:EPSG::6706` +
+    `&BBOX=${lat - delta},${lon - delta},${lat + delta},${lon + delta}` +
+    `&COUNT=200`;
+
+  const resp = await fetch(wfsUrl, {
+    headers: {
+      Accept: "application/xml, text/xml",
+      "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
+    },
+  });
+  if (!resp.ok) throw new Error(`WFS zoning ${resp.status}`);
+  const gml = await resp.text();
+  return gmlToGeoJSONZoning(gml);
+}
+
+// Parse CadastralZoning GML → features with label (foglio number) and geometry
+function gmlToGeoJSONZoning(gmlText: string): GeoJSON.Feature[] {
+  const features: GeoJSON.Feature[] = [];
+  const featureRegex = /<CP:CadastralZoning[\s\S]*?<\/CP:CadastralZoning>/g;
+  let featureMatch: RegExpExecArray | null;
+
+  while ((featureMatch = featureRegex.exec(gmlText)) !== null) {
+    const featureXml = featureMatch[0];
+    const labelMatch = featureXml.match(/<CP:label>(.*?)<\/CP:label>/);
+    const label = labelMatch ? labelMatch[1] : "";
+    const nationalIdMatch = featureXml.match(
+      /<CP:nationalCadastralReference>(.*?)<\/CP:nationalCadastralReference>/
+    );
+    const nationalRef = nationalIdMatch ? nationalIdMatch[1] : "";
+    const levelMatch = featureXml.match(/<CP:level[^>]*>(.*?)<\/CP:level>/);
+    const level = levelMatch ? levelMatch[1] : "";
+
+    const rings: [number, number][][] = [];
+    const posListRegex = /<gml:posList[^>]*>([\s\S]*?)<\/gml:posList>/g;
+    let posMatch: RegExpExecArray | null;
+    while ((posMatch = posListRegex.exec(featureXml)) !== null) {
+      const coords = parseGMLCoordinates(posMatch[1]);
+      if (coords.length >= 3) rings.push(coords);
+    }
+
+    if (rings.length === 0) continue;
+
+    features.push({
+      type: "Feature",
+      geometry: { type: "Polygon", coordinates: rings },
+      properties: { label, nationalRef, level },
+    });
+  }
+
+  return features;
+}
+
+// Compute bbox of a GeoJSON polygon feature → [south, north, west, east]
+function featureBbox(feat: GeoJSON.Feature): [number, number, number, number] {
+  let south = 90, north = -90, west = 180, east = -180;
+  if (feat.geometry?.type === "Polygon") {
+    for (const ring of (feat.geometry as GeoJSON.Polygon).coordinates) {
+      for (const [lng, lat] of ring) {
+        if (lat < south) south = lat;
+        if (lat > north) north = lat;
+        if (lng < west) west = lng;
+        if (lng > east) east = lng;
+      }
+    }
+  }
+  return [south, north, west, east];
+}
+
+// Compute centroid of a GeoJSON polygon feature
+function featureCentroid(feat: GeoJSON.Feature): [number, number] {
+  const [south, north, west, east] = featureBbox(feat);
+  return [(south + north) / 2, (west + east) / 2]; // [lat, lon]
+}
+
+// Progressive parcel search: comune → foglio → particella
+async function progressiveParcelSearch(
   centerLat: number,
   centerLon: number,
   foglio: string,
   particella: string
 ): Promise<GeoJSON.Feature[]> {
-  // Build a grid from ±0.05° around commune center (covers ~5km radius)
+  const foglioNum = parseInt(foglio, 10);
+  console.log(`Progressive search: center=${centerLat},${centerLon} foglio=${foglio} particella=${particella}`);
+
+  // Step 1: Find the foglio (CadastralZoning) near the comune center
+  // Try expanding deltas: 0.02° (~2km), 0.05° (~5km), 0.1° (~10km)
+  let foglioFeature: GeoJSON.Feature | null = null;
+  for (const delta of [0.02, 0.05, 0.1, 0.2]) {
+    try {
+      const zonings = await wfsQueryZoning(centerLat, centerLon, delta);
+      console.log(`Zoning delta=${delta} → ${zonings.length} features`);
+      // Match foglio by label number
+      const match = zonings.find(z => {
+        const lbl = String(z.properties?.label ?? "");
+        return parseInt(lbl, 10) === foglioNum;
+      });
+      if (match) {
+        foglioFeature = match;
+        console.log(`Found foglio ${foglio} at delta=${delta}`);
+        break;
+      }
+    } catch (err) {
+      console.warn(`Zoning query failed at delta=${delta}:`, err);
+    }
+  }
+
+  if (!foglioFeature) {
+    console.warn("Foglio not found via CadastralZoning, falling back to wider bbox search");
+    // Fallback: search parcels directly with expanding bbox
+    for (const delta of [0.003, 0.01, 0.03, 0.05]) {
+      const fc = await wfsQueryBbox(centerLat, centerLon, delta);
+      const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
+      if (matched.length > 0) return matched;
+    }
+    return [];
+  }
+
+  // Step 2: Use foglio bbox to search for the specific particella
+  const [south, north, west, east] = featureBbox(foglioFeature);
+  const foglioCenterLat = (south + north) / 2;
+  const foglioCenterLon = (west + east) / 2;
+  const foglioDeltaLat = (north - south) / 2 + 0.001; // small padding
+  const foglioDeltaLon = (east - west) / 2 + 0.001;
+  const foglioDelta = Math.max(foglioDeltaLat, foglioDeltaLon);
+
+  console.log(`Foglio bbox: ${south},${west} → ${north},${east}, searching parcels with delta=${foglioDelta.toFixed(4)}`);
+
+  // If foglio is small enough, query it in one shot
+  if (foglioDelta <= 0.01) {
+    const fc = await wfsQueryBbox(foglioCenterLat, foglioCenterLon, foglioDelta);
+    console.log(`Parcel search within foglio → ${fc.features.length} features`);
+    const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
+    if (matched.length > 0) return matched;
+    // If not matched by filter but features exist, scan by label
+    return [];
+  }
+
+  // If foglio is large, subdivide into smaller cells
   const STEP = 0.006;
-  const RANGE = 0.05;
-  const cells: [number, number][] = [];
-
-  for (let dlat = -RANGE; dlat <= RANGE; dlat += STEP) {
-    for (let dlon = -RANGE; dlon <= RANGE; dlon += STEP) {
-      cells.push([centerLat + dlat, centerLon + dlon]);
-    }
-  }
-
-  // Search in parallel batches of 6
-  const BATCH = 6;
-  for (let i = 0; i < cells.length; i += BATCH) {
-    const batch = cells.slice(i, i + BATCH);
-    const results = await Promise.all(
-      batch.map(async ([lat, lon]) => {
-        try {
-          const gj = await wfsQueryBbox(lat, lon, STEP / 2);
-          const matched = gj.features.filter(f =>
-            featureMatchesFoglioParticella(f, foglio, particella)
-          );
+  for (let lat = south; lat <= north; lat += STEP) {
+    for (let lon = west; lon <= east; lon += STEP) {
+      try {
+        const fc = await wfsQueryBbox(lat + STEP / 2, lon + STEP / 2, STEP / 2);
+        const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
+        if (matched.length > 0) {
+          console.log(`Found particella in foglio subdivision at ${lat.toFixed(4)},${lon.toFixed(4)}`);
           return matched;
-        } catch { return []; }
-      })
-    );
-    const found = results.flat();
-    if (found.length > 0) {
-      console.log(`Grid found parcel at batch ${i / BATCH}`);
-      return found;
+        }
+      } catch { /* continue */ }
     }
   }
+
   return [];
 }
 
@@ -374,28 +498,10 @@ serve(async (req) => {
         );
       }
 
-      // Step 2: grid search WFS cells around commune center
-      const gridFeatures = await gridSearchParcel(center.lat, center.lon, foglio, particella);
+      // Step 2: Progressive search — Comune center → Foglio (CadastralZoning) → Particella
+      const found = await progressiveParcelSearch(center.lat, center.lon, foglio, particella);
 
-      let geojson: GeoJSON.FeatureCollection;
-      if (gridFeatures.length > 0) {
-        geojson = { type: "FeatureCollection", features: gridFeatures };
-      } else {
-        // Fallback: try a wider WFS bbox around commune center
-        geojson = { type: "FeatureCollection", features: [] };
-        for (const delta of [0.003, 0.01, 0.03]) {
-          geojson = await wfsQueryBbox(center.lat, center.lon, delta);
-          console.log(`Fallback WFS delta=${delta} → ${geojson.features.length} features`);
-          if (geojson.features.length > 0) break;
-        }
-      }
-
-      const matched = geojson.features.filter((f) =>
-        featureMatchesFoglioParticella(f, foglio, particella)
-      );
-      const result = matched.length > 0 ? matched : geojson.features;
-
-      result.forEach((f) => {
+      found.forEach((f) => {
         if (f.properties) {
           f.properties._comune = comune;
           f.properties._foglio = foglio;
@@ -404,7 +510,7 @@ serve(async (req) => {
       });
 
       return new Response(
-        JSON.stringify({ type: "FeatureCollection", features: result }),
+        JSON.stringify({ type: "FeatureCollection", features: found }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
