@@ -443,6 +443,10 @@ export function MapView({
     map.createPane("wmsPane");
     map.getPane("wmsPane")!.style.zIndex = "300";
 
+    // Custom pane for catasto — above WMS vincoli but below parcels
+    map.createPane("catastoPane");
+    map.getPane("catastoPane")!.style.zIndex = "400";
+
     // Initial basemap
     const base = makeBaselayer("osm");
     base.addTo(map);
@@ -496,7 +500,7 @@ export function MapView({
       });
       return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
         proxyBase,
-        { opacity, attribution: "Agenzia delle Entrate", pane: "wmsPane", tileSize: tileSize, maxZoom: 19 } as L.TileLayerOptions & { pane: string }
+        { opacity, attribution: "Agenzia delle Entrate", pane: "catastoPane", tileSize: tileSize, maxZoom: 19 } as L.TileLayerOptions & { pane: string }
       );
     };
 
@@ -972,7 +976,7 @@ export function MapView({
 
       {/* Selected parcel info panel */}
       {selectedParcelInfo && !clickMode && (
-        <div className="absolute top-3 right-3 z-[1000] bg-card/95 backdrop-blur border border-primary/40 rounded-lg px-3 py-2 shadow-md min-w-[180px]">
+        <div className="absolute top-14 left-3 z-[1000] bg-card/95 backdrop-blur border border-primary/40 rounded-lg px-3 py-2 shadow-md min-w-[180px]">
           <div className="flex items-center justify-between gap-2 mb-1">
             <span className="text-xs font-semibold text-foreground">Particella selezionata</span>
             <button
