@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Particella, PARCEL_COLORS } from "@/types/vincoli";
-import { Satellite, Map, Layers, Loader2, MousePointer } from "lucide-react";
+import { Satellite, Map, Loader2, MousePointer } from "lucide-react";
 import { cn } from "@/lib/utils";
 import area from "@turf/area";
 import { ALL_LAYERS } from "@/components/LayerControl";
@@ -344,19 +344,17 @@ function formatArea(mq: number): string {
 const CENTER: L.LatLngExpression = [41.897, 12.483];
 
 // ── Basemap definitions ────────────────────────────────────────
-type BasemapId = "osm" | "satellite" | "catasto" | "satellite_catasto";
+type BasemapId = "osm" | "satellite";
 
 interface BasemapDef {
   id: BasemapId;
   label: string;
-  icon: "map" | "satellite" | "layers";
+  icon: "map" | "satellite";
 }
 
 const BASEMAPS: BasemapDef[] = [
   { id: "osm", label: "Mappa", icon: "map" },
   { id: "satellite", label: "Satellite", icon: "satellite" },
-  { id: "satellite_catasto", label: "Sat+Catasto", icon: "layers" },
-  { id: "catasto", label: "Map+Catasto", icon: "layers" },
 ];
 
 function makeBaselayer(id: BasemapId): L.TileLayer {
@@ -367,7 +365,6 @@ function makeBaselayer(id: BasemapId): L.TileLayer {
         maxZoom: 19,
       });
     case "satellite":
-    case "satellite_catasto":
       return L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
         {
@@ -375,12 +372,6 @@ function makeBaselayer(id: BasemapId): L.TileLayer {
           maxZoom: 19,
         }
       );
-    case "catasto":
-      return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19,
-        opacity: 0.55,
-      });
   }
 }
 
@@ -734,11 +725,7 @@ export function MapView({
     newBase.addTo(map);
     basemapRef.current = newBase;
 
-    if ((activeBase === "catasto" || activeBase === "satellite_catasto") && map.getZoom() < 15) {
-      map.setZoom(15);
-    }
-
-    const shouldShow = showCatasto || activeBase === "catasto" || activeBase === "satellite_catasto";
+    const shouldShow = showCatasto;
 
     const toggleCatastoLayer = (layer: L.TileLayer | null) => {
       if (!layer) return;
@@ -1044,7 +1031,6 @@ export function MapView({
           >
             {bm.icon === "map" && <Map size={12} />}
             {bm.icon === "satellite" && <Satellite size={12} />}
-            {bm.icon === "layers" && <Layers size={12} />}
             {bm.label}
           </button>
         ))}
