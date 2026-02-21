@@ -567,46 +567,35 @@ export function MapView({
       if (!onAddParticellaRef.current) return;
       const { lat, lng } = e.latlng;
       const zoom = map.getZoom();
-      if (zoom < 15) return; // Need sufficient zoom for catasto
+      if (zoom < 15) return;
       setClickLoading(true);
       try {
-        // Step 1: GetFeatureInfo → identify exactly which parcel was clicked (pixel-level precision)
-        const info = await getFeatureInfoAtPoint(lat, lng, zoom);
-        if (!info || !info.localId || info.localId === "unknown") {
-          console.warn("GetFeatureInfo returned no parcel at click point");
-          setClickLoading(false);
-          return;
-        }
-
-        console.log("GFI identified parcel:", info.localId, info.label, info.nationalRef);
-
-        // Step 2: WFS GetFeature by RESOURCEID → exact geometry of that single parcel
-        const resourceId = `CP.CadastralParcel.${info.localId}`;
-        const features = await fetchParcelGeometryById(resourceId);
+        // Single call: bbox + server-side point-in-polygon → exactly 1 parcel
+        const features = await fetchParcelAtPoint(lat, lng);
         if (features.length === 0) {
-          console.warn("RESOURCEID returned no geometry for:", resourceId);
           setClickLoading(false);
           return;
         }
 
-        const feat = features[0]; // Exactly ONE parcel
+        const feat = features[0];
+        const props = feat.properties ?? {};
+        const label: string = props.label ?? "";
+        const localId: string = props.localId ?? "";
 
-        // Parse foglio/particella from label or localId
         let foglio = "";
         let particella = "";
-        const labelParts = (info.label || "").split("/");
+        const labelParts = label.split("/");
         if (labelParts.length === 2) {
           foglio = labelParts[0].trim();
           particella = labelParts[1].trim();
         } else {
-          const idParts = info.localId.split("_");
+          const idParts = (props.nationalRef || localId).split("_");
           if (idParts.length >= 2) {
             foglio = idParts[idParts.length - 2] ?? "";
             particella = idParts[idParts.length - 1] ?? "";
           }
         }
 
-        // Find closest comune from dictionary
         let bestComune = "Sconosciuto";
         let bestDist = Infinity;
         for (const [nome, [clat, clng]] of Object.entries(COMUNI_COORDS)) {
@@ -662,34 +651,27 @@ export function MapView({
 
       setClickLoading(true);
       try {
-        // Step 1: GetFeatureInfo → pixel-level identification of the clicked parcel
-        const info = await getFeatureInfoAtPoint(lat, lng, zoom);
-        if (!info || !info.localId || info.localId === "unknown") {
-          setClickLoading(false);
-          return;
-        }
-
-        console.log("Selection GFI:", info.localId, info.label);
-
-        // Step 2: WFS RESOURCEID → exact geometry of that single parcel
-        const resourceId = `CP.CadastralParcel.${info.localId}`;
-        const features = await fetchParcelGeometryById(resourceId);
+        // bbox + server-side point-in-polygon → exactly 1 parcel
+        const features = await fetchParcelAtPoint(lat, lng);
         if (features.length === 0) {
           setClickLoading(false);
           return;
         }
 
         const feat = features[0];
+        const props = feat.properties ?? {};
+        const label: string = props.label ?? "";
+        const localId: string = props.localId ?? "";
+        const nationalRef: string = props.nationalRef ?? "";
 
-        // Parse foglio/particella
         let foglio = "—";
         let particella = "—";
-        const labelParts = (info.label || "").split("/");
+        const labelParts = label.split("/");
         if (labelParts.length === 2) {
           foglio = labelParts[0].trim();
           particella = labelParts[1].trim();
         } else {
-          const refParts = (info.nationalRef || info.localId).split("_");
+          const refParts = (nationalRef || localId).split("_");
           if (refParts.length >= 2) {
             foglio = refParts[refParts.length - 2] ?? "—";
             particella = refParts[refParts.length - 1] ?? "—";
@@ -698,13 +680,11 @@ export function MapView({
 
         const mq = calcAreaMq([feat]);
 
-        // Remove previous selection
         if (selectedParcelLayerRef.current) {
           try { map.removeLayer(selectedParcelLayerRef.current); } catch {}
           selectedParcelLayerRef.current = null;
         }
 
-        // Draw highlight for the single parcel
         const rings: L.LatLngExpression[][] = feat.geometry?.type === "Polygon"
           ? (feat.geometry as GeoJSON.Polygon).coordinates.map(ring =>
               ring.map(([lng2, lat2]) => [lat2, lng2] as L.LatLngExpression)
@@ -720,13 +700,11 @@ export function MapView({
             opacity: 1,
             pane: "parcelsPane",
           });
-
           highlight.bindPopup(
             `<strong>Particella selezionata</strong><br>` +
             `Foglio <b>${foglio}</b> / Particella <b>${particella}</b>` +
             (mq > 0 ? `<br><span style="font-weight:600">Superficie: ${formatArea(mq)}</span>` : "")
           ).openPopup();
-
           highlight.addTo(map);
           selectedParcelLayerRef.current = highlight;
           setSelectedParcelInfo({ foglio, particella, mq });

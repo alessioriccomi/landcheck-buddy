@@ -396,38 +396,45 @@ function featureMatchesFoglioParticella(
   return false;
 }
 
-// ── WFS query with CQL INTERSECTS (exact point → single parcel) ──
-// This is the correct approach for click-based parcel selection.
-// CQL_FILTER=INTERSECTS(geometry, POINT(lon lat)) returns only the parcel
-// whose polygon geometry contains the clicked point.
-async function wfsQueryPoint(
+// ── Point-in-polygon (ray casting) ──────────────────────────────
+// Returns true if point [lng, lat] is inside the polygon ring [[lng,lat], ...]
+function pointInPolygon(point: [number, number], ring: [number, number][]): boolean {
+  const [px, py] = point;
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+// Find the single feature whose polygon contains the given point
+function findFeatureContainingPoint(
+  features: GeoJSON.Feature[],
   lat: number,
   lon: number
-): Promise<GeoJSON.FeatureCollection> {
-  // CQL POINT uses X=lon, Y=lat (geographic convention)
-  const cqlFilter = `INTERSECTS(geometry,POINT(${lon} ${lat}))`;
-  const wfsUrl =
-    `https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php` +
-    `?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature` +
-    `&TYPENAMES=CP:CadastralParcel` +
-    `&SRSNAME=urn:ogc:def:crs:EPSG::6706` +
-    `&CQL_FILTER=${encodeURIComponent(cqlFilter)}` +
-    `&COUNT=1`;
-
-  console.log("WFS INTERSECTS point query:", wfsUrl.substring(0, 300));
-
-  const resp = await fetch(wfsUrl, {
-    headers: {
-      Accept: "application/xml, text/xml",
-      "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
-    },
-  });
-
-  if (!resp.ok) throw new Error(`WFS point ${resp.status}`);
-  const gml = await resp.text();
-  const fc = gmlToGeoJSON(gml);
-  console.log(`WFS INTERSECTS → ${fc.features.length} feature(s)`);
-  return fc;
+): GeoJSON.Feature | null {
+  const point: [number, number] = [lon, lat]; // GeoJSON is [lng, lat]
+  for (const feat of features) {
+    if (feat.geometry?.type !== "Polygon") continue;
+    const rings = (feat.geometry as GeoJSON.Polygon).coordinates;
+    // Check outer ring (first ring)
+    if (rings.length > 0 && pointInPolygon(point, rings[0] as [number, number][])) {
+      // Check not inside any hole (subsequent rings)
+      let inHole = false;
+      for (let h = 1; h < rings.length; h++) {
+        if (pointInPolygon(point, rings[h] as [number, number][])) {
+          inHole = true;
+          break;
+        }
+      }
+      if (!inHole) return feat;
+    }
+  }
+  return null;
 }
 
 // ── WFS query with tiny bbox (used for grid search, NOT for click) ──
@@ -561,7 +568,7 @@ serve(async (req) => {
       );
     }
 
-    // ── mode=wfs_point: WFS INTERSECTS per selezione precisa da click ──
+    // ── mode=wfs_point: bbox + server-side point-in-polygon for precise click ──
     if (mode === "wfs_point") {
       const lat = parseFloat(url.searchParams.get("lat") ?? "");
       const lng = parseFloat(url.searchParams.get("lng") ?? "");
@@ -572,36 +579,34 @@ serve(async (req) => {
         );
       }
 
-      try {
-        const fc = await wfsQueryPoint(lat, lng);
-        return new Response(
-          JSON.stringify(fc),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      } catch (err) {
-        // Fallback to tiny bbox if CQL not supported
-        console.warn("CQL INTERSECTS failed, fallback to tiny bbox:", err);
+      // Fetch parcels in a small bbox around the click point
+      // Try progressively larger bbox until we find a containing polygon
+      for (const delta of [0.0003, 0.001, 0.003]) {
         try {
-          const fc = await wfsQueryBbox(lat, lng, 0.00005);
-          // Return only the first (smallest?) feature to approximate point selection
-          const sorted = fc.features.sort((a, b) => {
-            const aArea = a.geometry?.type === "Polygon"
-              ? (a.geometry as GeoJSON.Polygon).coordinates[0].length : 999;
-            const bArea = b.geometry?.type === "Polygon"
-              ? (b.geometry as GeoJSON.Polygon).coordinates[0].length : 999;
-            return aArea - bArea;
-          });
-          return new Response(
-            JSON.stringify({ type: "FeatureCollection", features: sorted.slice(0, 1) }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        } catch (err2) {
-          return new Response(
-            JSON.stringify({ error: String(err2) }),
-            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          const fc = await wfsQueryBbox(lat, lng, delta);
+          console.log(`wfs_point bbox delta=${delta} → ${fc.features.length} features`);
+          
+          if (fc.features.length === 0) continue;
+
+          // Server-side point-in-polygon: find exactly which parcel contains the click
+          const match = findFeatureContainingPoint(fc.features, lat, lng);
+          if (match) {
+            console.log(`Point-in-polygon match: ${match.properties?.label ?? match.properties?.localId}`);
+            return new Response(
+              JSON.stringify({ type: "FeatureCollection", features: [match] }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        } catch (err) {
+          console.warn(`wfs_point bbox delta=${delta} failed:`, err);
         }
       }
+
+      // No match found
+      return new Response(
+        JSON.stringify({ type: "FeatureCollection", features: [] }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // ── mode=getfeatureinfo: WMS GetFeatureInfo per click preciso ──
