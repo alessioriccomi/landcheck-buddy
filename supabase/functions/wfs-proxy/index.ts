@@ -759,6 +759,55 @@ serve(async (req) => {
       );
     }
 
+    // ── mode=wms_ext: proxy for external WMS servers (PCN, ISPRA, MiC, etc.) ──
+    if (mode === "wms_ext") {
+      const targetUrl = url.searchParams.get("url");
+      if (!targetUrl) {
+        return new Response(JSON.stringify({ error: "Missing url parameter" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Allowlist of trusted WMS domains
+      const allowedDomains = [
+        "wms.pcn.minambiente.it",
+        "geodata.mit.gov.it",
+        "wms.cartografia.agenziaentrate.gov.it",
+      ];
+      let parsedUrl: URL;
+      try { parsedUrl = new URL(targetUrl); } catch {
+        return new Response(JSON.stringify({ error: "Invalid url" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!allowedDomains.some(d => parsedUrl.hostname === d || parsedUrl.hostname.endsWith("." + d))) {
+        return new Response(JSON.stringify({ error: "Domain not allowed" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      try {
+        const resp = await fetch(targetUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; GeoVincoliProxy/1.0)",
+            Accept: "image/png,image/*",
+          },
+        });
+        const imageData = await resp.arrayBuffer();
+        return new Response(imageData, {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": resp.headers.get("Content-Type") ?? "image/png",
+            "Cache-Control": "public, max-age=3600",
+          },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: "WMS fetch failed", detail: String(err) }), {
+          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // ── mode=wms ──────────────────────────────────────────────
     if (mode === "wms") {
       const wmsParams = new URLSearchParams();
