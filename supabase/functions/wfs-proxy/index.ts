@@ -637,7 +637,7 @@ serve(async (req) => {
         REQUEST: "GetFeatureInfo",
         LAYERS: "CP.CadastralParcel",
         QUERY_LAYERS: "CP.CadastralParcel",
-        INFO_FORMAT: "application/json",
+        INFO_FORMAT: "text/xml",
         CRS: "EPSG:6706",
         WIDTH: String(tileSize),
         HEIGHT: String(tileSize),
@@ -653,7 +653,7 @@ serve(async (req) => {
       const gfiResp = await fetch(gfiUrl, {
         headers: {
           "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
-          Accept: "application/json, text/plain, */*",
+          Accept: "text/xml, application/xml, */*",
           Referer: "https://wms.cartografia.agenziaentrate.gov.it/",
         },
       });
@@ -665,26 +665,37 @@ serve(async (req) => {
         );
       }
 
-      const contentType = gfiResp.headers.get("Content-Type") ?? "";
-      let gfiData: { features?: { id?: string; properties?: Record<string, string> }[] } = {};
+      const text = await gfiResp.text();
+      console.log("GFI raw response (first 800):", text.substring(0, 800));
 
-      if (contentType.includes("json")) {
-        gfiData = await gfiResp.json();
-      } else {
-        // Some AdE endpoints return GML/XML even with INFO_FORMAT=application/json
-        // Try to extract localId from XML
-        const text = await gfiResp.text();
-        console.log("GFI raw response (first 500):", text.substring(0, 500));
-        const localIdMatch = text.match(/<base:localId>(.*?)<\/base:localId>/);
-        const labelMatch = text.match(/<CP:label>(.*?)<\/CP:label>/);
-        const natRefMatch = text.match(/<CP:nationalCadastralReference>(.*?)<\/CP:nationalCadastralReference>/);
-        if (localIdMatch) {
+      // Check for ServiceException (error from WMS)
+      if (text.includes("ServiceException")) {
+        console.warn("GFI ServiceException:", text.substring(0, 300));
+        return new Response(
+          JSON.stringify({ error: "WMS GetFeatureInfo not supported for this layer", raw: text.substring(0, 200) }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Parse XML/GML response to extract localId, label, nationalCadastralReference
+      const localIdMatch = text.match(/<base:localId>(.*?)<\/base:localId>/);
+      const labelMatch = text.match(/<CP:label>(.*?)<\/CP:label>/);
+      const natRefMatch = text.match(/<CP:nationalCadastralReference>(.*?)<\/CP:nationalCadastralReference>/);
+      
+      // Also try INSPIRE ID pattern: <inspire:localId> or <gml:identifier>
+      const inspireIdMatch = text.match(/<inspire(?:id)?:localId>(.*?)<\/inspire(?:id)?:localId>/i);
+      const gmlIdMatch = text.match(/gml:id="([^"]+)"/);
+
+      const localId = localIdMatch?.[1] ?? inspireIdMatch?.[1] ?? "";
+      const label = labelMatch?.[1] ?? "";
+      const nationalRef = natRefMatch?.[1] ?? "";
+
+      if (!localId && !label && !nationalRef) {
+        // Try to extract any identifier from the XML
+        const anyIdMatch = text.match(/(?:localId|INSPIREID_LOCALID|inspireId)[>\s]*([A-Z0-9._]+)/i);
+        if (anyIdMatch) {
           return new Response(
-            JSON.stringify({
-              localId: localIdMatch[1],
-              label: labelMatch ? labelMatch[1] : "",
-              nationalRef: natRefMatch ? natRefMatch[1] : "",
-            }),
+            JSON.stringify({ localId: anyIdMatch[1], label: "", nationalRef: "" }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
@@ -693,20 +704,6 @@ serve(async (req) => {
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-
-      const features = gfiData.features ?? [];
-      if (features.length === 0) {
-        return new Response(
-          JSON.stringify({ error: "No feature found at click point" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const feat = features[0];
-      // GeoServer-style GFI: id is "CP.CadastralParcel.IT.AGE.PLA.XXXXX_FFF_PPP"
-      const localId: string = feat.id ?? feat.properties?.localId ?? feat.properties?.INSPIREID_LOCALID ?? "";
-      const label: string = feat.properties?.label ?? feat.properties?.CP_label ?? "";
-      const nationalRef: string = feat.properties?.nationalCadastralReference ?? feat.properties?.CP_nationalCadastralReference ?? "";
 
       return new Response(
         JSON.stringify({ localId, label, nationalRef }),
