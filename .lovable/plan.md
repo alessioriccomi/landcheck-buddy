@@ -1,69 +1,121 @@
 
 
-# Piano di correzione: Layer WMS vincoli e stabilizzazione
+# Piano: Fix layer vincoli + aggiunta layer completi
 
-## Problema identificato
+## Problema principale
 
-I layer WMS dei vincoli nel pannello Layer non funzionano perche' gli URL e i nomi dei layer sono in gran parte **inventati**. I server WMS del Geoportale Nazionale (PCN) hanno URL e nomi di layer specifici che vanno verificati. Inoltre, alcuni server potrebbero non essere raggiungibili o avere formati diversi.
+I layer vincoli (ArcGIS/WMS) non vengono visualizzati quando attivati dal pannello. L'indagine ha rivelato che:
+- Il proxy funziona (verificato con curl: risposta PNG valida da 6KB)
+- Il server PCN ArcGIS e' raggiungibile e restituisce dati reali
+- Ma ZERO richieste `wms_ext` arrivano al proxy — i tile non vengono mai caricati dal browser
 
-## Approccio
+La causa probabile e' un problema nel custom `L.TileLayer.extend()`: il metodo `getTileUrl` accede a `this._map` che puo' essere `null` al momento della prima richiesta tile (restituisce stringa vuota), oppure un problema di timing tra creazione del layer e aggiunta alla mappa.
 
-### Step 1 — Verificare i veri endpoint WMS del Geoportale Nazionale
+## Piano di correzione
 
-Fare una ricerca sui veri URL WMS disponibili dal PCN (wms.pcn.minambiente.it) e da ISPRA. I servizi WMS reali e documentati del PCN includono:
+### 1. Correggere il caricamento dei tile ArcGIS/WMS
 
-- **Natura 2000**: `https://wms.minambiente.it/ogc?map=/ms_ogc/WMS/Rete_Natura_2000.map` con layer come `rn2000:ZSC`, `rn2000:ZPS`
-- **Aree Protette**: `https://wms.minambiente.it/ogc?map=/ms_ogc/WMS/EUAP.map`
-- **PAI/IFFI**: `https://idrogeo.isprambiente.it/geoserver/wms` con layer `iffi:frane_poly`, `pai:pericolosita_frana`
-- **Vincolo Idrogeologico**: Varia per regione, non esiste un servizio nazionale unificato
+**File: `src/components/MapView.tsx`**
 
-### Step 2 — Ridurre i layer a quelli realmente funzionanti
+- Riscrivere `makeArcGISLayer` e `makeProxiedWmsLayer` usando `L.GridLayer.extend()` con `createTile()` invece di `L.TileLayer.extend()` con `getTileUrl()`. L'approccio `createTile` permette di caricare le immagini via `fetch()` con gestione errori esplicita, eliminando il problema del `_map` nullo
+- In alternativa, usare `crossOrigin: "anonymous"` e verificare che `_map` esista prima di generare l'URL
+- Aggiungere `console.log` per debug nelle prime tile caricate
+- Aggiungere l'`apikey` come query parameter ai tile URL per garantire l'autenticazione (anche se i tile catasto funzionano senza, per sicurezza)
 
-Invece di avere 30+ layer finti, mantenere solo quelli verificati e funzionanti:
+### 2. Espandere la lista layer vincoli
 
-1. **Catasto** (gia' funzionante via proxy AdE)
-2. **Natura 2000 ZSC/ZPS** (MASE/MATTM - verificare URL reale)
-3. **Aree Protette EUAP** (MATTM)
-4. **IFFI Frane** (ISPRA IdroGEO)
-5. **PGRA Alluvioni** (se disponibile via WMS pubblico)
+**File: `src/components/LayerControl.tsx`**
 
-I layer con URL non verificati vanno rimossi o commentati per evitare richieste inutili e confusione utente.
+Aggiungere tutti i servizi ArcGIS MapServer verificati dal catalogo PCN (www.pcn.minambiente.it/arcgis/rest/services). I servizi disponibili e verificati sono:
 
-### Step 3 — Aggiornare `LayerControl.tsx`
+**Ambiente e Natura (5 layer)**
+- SIC_ZSC_ZPS (Rete Natura 2000) - gia' presente
+- EUAP (Aree Protette) - gia' presente
+- IBA (Important Bird Areas) - gia' presente
+- Aree Ramsar - gia' presente
+- Santuario Pelagos
 
-Riscrivere `LAYER_GROUPS` con soli layer verificati, aggiungendo un commento per ogni URL con la fonte di verifica. Aggiungere anche il dominio corretto nell'allowlist del proxy (`wms_ext` in `wfs-proxy/index.ts`).
+**Idrogeologia e PAI (6 layer)**
+- PAI pericolosita idrogeologica (alluvioni, frane, valanghe) - gia' presente
+- PAI rischio idrogeologico - gia' presente
+- Alluvioni Estensione - gia' presente
+- Alluvioni Classi di Rischio (NUOVO)
+- Alluvioni Caratteristiche Idrauliche (NUOVO)
+- Alluvioni Elementi a Rischio (NUOVO)
 
-### Step 4 — Aggiungere domini all'allowlist del proxy
+**Geologia e Frane (5 layer)**
+- Catalogo Frane poligonali - gia' presente
+- Catalogo Frane lineari (NUOVO)
+- Catalogo Frane Aree (NUOVO)
+- Catalogo Frane DGPV (NUOVO)
+- Carta geologica - gia' presente
+- Carta geolitologica (NUOVO)
 
-In `wfs-proxy/index.ts`, aggiungere i domini reali dei WMS verificati all'array `allowedDomains`:
-- `wms.minambiente.it`
-- `idrogeo.isprambiente.it`
-- `geoserver.isprambiente.it`
+**Sismica (4 layer)**
+- Classificazione sismica comunale 2012 - gia' presente
+- Pericolosita sismica 0.02 (NUOVO)
+- Pericolosita sismica 0.05 (NUOVO)
+- Zone sismogenetiche ZS9 (NUOVO)
 
-### Step 5 — Test e validazione
+**Uso del suolo (3 layer)**
+- CORINE Land Cover 2012 - gia' presente
+- CORINE Land Cover 2012 IV livello (NUOVO)
+- IUTI - Inventario Uso Terre (NUOVO)
 
-Verificare che ogni layer attivato mostri effettivamente dei dati sulla mappa, almeno in una zona d'Italia nota (es. Roma, Firenze).
+**Idrografia e Costa (5 layer)**
+- Aste fluviali (NUOVO)
+- Laghi e specchi acqua (NUOVO)
+- Linea di costa 2009 (NUOVO)
+- Variazione costa 1960-2012 (NUOVO)
+- Unita fisiografiche (NUOVO)
 
----
+**Limiti e Infrastrutture (4 layer)**
+- Limiti amministrativi 2020 (NUOVO)
+- Ferrovie (NUOVO)
+- Porti 2012 (NUOVO)
+- ADB - Autorita di Bacino Distrettuale (NUOVO)
+
+**Ambiente e Territorio (4 layer)**
+- Carta ecopedologica (NUOVO)
+- Fitoclima (NUOVO)
+- Rischio erosione (NUOVO)
+- Regioni pedologiche desertificazione (NUOVO)
+
+Totale: da 11 a ~35 layer verificati.
+
+### 3. Aggiornare la allowlist del proxy
+
+**File: `supabase/functions/wfs-proxy/index.ts`**
+
+Verificare che `www.pcn.minambiente.it` sia nella allowlist (gia' presente). Nessuna modifica necessaria.
 
 ## Dettagli tecnici
 
+### Approccio per il fix tile (createTile)
+
+```text
+L.GridLayer.extend({
+  createTile(coords, done) {
+    const tile = document.createElement('img');
+    // Costruisci URL come prima
+    const url = buildTileUrl(coords, this._map);
+    tile.crossOrigin = 'anonymous';
+    tile.onload = () => done(null, tile);
+    tile.onerror = () => done(new Error('tile failed'), tile);
+    tile.src = url;
+    return tile;
+  }
+})
+```
+
+Questo approccio:
+- Non dipende dal timing di `_map` (il metodo `createTile` viene chiamato solo quando il layer e' gia' sulla mappa)
+- Fornisce gestione errori esplicita
+- Funziona con lo stesso pattern del proxy
+
 ### File modificati
 
-1. **`src/components/LayerControl.tsx`**: Ridurre LAYER_GROUPS ai soli layer con URL WMS verificati e funzionanti. Ogni layer avra' un commento con la fonte GetCapabilities verificata.
-
-2. **`supabase/functions/wfs-proxy/index.ts`**: Aggiornare `allowedDomains` per includere i domini WMS reali (minambiente.it, isprambiente.it). Nessuna altra modifica necessaria — la logica wms_ext e' gia' corretta.
-
-### Layer da mantenere (verificati)
-
-| Layer | URL WMS | Layer name | Fonte |
-|-------|---------|------------|-------|
-| Catasto | (proxy AdE diretto) | CP.CadastralParcel | AdE |
-| Natura 2000 | Da verificare via GetCapabilities | Da verificare | MASE |
-| Aree Protette | Da verificare via GetCapabilities | Da verificare | MATTM |
-| Frane IFFI | Da verificare via GetCapabilities | Da verificare | ISPRA |
-
-### Nota importante
-
-Prima dell'implementazione, faro' una verifica live dei GetCapabilities di ogni server WMS per ottenere i nomi esatti dei layer disponibili. Questo e' il passo critico che e' mancato finora — i nomi layer sono stati inseriti "a intuito" senza verifica.
+1. `src/components/LayerControl.tsx` — Espansione LAYER_GROUPS con ~35 layer verificati PCN
+2. `src/components/MapView.tsx` — Riscrittura makeArcGISLayer/makeProxiedWmsLayer con L.GridLayer.extend + createTile
+3. `supabase/functions/wfs-proxy/index.ts` — Nessuna modifica (allowlist gia' corretta)
 
