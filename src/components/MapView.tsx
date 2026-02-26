@@ -519,7 +519,8 @@ export function MapView({
     catastoGraffeRef.current     = catastoGraffe;
 
 
-    // ── Dynamic WMS layers from ALL_LAYERS definitions (proxied via wfs-proxy) ──
+    // ── Dynamic layers from ALL_LAYERS definitions ──
+    // Supports both WMS (proxied via wfs-proxy mode=wms_ext) and ArcGIS REST MapServer (proxied via mode=wms_ext)
     const makeProxiedWmsLayer = (wmsBaseUrl: string, wmsLayerName: string, opacity: number) => {
       const TileLayerClass = L.TileLayer.extend({
         getTileUrl(coords: L.Coords): string {
@@ -544,13 +545,53 @@ export function MapView({
       );
     };
 
+    // ArcGIS REST MapServer export — generates tile URLs via PCN ArcGIS endpoint
+    const makeArcGISLayer = (arcgisUrl: string, arcgisLayers: string | undefined, opacity: number) => {
+      const TileLayerClass = L.TileLayer.extend({
+        getTileUrl(coords: L.Coords): string {
+          const m = (this as unknown as { _map: L.Map })._map;
+          if (!m) return "";
+          const sz = 256;
+          const tileBounds = m.unproject([coords.x * sz, coords.y * sz], coords.z);
+          const tileBoundsNE = m.unproject([(coords.x + 1) * sz, (coords.y + 1) * sz], coords.z);
+          const south = Math.min(tileBounds.lat, tileBoundsNE.lat);
+          const north = Math.max(tileBounds.lat, tileBoundsNE.lat);
+          const west = Math.min(tileBounds.lng, tileBoundsNE.lng);
+          const east = Math.max(tileBounds.lng, tileBoundsNE.lng);
+          // ArcGIS export bbox = xmin,ymin,xmax,ymax (i.e. west,south,east,north)
+          const exportParams = new URLSearchParams({
+            bbox: `${west},${south},${east},${north}`,
+            bboxSR: "4326",
+            imageSR: "4326",
+            size: `${sz},${sz}`,
+            format: "png32",
+            transparent: "true",
+            f: "image",
+          });
+          if (arcgisLayers) exportParams.set("layers", arcgisLayers);
+          const targetUrl = `${arcgisUrl}/export?${exportParams.toString()}`;
+          const proxyParams = new URLSearchParams({ mode: "wms_ext", url: targetUrl });
+          return `${proxyBase}?${proxyParams.toString()}`;
+        },
+      });
+      return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
+        proxyBase,
+        { opacity, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: "Geoportale Nazionale (PCN)" } as L.TileLayerOptions & { pane: string }
+      );
+    };
+
     const dynamicLayers: Record<string, L.TileLayer> = {};
     for (const layerDef of ALL_LAYERS) {
-      if (!layerDef.wmsUrl || !layerDef.wmsLayer) continue;
       try {
-        dynamicLayers[layerDef.id] = makeProxiedWmsLayer(layerDef.wmsUrl, layerDef.wmsLayer, layerDef.opacity ?? 0.5);
+        if (layerDef.arcgisUrl) {
+          // ArcGIS REST MapServer export
+          dynamicLayers[layerDef.id] = makeArcGISLayer(layerDef.arcgisUrl, layerDef.arcgisLayers, layerDef.opacity ?? 0.5);
+        } else if (layerDef.wmsUrl && layerDef.wmsLayer) {
+          // Standard WMS (proxied)
+          dynamicLayers[layerDef.id] = makeProxiedWmsLayer(layerDef.wmsUrl, layerDef.wmsLayer, layerDef.opacity ?? 0.5);
+        }
       } catch (err) {
-        console.warn(`Failed to create WMS layer ${layerDef.id}:`, err);
+        console.warn(`Failed to create layer ${layerDef.id}:`, err);
       }
     }
 
