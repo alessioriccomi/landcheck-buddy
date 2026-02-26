@@ -5,7 +5,7 @@ import { Particella, PARCEL_COLORS } from "@/types/vincoli";
 import { Satellite, Map, Loader2, MousePointer } from "lucide-react";
 import { cn } from "@/lib/utils";
 import area from "@turf/area";
-import { ALL_LAYERS } from "@/components/LayerControl";
+import { ALL_LAYERS } from "@/lib/layerDefinitions";
 
 // Fix Leaflet icon paths for Vite
 import iconUrl from "leaflet/dist/images/marker-icon.png";
@@ -395,7 +395,7 @@ export function MapView({
   const showCatasto = activeLayers["catasto"] ?? true;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const wmsLayersRef = useRef<Record<string, L.TileLayer.WMS | L.TileLayer>>({});
+  const wmsLayersRef = useRef<Record<string, L.GridLayer>>({});
   const parcelLayersRef = useRef<L.Layer[]>([]);
   const basemapRef = useRef<L.TileLayer | null>(null);
   // Catasto overlay refs (order: foglio → terreno → fabbricato → labels → graffe)
@@ -520,74 +520,76 @@ export function MapView({
 
 
     // ── Dynamic layers from ALL_LAYERS definitions ──
-    // Supports both WMS (proxied via wfs-proxy mode=wms_ext) and ArcGIS REST MapServer (proxied via mode=wms_ext)
-    const makeProxiedWmsLayer = (wmsBaseUrl: string, wmsLayerName: string, opacity: number) => {
-      const TileLayerClass = L.TileLayer.extend({
-        getTileUrl(coords: L.Coords): string {
-          const m = (this as unknown as { _map: L.Map })._map;
-          if (!m) return "";
-          const sz = 256;
-          const tileBounds = m.unproject([coords.x * sz, coords.y * sz], coords.z);
-          const tileBoundsNE = m.unproject([(coords.x + 1) * sz, (coords.y + 1) * sz], coords.z);
-          const south = Math.min(tileBounds.lat, tileBoundsNE.lat);
-          const north = Math.max(tileBounds.lat, tileBoundsNE.lat);
-          const west = Math.min(tileBounds.lng, tileBoundsNE.lng);
-          const east = Math.max(tileBounds.lng, tileBoundsNE.lng);
+    // Uses L.GridLayer.extend + createTile to avoid _map null race condition
+    const makeProxiedWmsLayer = (wmsBaseUrl: string, wmsLayerName: string, opacity: number): L.GridLayer => {
+      const GridLayerClass = L.GridLayer.extend({
+        createTile(coords: L.Coords, done: (err: Error | null, tile: HTMLElement) => void): HTMLElement {
+          const tile = document.createElement("img");
+          const m = this._map as L.Map;
+          const sz = this.getTileSize().x;
+          const nw = m.unproject([coords.x * sz, coords.y * sz], coords.z);
+          const se = m.unproject([(coords.x + 1) * sz, (coords.y + 1) * sz], coords.z);
+          const south = Math.min(nw.lat, se.lat);
+          const north = Math.max(nw.lat, se.lat);
+          const west = Math.min(nw.lng, se.lng);
+          const east = Math.max(nw.lng, se.lng);
           const sep = wmsBaseUrl.includes("?") ? "&" : "?";
           const targetUrl = `${wmsBaseUrl}${sep}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${encodeURIComponent(wmsLayerName)}&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:4326&WIDTH=${sz}&HEIGHT=${sz}&BBOX=${south},${west},${north},${east}`;
-          const params = new URLSearchParams({ mode: "wms_ext", url: targetUrl });
-          return `${proxyBase}?${params.toString()}`;
+          const proxyUrl = `${proxyBase}?${new URLSearchParams({ mode: "wms_ext", url: targetUrl }).toString()}`;
+          tile.crossOrigin = "anonymous";
+          tile.onload = () => done(null as unknown as Error, tile);
+          tile.onerror = () => { tile.src = ""; done(new Error("tile load failed"), tile); };
+          tile.src = proxyUrl;
+          return tile;
         },
       });
-      return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
-        proxyBase,
-        { opacity, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: "Geoportale Nazionale/ISPRA/MASE" } as L.TileLayerOptions & { pane: string }
-      );
+      return new (GridLayerClass as any)({
+        opacity, pane: "wmsPane", tileSize: 256, maxZoom: 19,
+        attribution: "Geoportale Nazionale/ISPRA/MASE",
+      });
     };
 
-    // ArcGIS REST MapServer export — generates tile URLs via PCN ArcGIS endpoint
-    const makeArcGISLayer = (arcgisUrl: string, arcgisLayers: string | undefined, opacity: number) => {
-      const TileLayerClass = L.TileLayer.extend({
-        getTileUrl(coords: L.Coords): string {
-          const m = (this as unknown as { _map: L.Map })._map;
-          if (!m) return "";
-          const sz = 256;
-          const tileBounds = m.unproject([coords.x * sz, coords.y * sz], coords.z);
-          const tileBoundsNE = m.unproject([(coords.x + 1) * sz, (coords.y + 1) * sz], coords.z);
-          const south = Math.min(tileBounds.lat, tileBoundsNE.lat);
-          const north = Math.max(tileBounds.lat, tileBoundsNE.lat);
-          const west = Math.min(tileBounds.lng, tileBoundsNE.lng);
-          const east = Math.max(tileBounds.lng, tileBoundsNE.lng);
-          // ArcGIS export bbox = xmin,ymin,xmax,ymax (i.e. west,south,east,north)
+    // ArcGIS REST MapServer export — uses L.GridLayer.extend + createTile
+    const makeArcGISLayer = (arcgisUrl: string, arcgisLayers: string | undefined, opacity: number): L.GridLayer => {
+      const GridLayerClass = L.GridLayer.extend({
+        createTile(coords: L.Coords, done: (err: Error | null, tile: HTMLElement) => void): HTMLElement {
+          const tile = document.createElement("img");
+          const m = this._map as L.Map;
+          const sz = this.getTileSize().x;
+          const nw = m.unproject([coords.x * sz, coords.y * sz], coords.z);
+          const se = m.unproject([(coords.x + 1) * sz, (coords.y + 1) * sz], coords.z);
+          const south = Math.min(nw.lat, se.lat);
+          const north = Math.max(nw.lat, se.lat);
+          const west = Math.min(nw.lng, se.lng);
+          const east = Math.max(nw.lng, se.lng);
           const exportParams = new URLSearchParams({
             bbox: `${west},${south},${east},${north}`,
-            bboxSR: "4326",
-            imageSR: "4326",
-            size: `${sz},${sz}`,
-            format: "png32",
-            transparent: "true",
-            f: "image",
+            bboxSR: "4326", imageSR: "4326",
+            size: `${sz},${sz}`, format: "png32",
+            transparent: "true", f: "image",
           });
           if (arcgisLayers) exportParams.set("layers", arcgisLayers);
           const targetUrl = `${arcgisUrl}/export?${exportParams.toString()}`;
-          const proxyParams = new URLSearchParams({ mode: "wms_ext", url: targetUrl });
-          return `${proxyBase}?${proxyParams.toString()}`;
+          const proxyUrl = `${proxyBase}?${new URLSearchParams({ mode: "wms_ext", url: targetUrl }).toString()}`;
+          tile.crossOrigin = "anonymous";
+          tile.onload = () => done(null as unknown as Error, tile);
+          tile.onerror = () => { tile.src = ""; done(new Error("tile load failed"), tile); };
+          tile.src = proxyUrl;
+          return tile;
         },
       });
-      return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
-        proxyBase,
-        { opacity, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: "Geoportale Nazionale (PCN)" } as L.TileLayerOptions & { pane: string }
-      );
+      return new (GridLayerClass as any)({
+        opacity, pane: "wmsPane", tileSize: 256, maxZoom: 19,
+        attribution: "Geoportale Nazionale (PCN)",
+      });
     };
 
-    const dynamicLayers: Record<string, L.TileLayer> = {};
+    const dynamicLayers: Record<string, L.GridLayer> = {};
     for (const layerDef of ALL_LAYERS) {
       try {
         if (layerDef.arcgisUrl) {
-          // ArcGIS REST MapServer export
           dynamicLayers[layerDef.id] = makeArcGISLayer(layerDef.arcgisUrl, layerDef.arcgisLayers, layerDef.opacity ?? 0.5);
         } else if (layerDef.wmsUrl && layerDef.wmsLayer) {
-          // Standard WMS (proxied)
           dynamicLayers[layerDef.id] = makeProxiedWmsLayer(layerDef.wmsUrl, layerDef.wmsLayer, layerDef.opacity ?? 0.5);
         }
       } catch (err) {
