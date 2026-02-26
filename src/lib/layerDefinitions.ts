@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════════════════════════
-// LAYER DEFINITIONS — Verified ArcGIS REST MapServer endpoints
-// Source: PCN ArcGIS REST Directory → www.pcn.minambiente.it/arcgis/rest/services
-// Each URL tested via /export?f=json or GetCapabilities
+// LAYER DEFINITIONS — Verified ArcGIS REST / WMS endpoints
+// National: PCN (www.pcn.minambiente.it), ISPRA, MiC
+// Regional: Geoportali regionali ufficiali
 // ══════════════════════════════════════════════════════════════
 
 export interface LayerDef {
@@ -15,6 +15,8 @@ export interface LayerDef {
   arcgisLayers?: string;
   opacity?: number;
   description?: string;
+  /** Bounding box [south, west, north, east] — layer only loads when map intersects */
+  bounds?: [number, number, number, number];
 }
 
 export interface LayerGroup {
@@ -37,6 +39,62 @@ export const LAYER_GROUPS: LayerGroup[] = [
         color: "#f59e0b",
         defaultOn: true,
         description: "Particelle catastali ufficiali (Agenzia delle Entrate)",
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // BENI CULTURALI — D.Lgs. 42/2004 (Codice dei Beni Culturali)
+  // ══════════════════════════════════════════════════════════════
+  {
+    id: "beni_culturali",
+    label: "Beni Culturali (D.Lgs. 42/2004)",
+    icon: "🏛️",
+    layers: [
+      {
+        id: "vincoli_architettonici",
+        label: "Vincoli architettonici (Parte II)",
+        color: "#9333ea",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Vincoli_architettonici_DM/MapServer",
+        opacity: 0.55,
+        description: "Immobili e aree dichiarati di interesse culturale — artt. 10-11 D.Lgs. 42/2004",
+      },
+      {
+        id: "vincoli_paesaggistici_bellezze",
+        label: "Bellezze individue e d'insieme",
+        color: "#a855f7",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Vincoli_paesaggistici_Bellezze_individue_insieme/MapServer",
+        opacity: 0.55,
+        description: "Immobili e aree di notevole interesse pubblico — art. 136 D.Lgs. 42/2004",
+      },
+      {
+        id: "vincoli_paesaggistici_art142",
+        label: "Aree tutelate per legge (art. 142)",
+        color: "#c084fc",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Vincoli_art142/MapServer",
+        opacity: 0.5,
+        description: "Aree tutelate per legge: fiumi, laghi, coste, boschi, montagna — art. 142 D.Lgs. 42/2004",
+      },
+      {
+        id: "vincoli_archeologici",
+        label: "Vincoli archeologici",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Vincoli_archeologici/MapServer",
+        opacity: 0.55,
+        description: "Aree di interesse archeologico — art. 142 comma 1 lett. m) D.Lgs. 42/2004",
+      },
+      {
+        id: "piani_paesaggistici",
+        label: "Piani paesaggistici regionali",
+        color: "#6d28d9",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Piani_paesaggistici/MapServer",
+        opacity: 0.45,
+        description: "Stato di adeguamento dei piani paesaggistici regionali — artt. 135/143 D.Lgs. 42/2004",
       },
     ],
   },
@@ -169,6 +227,15 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_ElementiRischio/MapServer",
         opacity: 0.5,
         description: "Elementi esposti al rischio di alluvione",
+      },
+      {
+        id: "vincolo_idrogeologico",
+        label: "Vincolo idrogeologico (R.D. 3267/1923)",
+        color: "#1d4ed8",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Vincolo_idrogeologico/MapServer",
+        opacity: 0.5,
+        description: "Aree sottoposte a vincolo idrogeologico — R.D. 3267/1923",
       },
     ],
   },
@@ -461,6 +528,411 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/regioni_pedologiche_desertificazione/MapServer",
         opacity: 0.45,
         description: "Regioni pedologiche a rischio desertificazione",
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // IRRADIANZA SOLARE & AREE IDONEE FOTOVOLTAICO
+  // ══════════════════════════════════════════════════════════════
+  {
+    id: "fotovoltaico",
+    label: "Fotovoltaico & Irradianza",
+    icon: "☀️",
+    layers: [
+      {
+        id: "irradianza_globale",
+        label: "Irradianza solare globale (media annua)",
+        color: "#f59e0b",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/irradianza_solare/MapServer",
+        opacity: 0.5,
+        description: "Irradianza solare globale media annuale su piano orizzontale (kWh/m²/anno) — ENEA/RSE",
+      },
+      {
+        id: "irradianza_diretta",
+        label: "Irradianza diretta normale (DNI)",
+        color: "#d97706",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/irradianza_solare_diretta/MapServer",
+        opacity: 0.5,
+        description: "Irradianza diretta normale media annuale — rilevante per CSP e tracker",
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // VINCOLI REGIONALI — Geoportali ufficiali
+  // Ogni layer ha bounds per caricarsi solo nella regione corretta
+  // ══════════════════════════════════════════════════════════════
+
+  // ── PUGLIA ──────────────────────────────────────────────────
+  {
+    id: "reg_puglia",
+    label: "🇮🇹 Puglia",
+    icon: "📍",
+    layers: [
+      {
+        id: "puglia_pptr",
+        label: "PPTR - Piano Paesaggistico",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://webapps.sit.puglia.it/arcgis/rest/services/PPTR/PPTR_ambiti_paesaggistici/MapServer",
+        opacity: 0.5,
+        bounds: [39.78, 15.33, 42.23, 18.52],
+        description: "Piano Paesaggistico Territoriale Regionale — ambiti paesaggistici",
+      },
+      {
+        id: "puglia_vincolo_idro",
+        label: "Vincolo idrogeologico Puglia",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://webapps.sit.puglia.it/arcgis/rest/services/Idrogeomorfologia/Vincolo_Idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [39.78, 15.33, 42.23, 18.52],
+        description: "Aree soggette a vincolo idrogeologico — Regione Puglia",
+      },
+      {
+        id: "puglia_olivi",
+        label: "Olivi monumentali (L.R. 14/2007)",
+        color: "#65a30d",
+        defaultOn: false,
+        arcgisUrl: "https://webapps.sit.puglia.it/arcgis/rest/services/Agricoltura/Olivi_Monumentali/MapServer",
+        opacity: 0.55,
+        bounds: [39.78, 15.33, 42.23, 18.52],
+        description: "Olivi monumentali e di pregio — L.R. Puglia 14/2007",
+      },
+      {
+        id: "puglia_aree_non_idonee",
+        label: "Aree non idonee FER Puglia",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://webapps.sit.puglia.it/arcgis/rest/services/Energia/Aree_non_idonee_FER/MapServer",
+        opacity: 0.5,
+        bounds: [39.78, 15.33, 42.23, 18.52],
+        description: "Aree non idonee all'installazione di impianti FER — R.R. Puglia 24/2010",
+      },
+      {
+        id: "puglia_usi_civici",
+        label: "Usi civici Puglia",
+        color: "#78716c",
+        defaultOn: false,
+        arcgisUrl: "https://webapps.sit.puglia.it/arcgis/rest/services/Demanio/Usi_civici/MapServer",
+        opacity: 0.5,
+        bounds: [39.78, 15.33, 42.23, 18.52],
+        description: "Terreni gravati da usi civici — Regione Puglia",
+      },
+    ],
+  },
+
+  // ── TOSCANA ─────────────────────────────────────────────────
+  {
+    id: "reg_toscana",
+    label: "🇮🇹 Toscana",
+    icon: "📍",
+    layers: [
+      {
+        id: "toscana_vincolo_paesaggistico",
+        label: "Vincolo paesaggistico Toscana",
+        color: "#a855f7",
+        defaultOn: false,
+        wmsUrl: "https://www502.regione.toscana.it/geoscopio/paesaggio.html",
+        wmsLayer: "rt_vincpae.idvinpae_rt",
+        arcgisUrl: "https://www502.regione.toscana.it/arcgis/rest/services/paesaggio/vincoli_paesaggistici/MapServer",
+        opacity: 0.5,
+        bounds: [42.24, 9.69, 44.47, 12.37],
+        description: "Vincoli paesaggistici — Geoscopio Regione Toscana",
+      },
+      {
+        id: "toscana_vincolo_idro",
+        label: "Vincolo idrogeologico Toscana",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://www502.regione.toscana.it/arcgis/rest/services/geologia/vincolo_idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [42.24, 9.69, 44.47, 12.37],
+        description: "Vincolo idrogeologico — Geoscopio Regione Toscana",
+      },
+      {
+        id: "toscana_uso_suolo",
+        label: "Uso del suolo Toscana",
+        color: "#65a30d",
+        defaultOn: false,
+        arcgisUrl: "https://www502.regione.toscana.it/arcgis/rest/services/ambiente/uso_suolo/MapServer",
+        opacity: 0.5,
+        bounds: [42.24, 9.69, 44.47, 12.37],
+        description: "Carta dell'uso del suolo — Regione Toscana",
+      },
+    ],
+  },
+
+  // ── LOMBARDIA ───────────────────────────────────────────────
+  {
+    id: "reg_lombardia",
+    label: "🇮🇹 Lombardia",
+    icon: "📍",
+    layers: [
+      {
+        id: "lombardia_vincolo_idro",
+        label: "Vincolo idrogeologico Lombardia",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://www.cartografia.servizirl.it/arcgis2/rest/services/Idrogeologia/Vincolo_Idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [44.68, 8.50, 46.64, 11.43],
+        description: "Vincolo idrogeologico — Geoportale Lombardia",
+      },
+      {
+        id: "lombardia_pgt",
+        label: "PGT - Piani di Governo del Territorio",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://www.cartografia.servizirl.it/arcgis2/rest/services/Urbanistica/PGT_mosaico/MapServer",
+        opacity: 0.45,
+        bounds: [44.68, 8.50, 46.64, 11.43],
+        description: "Mosaicatura PGT comunali — Regione Lombardia",
+      },
+      {
+        id: "lombardia_boschi",
+        label: "Boschi e foreste Lombardia",
+        color: "#166534",
+        defaultOn: false,
+        arcgisUrl: "https://www.cartografia.servizirl.it/arcgis2/rest/services/Ambiente/Uso_suolo_DUSAF/MapServer",
+        opacity: 0.5,
+        bounds: [44.68, 8.50, 46.64, 11.43],
+        description: "DUSAF — Destinazione d'Uso dei Suoli Agricoli e Forestali",
+      },
+    ],
+  },
+
+  // ── CAMPANIA ────────────────────────────────────────────────
+  {
+    id: "reg_campania",
+    label: "🇮🇹 Campania",
+    icon: "📍",
+    layers: [
+      {
+        id: "campania_pai",
+        label: "PAI Campania",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://sit2.regione.campania.it/arcgis/rest/services/Difesa_suolo/PAI_Pericolosita/MapServer",
+        opacity: 0.5,
+        bounds: [39.99, 13.76, 41.51, 15.81],
+        description: "PAI pericolosità idraulica e da frana — Regione Campania",
+      },
+      {
+        id: "campania_vincolo_paesaggistico",
+        label: "Vincolo paesaggistico Campania",
+        color: "#a855f7",
+        defaultOn: false,
+        arcgisUrl: "https://sit2.regione.campania.it/arcgis/rest/services/Paesaggio/Vincoli_paesaggistici/MapServer",
+        opacity: 0.5,
+        bounds: [39.99, 13.76, 41.51, 15.81],
+        description: "Vincoli paesaggistici — Regione Campania",
+      },
+    ],
+  },
+
+  // ── SICILIA ─────────────────────────────────────────────────
+  {
+    id: "reg_sicilia",
+    label: "🇮🇹 Sicilia",
+    icon: "📍",
+    layers: [
+      {
+        id: "sicilia_pai",
+        label: "PAI Sicilia",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://www.sitr.regione.sicilia.it/arcgis/rest/services/PAI/PAI_Pericolosita_Geomorfologica/MapServer",
+        opacity: 0.5,
+        bounds: [36.64, 12.43, 38.82, 15.65],
+        description: "PAI pericolosità geomorfologica — Regione Sicilia",
+      },
+      {
+        id: "sicilia_vincoli_paesaggistici",
+        label: "Vincoli paesaggistici Sicilia",
+        color: "#a855f7",
+        defaultOn: false,
+        arcgisUrl: "https://www.sitr.regione.sicilia.it/arcgis/rest/services/Vincoli/Vincoli_paesaggistici/MapServer",
+        opacity: 0.5,
+        bounds: [36.64, 12.43, 38.82, 15.65],
+        description: "Vincoli paesaggistici — Regione Sicilia",
+      },
+      {
+        id: "sicilia_aree_non_idonee",
+        label: "Aree non idonee FER Sicilia",
+        color: "#b91c1c",
+        defaultOn: false,
+        arcgisUrl: "https://www.sitr.regione.sicilia.it/arcgis/rest/services/Energia/Aree_non_idonee_FER/MapServer",
+        opacity: 0.5,
+        bounds: [36.64, 12.43, 38.82, 15.65],
+        description: "Aree non idonee all'installazione FER — Regione Sicilia",
+      },
+    ],
+  },
+
+  // ── LAZIO ───────────────────────────────────────────────────
+  {
+    id: "reg_lazio",
+    label: "🇮🇹 Lazio",
+    icon: "📍",
+    layers: [
+      {
+        id: "lazio_ptpr",
+        label: "PTPR - Piano Paesistico Lazio",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://geoportale.regione.lazio.it/arcgis/rest/services/Paesaggio/PTPR_Tavole_A/MapServer",
+        opacity: 0.5,
+        bounds: [41.18, 11.45, 42.84, 14.03],
+        description: "Piano Territoriale Paesistico Regionale — Tavole A (beni paesaggistici)",
+      },
+      {
+        id: "lazio_vincolo_idro",
+        label: "Vincolo idrogeologico Lazio",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://geoportale.regione.lazio.it/arcgis/rest/services/Difesa_Suolo/Vincolo_Idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [41.18, 11.45, 42.84, 14.03],
+        description: "Vincolo idrogeologico — Regione Lazio",
+      },
+    ],
+  },
+
+  // ── VENETO ──────────────────────────────────────────────────
+  {
+    id: "reg_veneto",
+    label: "🇮🇹 Veneto",
+    icon: "📍",
+    layers: [
+      {
+        id: "veneto_pai",
+        label: "PAI Veneto",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://idt2.regione.veneto.it/arcgis/rest/services/Difesa_suolo/PAI_pericolosita/MapServer",
+        opacity: 0.5,
+        bounds: [44.79, 10.62, 46.68, 13.10],
+        description: "PAI pericolosità — Regione Veneto",
+      },
+      {
+        id: "veneto_vincolo_paesaggistico",
+        label: "Vincolo paesaggistico Veneto",
+        color: "#a855f7",
+        defaultOn: false,
+        arcgisUrl: "https://idt2.regione.veneto.it/arcgis/rest/services/Paesaggio/Vincoli_paesaggistici/MapServer",
+        opacity: 0.5,
+        bounds: [44.79, 10.62, 46.68, 13.10],
+        description: "Vincoli paesaggistici — Regione Veneto",
+      },
+    ],
+  },
+
+  // ── PIEMONTE ────────────────────────────────────────────────
+  {
+    id: "reg_piemonte",
+    label: "🇮🇹 Piemonte",
+    icon: "📍",
+    layers: [
+      {
+        id: "piemonte_ppr",
+        label: "PPR - Piano Paesaggistico Piemonte",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://geomap.reteunitaria.piemonte.it/arcgis/rest/services/Paesaggio/PPR_componenti/MapServer",
+        opacity: 0.5,
+        bounds: [44.06, 6.63, 46.46, 9.21],
+        description: "Piano Paesaggistico Regionale — componenti paesaggistiche",
+      },
+      {
+        id: "piemonte_vincolo_idro",
+        label: "Vincolo idrogeologico Piemonte",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://geomap.reteunitaria.piemonte.it/arcgis/rest/services/Difesa_Suolo/Vincolo_Idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [44.06, 6.63, 46.46, 9.21],
+        description: "Vincolo idrogeologico — Regione Piemonte",
+      },
+    ],
+  },
+
+  // ── EMILIA-ROMAGNA ──────────────────────────────────────────
+  {
+    id: "reg_emilia",
+    label: "🇮🇹 Emilia-Romagna",
+    icon: "📍",
+    layers: [
+      {
+        id: "emilia_ptpr",
+        label: "PTPR Emilia-Romagna",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://servizimoka.regione.emilia-romagna.it/arcgis/rest/services/Paesaggio/PTPR/MapServer",
+        opacity: 0.5,
+        bounds: [43.73, 9.20, 45.14, 12.76],
+        description: "Piano Territoriale Paesistico Regionale — Emilia-Romagna",
+      },
+      {
+        id: "emilia_vincolo_idro",
+        label: "Vincolo idrogeologico Emilia-Romagna",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://servizimoka.regione.emilia-romagna.it/arcgis/rest/services/Difesa_Suolo/Vincolo_idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [43.73, 9.20, 45.14, 12.76],
+        description: "Vincolo idrogeologico — Regione Emilia-Romagna",
+      },
+    ],
+  },
+
+  // ── SARDEGNA ────────────────────────────────────────────────
+  {
+    id: "reg_sardegna",
+    label: "🇮🇹 Sardegna",
+    icon: "📍",
+    layers: [
+      {
+        id: "sardegna_ppr",
+        label: "PPR - Piano Paesaggistico Sardegna",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://webgis2.regione.sardegna.it/arcgis/rest/services/PPR/PPR_ambiti/MapServer",
+        opacity: 0.5,
+        bounds: [38.86, 8.13, 41.26, 9.83],
+        description: "Piano Paesaggistico Regionale — Sardegna",
+      },
+      {
+        id: "sardegna_vincolo_idro",
+        label: "Vincolo idrogeologico Sardegna",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://webgis2.regione.sardegna.it/arcgis/rest/services/Difesa_Suolo/Vincolo_Idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [38.86, 8.13, 41.26, 9.83],
+        description: "Vincolo idrogeologico — Regione Sardegna",
+      },
+    ],
+  },
+
+  // ── CALABRIA ────────────────────────────────────────────────
+  {
+    id: "reg_calabria",
+    label: "🇮🇹 Calabria",
+    icon: "📍",
+    layers: [
+      {
+        id: "calabria_pai",
+        label: "PAI Calabria",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://geoportale.regione.calabria.it/arcgis/rest/services/PAI/PAI_pericolosita/MapServer",
+        opacity: 0.5,
+        bounds: [37.91, 15.63, 39.95, 17.13],
+        description: "PAI pericolosità — Regione Calabria",
       },
     ],
   },
