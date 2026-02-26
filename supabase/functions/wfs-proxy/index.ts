@@ -775,6 +775,18 @@ serve(async (req) => {
         "geodata.mit.gov.it",
         "wms.cartografia.agenziaentrate.gov.it",
         "idrogeo.isprambiente.it",
+        // Regional geoportals
+        "webapps.sit.puglia.it",
+        "www502.regione.toscana.it",
+        "www.cartografia.servizirl.it",
+        "sit2.regione.campania.it",
+        "www.sitr.regione.sicilia.it",
+        "geoportale.regione.lazio.it",
+        "idt2.regione.veneto.it",
+        "geomap.reteunitaria.piemonte.it",
+        "servizimoka.regione.emilia-romagna.it",
+        "webgis2.regione.sardegna.it",
+        "geoportale.regione.calabria.it",
       ];
       let parsedUrl: URL;
       try { parsedUrl = new URL(targetUrl); } catch {
