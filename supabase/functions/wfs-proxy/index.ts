@@ -771,8 +771,10 @@ serve(async (req) => {
       // Allowlist of trusted WMS domains
       const allowedDomains = [
         "wms.pcn.minambiente.it",
+        "www.pcn.minambiente.it",
         "geodata.mit.gov.it",
         "wms.cartografia.agenziaentrate.gov.it",
+        "idrogeo.isprambiente.it",
       ];
       let parsedUrl: URL;
       try { parsedUrl = new URL(targetUrl); } catch {
