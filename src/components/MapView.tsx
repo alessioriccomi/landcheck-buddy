@@ -6,6 +6,7 @@ import { Satellite, Map, Loader2, MousePointer } from "lucide-react";
 import { cn } from "@/lib/utils";
 import area from "@turf/area";
 import { ALL_LAYERS } from "@/lib/layerDefinitions";
+import { toast } from "@/hooks/use-toast";
 
 // Fix Leaflet icon paths for Vite
 import iconUrl from "leaflet/dist/images/marker-icon.png";
@@ -837,7 +838,18 @@ export function MapView({
       try {
         const features = await searchParcelByAttribute(p.comune, p.foglio, p.particella);
 
-        if (features.length === 0) throw new Error("No features returned");
+        if (features.length === 0) {
+          // Remove placeholder — parcel not found
+          try { map.removeLayer(placeholderPoly); } catch {}
+          parcelLayersRef.current = parcelLayersRef.current.filter(l => l !== placeholderPoly);
+          toast({
+            title: "Particella non trovata",
+            description: `${p.comune} — Fg. ${p.foglio} / Part. ${p.particella} non trovata nel catasto WFS`,
+            variant: "destructive",
+          });
+          setParcelStatuses(prev => ({ ...prev, [p.id]: "placeholder" }));
+          return;
+        }
 
         // Remove placeholder
         try { map.removeLayer(placeholderPoly); } catch {}
@@ -900,6 +912,14 @@ export function MapView({
         setParcelStatuses(prev => ({ ...prev, [p.id]: "real" }));
       } catch (err) {
         console.warn(`WFS fetch failed for ${p.comune} Fg.${p.foglio} Part.${p.particella}:`, err);
+        // Remove placeholder on error too
+        try { map.removeLayer(placeholderPoly); } catch {}
+        parcelLayersRef.current = parcelLayersRef.current.filter(l => l !== placeholderPoly);
+        toast({
+          title: "Errore ricerca particella",
+          description: `Impossibile cercare ${p.comune} Fg. ${p.foglio} / Part. ${p.particella}`,
+          variant: "destructive",
+        });
         setParcelStatuses(prev => ({ ...prev, [p.id]: "placeholder" }));
       }
     });
