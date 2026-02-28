@@ -18,9 +18,20 @@ export default function Index() {
   const [analisi, setAnalisi] = useState<AnalisiVincolistica | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [selectedParcelIds, setSelectedParcelIds] = useState<string[]>([]);
   const [layerState, setLayerState] = useState<Record<string, boolean>>(
     Object.fromEntries(ALL_LAYERS.map(l => [l.id, l.defaultOn]))
   );
+
+  const handleToggleSelectParcel = useCallback((id: string) => {
+    setSelectedParcelIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  }, []);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedParcelIds([]);
+  }, []);
 
   // Called by MapView to propagate real WFS area back to the parcel list
   const handleParcelAreaUpdate = useCallback((id: string, mq: number) => {
@@ -124,7 +135,13 @@ export default function Index() {
                     Inserisci le particelle da analizzare. Puoi aggiungere terreni di Comuni diversi.
                   </p>
                 </div>
-                <ParcelInput particelle={particelle} onChange={setParticelle} />
+                <ParcelInput
+                  particelle={particelle}
+                  onChange={setParticelle}
+                  selectedIds={selectedParcelIds}
+                  onToggleSelect={handleToggleSelectParcel}
+                  onClearSelection={handleClearSelection}
+                />
                 <div className="pt-2 border-t border-border">
                   <Button
                     onClick={handleAnalisi}
@@ -239,6 +256,9 @@ export default function Index() {
             particelle={particelle}
             activeLayers={layerState}
             onParcelAreaUpdate={handleParcelAreaUpdate}
+            selectedParcelIds={selectedParcelIds}
+            onToggleSelectParcel={handleToggleSelectParcel}
+            onClearSelection={handleClearSelection}
             onAddParticella={(p) => {
               if (step === "input") setParticelle(prev => [...prev, p]);
             }}
