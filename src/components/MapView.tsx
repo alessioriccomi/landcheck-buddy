@@ -634,20 +634,36 @@ export function MapView({
 
         const feat = features[0];
         const props = feat.properties ?? {};
-        const label: string = props.label ?? "";
-        const localId: string = props.localId ?? "";
 
+        // Extract foglio/particella using decoded fields from proxy (priority)
         let foglio = "";
         let particella = "";
-        const labelParts = label.split("/");
-        if (labelParts.length === 2) {
-          foglio = labelParts[0].trim();
-          particella = labelParts[1].trim();
+        if (props._foglio && props._particella) {
+          foglio = props._foglio;
+          particella = props._particella;
         } else {
-          const idParts = (props.nationalRef || localId).split("_");
-          if (idParts.length >= 2) {
-            foglio = idParts[idParts.length - 2] ?? "";
-            particella = idParts[idParts.length - 1] ?? "";
+          // Fallback: try decoding nationalRef client-side
+          const nationalRef: string = props.nationalRef ?? "";
+          if (nationalRef && nationalRef.includes(".")) {
+            const dotIdx = nationalRef.indexOf(".");
+            particella = nationalRef.substring(dotIdx + 1);
+            const codePart = nationalRef.substring(0, dotIdx);
+            if (codePart.length > 4) {
+              const digits = codePart.substring(4).replace(/[^0-9]/g, "");
+              const num = parseInt(digits, 10);
+              if (!isNaN(num)) foglio = String(num);
+            }
+          }
+          // Fallback: label "foglio/particella"
+          if (!foglio) {
+            const label: string = props.label ?? "";
+            const labelParts = label.split("/");
+            if (labelParts.length === 2) {
+              foglio = labelParts[0].trim();
+              particella = labelParts[1].trim();
+            } else if (label && !particella) {
+              particella = label;
+            }
           }
         }
 
@@ -715,21 +731,36 @@ export function MapView({
 
         const feat = features[0];
         const props = feat.properties ?? {};
-        const label: string = props.label ?? "";
-        const localId: string = props.localId ?? "";
-        const nationalRef: string = props.nationalRef ?? "";
 
+        // Extract foglio/particella using decoded fields from proxy (priority)
         let foglio = "—";
         let particella = "—";
-        const labelParts = label.split("/");
-        if (labelParts.length === 2) {
-          foglio = labelParts[0].trim();
-          particella = labelParts[1].trim();
+        if (props._foglio && props._particella) {
+          foglio = props._foglio;
+          particella = props._particella;
         } else {
-          const refParts = (nationalRef || localId).split("_");
-          if (refParts.length >= 2) {
-            foglio = refParts[refParts.length - 2] ?? "—";
-            particella = refParts[refParts.length - 1] ?? "—";
+          // Fallback: try decoding nationalRef client-side
+          const nationalRef: string = props.nationalRef ?? "";
+          if (nationalRef && nationalRef.includes(".")) {
+            const dotIdx = nationalRef.indexOf(".");
+            particella = nationalRef.substring(dotIdx + 1);
+            const codePart = nationalRef.substring(0, dotIdx);
+            if (codePart.length > 4) {
+              const digits = codePart.substring(4).replace(/[^0-9]/g, "");
+              const num = parseInt(digits, 10);
+              if (!isNaN(num)) foglio = String(num);
+            }
+          }
+          // Fallback: label "foglio/particella"
+          if (foglio === "—") {
+            const label: string = props.label ?? "";
+            const labelParts = label.split("/");
+            if (labelParts.length === 2) {
+              foglio = labelParts[0].trim();
+              particella = labelParts[1].trim();
+            } else if (label) {
+              particella = label;
+            }
           }
         }
 
