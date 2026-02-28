@@ -249,66 +249,119 @@ function featureCentroid(feat: GeoJSON.Feature): [number, number] {
   return [(south + north) / 2, (west + east) / 2]; // [lat, lon]
 }
 
-// Progressive parcel search: scan full commune bbox to find foglio, then search parcels within
+// ── Lookup parcel coordinates from regional parquet ──────────
+// The onData parquets contain pre-computed x,y (lon,lat) for every parcel in Italy
+async function lookupParcelCoordsFromParquet(
+  codiceComune: string,
+  regioneFile: string,
+  foglio: string,
+  particella: string,
+): Promise<{ lat: number; lon: number } | null> {
+  const url = PARQUET_BASE + regioneFile;
+  try {
+    const buf = await fetchCached(url);
+    const rows = await readParquet(buf, REGIONAL_COLUMNS);
+    console.log(`Regional parquet ${regioneFile}: ${rows.length} rows loaded`);
+
+    const foglioNum = parseInt(foglio, 10);
+    const partNum = parseInt(particella, 10);
+
+    // Find matching row: comune + foglio + particella
+    const match = rows.find(r => {
+      if (String(r.comune ?? "").trim() !== codiceComune) return false;
+      if (parseInt(String(r.foglio ?? ""), 10) !== foglioNum) return false;
+      if (parseInt(String(r.particella ?? ""), 10) !== partNum) return false;
+      return true;
+    });
+
+    if (!match) {
+      console.warn(`Parcel not found in parquet: ${codiceComune} Fg.${foglio} Part.${particella}`);
+      return null;
+    }
+
+    const x = parseFloat(String(match.x ?? ""));
+    const y = parseFloat(String(match.y ?? ""));
+    if (isNaN(x) || isNaN(y)) {
+      console.warn("Invalid x,y in parquet row:", match);
+      return null;
+    }
+
+    console.log(`Parquet lookup found: ${codiceComune} Fg.${foglio} Part.${particella} → x=${x}, y=${y}`);
+    return { lat: y, lon: x };
+  } catch (err) {
+    console.warn(`Failed to read regional parquet ${regioneFile}:`, err);
+    return null;
+  }
+}
+
+// Progressive parcel search: parquet coords → WFS bbox at exact location
 async function progressiveParcelSearch(
   centerLat: number,
   centerLon: number,
   foglio: string,
   particella: string,
-  _codiceComune?: string,
-  communeBbox?: [number, number, number, number] // [south, north, west, east]
+  codiceComune?: string,
+  communeBbox?: [number, number, number, number],
+  regioneFile?: string,
 ): Promise<GeoJSON.Feature[]> {
-  const foglioNum = parseInt(foglio, 10);
-  console.log(`Progressive search: center=${centerLat},${centerLon} foglio=${foglio} particella=${particella} bbox=${communeBbox?.join(",") ?? "N/A"}`);
+  console.log(`Progressive search: center=${centerLat},${centerLon} foglio=${foglio} particella=${particella} codice=${codiceComune} regione=${regioneFile}`);
 
-  // ── Strategy 1: CadastralZoning around center (fast, covers most cases) ──
+  // ── Strategy 0: Parquet coordinates (like formaps/urbismap) ──
+  // Use the pre-indexed x,y from onData parquets to locate the parcel precisely
+  if (codiceComune && regioneFile) {
+    const parcelCoords = await lookupParcelCoordsFromParquet(codiceComune, regioneFile, foglio, particella);
+    if (parcelCoords) {
+      console.log(`Using parquet coords: lat=${parcelCoords.lat}, lon=${parcelCoords.lon}`);
+      // Search with progressively larger bbox around the exact parcel location
+      for (const delta of [0.0005, 0.001, 0.003, 0.006]) {
+        try {
+          const fc = await wfsQueryBbox(parcelCoords.lat, parcelCoords.lon, delta);
+          console.log(`WFS bbox at parquet coords delta=${delta} → ${fc.features.length} features`);
+          const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
+          if (matched.length > 0) {
+            console.log(`✓ Found particella via parquet coords at delta=${delta}`);
+            return matched;
+          }
+        } catch (err) {
+          console.warn(`WFS query at parquet coords failed (delta=${delta}):`, err);
+        }
+      }
+      console.warn("Parquet coords found but WFS returned no matching parcel");
+    }
+  }
+
+  // ── Strategy 1: CadastralZoning around center (fallback) ──
+  const foglioNum = parseInt(foglio, 10);
   let foglioFeature: GeoJSON.Feature | null = null;
   for (const delta of [0.02, 0.05]) {
     try {
       const zonings = await wfsQueryZoning(centerLat, centerLon, delta);
       console.log(`Zoning center delta=${delta} → ${zonings.length} features`);
-      const match = zonings.find(z => parseInt(String(z.properties?.label ?? ""), 10) === foglioNum);
+      const match = zonings.find(z => {
+        const lbl = String(z.properties?.label ?? "");
+        const ref = String(z.properties?.nationalRef ?? "");
+        // Try label first, then extract from nationalRef
+        if (lbl && parseInt(lbl, 10) === foglioNum) return true;
+        if (ref && codiceComune && ref.startsWith(codiceComune)) {
+          const afterCode = ref.substring(codiceComune.length);
+          const digits = afterCode.replace(/[^0-9]/g, "").substring(0, 4);
+          if (digits && parseInt(digits, 10) === foglioNum) return true;
+        }
+        return false;
+      });
       if (match) {
         foglioFeature = match;
         console.log(`Found foglio ${foglio} at center delta=${delta}`);
         break;
       }
-      if (zonings.length === 0 && delta >= 0.05) break; // WFS limit reached
+      if (zonings.length === 0 && delta >= 0.05) break;
     } catch (err) {
-      console.warn(`Zoning center query failed at delta=${delta}:`, err);
-    }
-  }
-
-  // ── Strategy 2: Grid scan of full commune bbox (for distant fogli) ──
-  if (!foglioFeature && communeBbox) {
-    const [south, north, west, east] = communeBbox;
-    const SCAN_DELTA = 0.015; // each cell is 0.03 x 0.03 degrees
-    console.log(`Scanning full commune bbox: ${south},${west} → ${north},${east}`);
-    
-    const seenLabels = new Set<string>();
-    for (let lat = south; lat <= north && !foglioFeature; lat += SCAN_DELTA * 2) {
-      for (let lon = west; lon <= east && !foglioFeature; lon += SCAN_DELTA * 2) {
-        const cellLat = lat + SCAN_DELTA;
-        const cellLon = lon + SCAN_DELTA;
-        // Skip if too close to center (already searched)
-        if (Math.abs(cellLat - centerLat) < 0.02 && Math.abs(cellLon - centerLon) < 0.02) continue;
-        try {
-          const zonings = await wfsQueryZoning(cellLat, cellLon, SCAN_DELTA);
-          if (zonings.length > 0) {
-            console.log(`Grid cell ${cellLat.toFixed(3)},${cellLon.toFixed(3)} → ${zonings.length} fogli: ${zonings.map(z => z.properties?.label).join(",")}`);
-          }
-          const match = zonings.find(z => parseInt(String(z.properties?.label ?? ""), 10) === foglioNum);
-          if (match) {
-            foglioFeature = match;
-            console.log(`Found foglio ${foglio} via grid scan at ${cellLat.toFixed(4)},${cellLon.toFixed(4)}`);
-          }
-        } catch { /* continue */ }
-      }
+      console.warn(`Zoning query failed at delta=${delta}:`, err);
     }
   }
 
   if (!foglioFeature) {
-    console.warn("Foglio not found via CadastralZoning, falling back to direct bbox parcel search");
+    console.warn("Foglio not found, falling back to direct bbox search around center");
     for (const delta of [0.003, 0.01, 0.03]) {
       const fc = await wfsQueryBbox(centerLat, centerLon, delta);
       const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
@@ -598,8 +651,8 @@ serve(async (req) => {
         );
       }
 
-      // Step 2: Progressive search — Comune center → Foglio (CadastralZoning) → Particella
-      const found = await progressiveParcelSearch(center.lat, center.lon, foglio, particella, codiceComune, center.bbox);
+      // Step 2: Progressive search — Parquet coords → Foglio (CadastralZoning) → Particella
+      const found = await progressiveParcelSearch(center.lat, center.lon, foglio, particella, codiceComune, center.bbox, regioneFile);
 
       found.forEach((f) => {
         if (f.properties) {
