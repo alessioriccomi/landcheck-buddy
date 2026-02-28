@@ -333,21 +333,46 @@ function parseGMLCoordinates(posListStr: string): [number, number][] {
   return coords;
 }
 
+// Decode nationalCadastralReference → { foglio, particella }
+// e.g. "H501A0352B0.1018" → { foglio: "352", particella: "1018" }
+function decodeNationalRef(ref: string): { foglio: string; particella: string } | null {
+  if (!ref) return null;
+  const dotIdx = ref.indexOf(".");
+  if (dotIdx < 0) return null;
+  const particella = ref.substring(dotIdx + 1);
+  const codePart = ref.substring(0, dotIdx);
+  // Remove first 4 chars (codice catastale comune)
+  if (codePart.length <= 4) return null;
+  const foglioEncoded = codePart.substring(4); // e.g. "A0352B0"
+  // Extract digits → foglio number
+  const digits = foglioEncoded.replace(/[^0-9]/g, "");
+  const foglioNum = parseInt(digits, 10);
+  if (isNaN(foglioNum)) return null;
+  return { foglio: String(foglioNum), particella };
+}
+
 function gmlToGeoJSON(gmlText: string): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   const featureRegex = /<CP:CadastralParcel[\s\S]*?<\/CP:CadastralParcel>/g;
   let featureMatch: RegExpExecArray | null;
 
+  // Log first 500 chars of GML for diagnostics
+  console.log("GML raw (first 500):", gmlText.substring(0, 500));
+
   while ((featureMatch = featureRegex.exec(gmlText)) !== null) {
     const featureXml = featureMatch[0];
-    const idMatch = featureXml.match(/<base:localId>(.*?)<\/base:localId>/);
+    // Support both <base:localId> and <CP:inspireId_localId>
+    const idMatch = featureXml.match(/<(?:base|CP):(?:localId|inspireId_localId)>(.*?)<\/(?:base|CP):(?:localId|inspireId_localId)>/i);
     const localId = idMatch ? idMatch[1] : "unknown";
-    const labelMatch = featureXml.match(/<CP:label>(.*?)<\/CP:label>/);
+    const labelMatch = featureXml.match(/<CP:label>(.*?)<\/CP:label>/i);
     const label = labelMatch ? labelMatch[1] : "";
     const nationalIdMatch = featureXml.match(
-      /<CP:nationalCadastralReference>(.*?)<\/CP:nationalCadastralReference>/
+      /<CP:nationalCadastralReference>(.*?)<\/CP:nationalCadastralReference>/i
     );
     const nationalRef = nationalIdMatch ? nationalIdMatch[1] : "";
+    // Extract administrativeUnit (codice catastale comune)
+    const adminMatch = featureXml.match(/<CP:administrativeUnit>(.*?)<\/CP:administrativeUnit>/i);
+    const adminUnit = adminMatch ? adminMatch[1] : "";
 
     const rings: [number, number][][] = [];
     const posListRegex = /<gml:posList[^>]*>([\s\S]*?)<\/gml:posList>/g;
@@ -359,10 +384,23 @@ function gmlToGeoJSON(gmlText: string): GeoJSON.FeatureCollection {
 
     if (rings.length === 0) continue;
 
+    // Decode foglio and particella from nationalRef
+    const decoded = decodeNationalRef(nationalRef);
+
+    const props: Record<string, string> = {
+      localId, label, nationalRef, adminUnit,
+    };
+    if (decoded) {
+      props._foglio = decoded.foglio;
+      props._particella = decoded.particella;
+    }
+
+    console.log("Parsed feature:", { localId, label, nationalRef, _foglio: decoded?.foglio, _particella: decoded?.particella });
+
     features.push({
       type: "Feature",
       geometry: { type: "Polygon", coordinates: rings },
-      properties: { localId, label, nationalRef },
+      properties: props,
     });
   }
 
@@ -374,9 +412,27 @@ function featureMatchesFoglioParticella(
   foglioStr: string,
   particellaStr: string
 ): boolean {
-  const ref: string = f.properties?.nationalRef ?? "";
-  const lbl: string = f.properties?.label ?? "";
+  const props = f.properties ?? {};
 
+  // Priority 1: decoded fields from proxy
+  if (props._foglio && props._particella) {
+    if (
+      parseInt(props._foglio, 10) === parseInt(foglioStr, 10) &&
+      parseInt(props._particella, 10) === parseInt(particellaStr, 10)
+    ) return true;
+  }
+
+  // Priority 2: decode from nationalRef
+  const ref: string = props.nationalRef ?? "";
+  const decoded = decodeNationalRef(ref);
+  if (decoded) {
+    if (
+      parseInt(decoded.foglio, 10) === parseInt(foglioStr, 10) &&
+      parseInt(decoded.particella, 10) === parseInt(particellaStr, 10)
+    ) return true;
+  }
+
+  // Priority 3: old underscore format
   const refParts = ref.split("_");
   if (refParts.length >= 3) {
     if (
@@ -385,6 +441,8 @@ function featureMatchesFoglioParticella(
     ) return true;
   }
 
+  // Priority 4: label "foglio/particella"
+  const lbl: string = props.label ?? "";
   const lblParts = lbl.split("/");
   if (lblParts.length === 2) {
     if (
