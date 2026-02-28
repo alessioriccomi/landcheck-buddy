@@ -47,185 +47,28 @@ async function geocodeComuneWithBbox(comune: string): Promise<{
 
 // ──────────────────────────────────────────────────────────────
 // Dizionario coordinate capoluoghi e comuni italiani principali
-// (mantenuto solo per compatibilità con la modalità click-mappa)
-// ──────────────────────────────────────────────────────────────
-const COMUNI_COORDS: Record<string, [number, number]> = {
-  "roma": [41.9028, 12.4964],
-  "milano": [45.4654, 9.1859],
-  "napoli": [40.8518, 14.2681],
-  "torino": [45.0703, 7.6869],
-  "palermo": [38.1157, 13.3615],
-  "genova": [44.4056, 8.9463],
-  "bologna": [44.4949, 11.3426],
-  "firenze": [43.7696, 11.2558],
-  "bari": [41.1171, 16.8719],
-  "catania": [37.5079, 15.0830],
-  "venezia": [45.4408, 12.3155],
-  "verona": [45.4384, 10.9916],
-  "messina": [38.1938, 15.5540],
-  "padova": [45.4064, 11.8768],
-  "trieste": [45.6495, 13.7768],
-  "taranto": [40.4644, 17.2470],
-  "brescia": [45.5416, 10.2118],
-  "prato": [43.8777, 11.1023],
-  "parma": [44.8015, 10.3279],
-  "modena": [44.6471, 10.9252],
-  "reggio calabria": [38.1114, 15.6438],
-  "reggio emilia": [44.6989, 10.6297],
-  "perugia": [43.1122, 12.3888],
-  "livorno": [43.5485, 10.3106],
-  "ravenna": [44.4184, 12.2035],
-  "cagliari": [39.2238, 9.1217],
-  "foggia": [41.4621, 15.5444],
-  "rimini": [44.0678, 12.5695],
-  "salerno": [40.6824, 14.7681],
-  "ferrara": [44.8381, 11.6198],
-  "sassari": [40.7259, 8.5556],
-  "latina": [41.4677, 12.9035],
-  "monza": [45.5845, 9.2744],
-  "siracusa": [37.0755, 15.2866],
-  "pescara": [42.4618, 14.2158],
-  "bergamo": [45.6983, 9.6773],
-  "forlì": [44.2227, 12.0407],
-  "trento": [46.0748, 11.1217],
-  "vicenza": [45.5455, 11.5354],
-  "terni": [42.5636, 12.6430],
-  "bolzano": [46.4983, 11.3548],
-  "novara": [45.4469, 8.6224],
-  "piacenza": [45.0526, 9.6930],
-  "ancona": [43.6158, 13.5189],
-  "arezzo": [43.4633, 11.8800],
-  "udine": [46.0614, 13.2356],
-  "cesena": [44.1394, 12.2420],
-  "lecce": [40.3516, 18.1750],
-  "pesaro": [43.9100, 12.9132],
-  "catanzaro": [38.9099, 16.5879],
-  "la spezia": [44.1024, 9.8240],
-  "como": [45.8081, 9.0852],
-  "lucca": [43.8430, 10.5077],
-  "brindisi": [40.6326, 17.9415],
-  "pistoia": [43.9298, 10.9066],
-  "savona": [44.3068, 8.4814],
-  "pisa": [43.7228, 10.4017],
-  "alessandria": [44.9121, 8.6150],
-  "siena": [43.3188, 11.3307],
-  "grosseto": [42.7604, 11.1116],
-  "potenza": [40.6418, 15.8058],
-  "l'aquila": [42.3498, 13.3995],
-  "campobasso": [41.5602, 14.6680],
-  "aosta": [45.7372, 7.3206],
-  "matera": [40.6664, 16.6043],
-  "cosenza": [39.3087, 16.2529],
-  "caserta": [41.0740, 14.3325],
-  "avellino": [40.9147, 14.7900],
-  "benevento": [41.1297, 14.7784],
-  "frosinone": [41.6354, 13.3500],
-  "viterbo": [42.4202, 12.1046],
-  "rieti": [42.4022, 12.8594],
-  "teramo": [42.6586, 13.7042],
-  "chieti": [42.3517, 14.1681],
-  "macerata": [43.2984, 13.4533],
-  "ascoli piceno": [42.8509, 13.5745],
-  "mantova": [45.1564, 10.7914],
-  "cremona": [45.1327, 10.0227],
-  "lodi": [45.3098, 9.5041],
-  "lecco": [45.8566, 9.3944],
-  "varese": [45.8206, 8.8257],
-  "pavia": [45.1847, 9.1582],
-  "asti": [44.9004, 8.2059],
-  "cuneo": [44.3842, 7.5421],
-  "vercelli": [45.3219, 8.4233],
-  "rovigo": [45.0699, 11.7901],
-  "belluno": [46.1434, 12.2169],
-  "treviso": [45.6699, 12.2430],
-  "pordenone": [45.9564, 12.6615],
-  "gorizia": [45.9408, 13.6219],
-  "imperia": [43.8886, 8.0214],
-  "nuoro": [40.3186, 9.3295],
-  "oristano": [39.9068, 8.5916],
-  "olbia": [40.9232, 9.4986],
-  // Comuni toscani e altri
-  "montecatini terme": [43.8847, 10.7735],
-  "montecatini-terme": [43.8847, 10.7735],
-  "empoli": [43.7197, 10.9453],
-  "pontedera": [43.6614, 10.6325],
-  "massa": [44.0353, 10.1418],
-  "carrara": [44.0786, 10.0998],
-  "viareggio": [43.8673, 10.2505],
-  "forte dei marmi": [43.9631, 10.1705],
-  "pietrasanta": [43.9580, 10.2240],
-  "capannori": [43.8427, 10.5742],
-  "altopascio": [43.8175, 10.6760],
-  "pescia": [43.9022, 10.6913],
-  "monsummano terme": [43.8715, 10.8128],
-  "buggiano": [43.8784, 10.7349],
-  "uzzano": [43.8872, 10.7213],
-  "lamporecchio": [43.8203, 10.8961],
-  "serravalle pistoiese": [43.9097, 10.8296],
-  "quarrata": [43.8458, 10.9858],
-  "montale": [43.9408, 11.0183],
-  "agliana": [43.9024, 11.0028],
-  "pieve a nievole": [43.8817, 10.7954],
-  "massa e cozzile": [43.9108, 10.7511],
-  "larciano": [43.8218, 10.8714],
-  "ponte buggianese": [43.8416, 10.7499],
-  "san miniato": [43.6857, 10.8498],
-  "certaldo": [43.5480, 11.0420],
-  "castelfiorentino": [43.6055, 10.9736],
-  "poggibonsi": [43.4688, 11.1511],
-  "colle val d'elsa": [43.4228, 11.1197],
-  "colle di val d'elsa": [43.4228, 11.1197],
-  "volterra": [43.4014, 10.8604],
-  "san gimignano": [43.4677, 11.0435],
-  "montalcino": [43.0588, 11.4900],
-  "montepulciano": [43.0980, 11.7861],
-  "pienza": [43.0748, 11.6790],
-  "chianciano terme": [43.0604, 11.8260],
-  "chiusi": [43.0156, 11.9457],
-  "sansepolcro": [43.5693, 12.1395],
-  "bibbiena": [43.6959, 11.8170],
-  "poppi": [43.7262, 11.7704],
-  "stia": [43.7996, 11.7097],
-  "pratovecchio": [43.7810, 11.7211],
-  "castiglion fiorentino": [43.3411, 11.9225],
-  "cortona": [43.2763, 11.9875],
-  "castiglione della pescaia": [42.7622, 10.8765],
-  "orbetello": [42.4384, 11.2148],
-  "pitigliano": [42.6362, 11.6680],
-  "sorano": [42.6826, 11.7158],
-  "manciano": [42.5907, 11.5153],
-  "scansano": [42.6889, 11.3318],
-  "follonica": [42.9234, 10.7612],
-  "massa marittima": [43.0505, 10.8943],
-  "roccastrada": [43.0061, 11.1636],
-  "civitavecchia": [42.0938, 11.7961],
-  "montefiascone": [42.5403, 12.0267],
-  "tivoli": [41.9634, 12.7981],
-  "velletri": [41.6869, 12.7805],
-  "anzio": [41.4477, 12.6267],
-  "nettuno": [41.4639, 12.6602],
-  "pomezia": [41.6719, 12.5012],
-  "albano laziale": [41.7292, 12.6608],
-  "genzano di roma": [41.7009, 12.6921],
-  "marino": [41.7706, 12.6548],
-  "frascati": [41.8082, 12.6813],
-  "palestrina": [41.8388, 12.8908],
-  "valmontone": [41.7804, 12.9206],
-  "colleferro": [41.7277, 13.0049],
-  "guidonia montecelio": [41.9968, 12.7218],
-  "monterotondo": [42.0514, 12.6168],
-  "mentana": [42.0232, 12.6422],
-  "fiumicino": [41.7756, 12.2381],
-  "cerveteri": [41.9994, 12.1000],
-  "ladispoli": [41.9479, 12.0791],
-  "santa marinella": [42.0342, 11.8498],
-  "tarquinia": [42.2591, 11.7559],
-};
-
-function getComuneCoords(comune: string): [number, number] | null {
-  const key = comune.toLowerCase().trim();
-  return COMUNI_COORDS[key] ?? null;
+// ── Reverse-geocode via Nominatim (get comune from lat/lng) ──
+async function reverseGeocodeComune(lat: number, lng: number): Promise<string> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=12&addressdetails=1&accept-language=it`;
+    const resp = await fetch(url, {
+      headers: { "User-Agent": "VincoliApp/1.0" },
+    });
+    if (!resp.ok) throw new Error(`Nominatim ${resp.status}`);
+    const data = await resp.json();
+    const addr = data.address ?? {};
+    // Nominatim returns city, town, village, or municipality
+    const comune = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
+    if (comune) return comune;
+    throw new Error("No comune found");
+  } catch (err) {
+    console.warn("Reverse geocode failed:", err);
+    return "Sconosciuto";
+  }
 }
+
+
+
 
 
 // Generate a placeholder polygon near the given center
@@ -667,13 +510,13 @@ export function MapView({
           }
         }
 
+        // Reverse-geocode via Nominatim to find the correct comune
         let bestComune = "Sconosciuto";
-        let bestDist = Infinity;
-        for (const [nome, [clat, clng]] of Object.entries(COMUNI_COORDS)) {
-          const d = Math.hypot(lat - clat, lng - clng);
-          if (d < bestDist) { bestDist = d; bestComune = nome; }
+        try {
+          bestComune = await reverseGeocodeComune(lat, lng);
+        } catch {
+          console.warn("Reverse geocode fallback: Sconosciuto");
         }
-        bestComune = bestComune.charAt(0).toUpperCase() + bestComune.slice(1);
 
         const mq = calcAreaMq([feat]);
         const currentLen = particelleRef.current.length;
