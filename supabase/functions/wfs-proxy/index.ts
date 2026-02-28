@@ -6,147 +6,57 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ── Parquet cache (persists for the warm instance lifetime) ────
-const parquetCache = new Map<string, ArrayBuffer>();
+// ── Comuni JSON cache (lightweight alternative to Parquet) ────
+// Source: matteocontrini/comuni-json — plain JSON, no ZSTD decompression needed
+const COMUNI_JSON_URL =
+  "https://raw.githubusercontent.com/matteocontrini/comuni-json/master/comuni.json";
 
-async function fetchCached(url: string): Promise<ArrayBuffer> {
-  if (parquetCache.has(url)) return parquetCache.get(url)!;
-  console.log("Fetching (uncached):", url);
-  const resp = await fetch(url, {
-    headers: { "User-Agent": "GeoVincoli/1.0 (info@tuscanyengineering.it)" },
-  });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching ${url}`);
-  const buf = await resp.arrayBuffer();
-  parquetCache.set(url, buf);
-  return buf;
+interface ComuneRecord {
+  nome: string;
+  codiceCatastale: string;
+  regione?: { nome: string };
 }
 
-// ── Parquet reader with ZSTD support via hyparquet + hyparquet-compressors ──
-// Known column orders from onData/dati_catastali (CC BY 4.0):
-// index.parquet: comune, file, CODISTAT, DENOMINAZIONE_IT
-// regional: INSPIREID_LOCALID, comune, foglio, particella, x, y
-const INDEX_COLUMNS = ["comune", "file", "CODISTAT", "DENOMINAZIONE_IT"];
-const REGIONAL_COLUMNS = ["INSPIREID_LOCALID", "comune", "foglio", "particella", "x", "y"];
+let comuniCache: ComuneRecord[] | null = null;
 
-// deno-lint-ignore no-explicit-any
-type ParquetRow = Record<string, any>;
-
-async function readParquet(buf: ArrayBuffer, knownColumns: string[]): Promise<ParquetRow[]> {
-  // @ts-ignore esm.sh import
-  const { parquetRead, parquetMetadata } = await import("https://esm.sh/hyparquet@1.9.1");
-  // @ts-ignore esm.sh import
-  const { compressors } = await import("https://esm.sh/hyparquet-compressors@1.1.0");
-
-  const metadata = await parquetMetadata(buf);
-
-  const rawRows: unknown[] = [];
-  await parquetRead({
-    file: buf,
-    metadata,
-    compressors,
-    onComplete: (data: unknown[]) => rawRows.push(...data),
+async function fetchComuniJson(): Promise<ComuneRecord[]> {
+  if (comuniCache) return comuniCache;
+  console.log("Fetching comuni-json (first time)...");
+  const resp = await fetch(COMUNI_JSON_URL, {
+    headers: { "User-Agent": "GeoVincoli/1.0" },
   });
-
-  if (rawRows.length === 0) return [];
-
-  const firstRow = rawRows[0];
-
-  // If rows are objects with numeric keys ("0","1","2"…) remap to column names
-  if (firstRow && typeof firstRow === "object" && !Array.isArray(firstRow)) {
-    const keys = Object.keys(firstRow as object);
-    const areNumeric = keys.length > 0 && keys.every((k) => !isNaN(Number(k)));
-    if (areNumeric && knownColumns.length > 0) {
-      console.log("Remapping numeric keys to:", knownColumns);
-      return rawRows.map((row) => {
-        const obj: ParquetRow = {};
-        const r = row as Record<string, unknown>;
-        knownColumns.forEach((colName, i) => {
-          obj[colName] = r[String(i)];
-        });
-        return obj;
-      });
-    }
-    // Already properly named
-    return rawRows as ParquetRow[];
-  }
-
-  // Rows are plain arrays
-  if (Array.isArray(firstRow) && knownColumns.length > 0) {
-    return rawRows.map((row) => {
-      const obj: ParquetRow = {};
-      const r = row as unknown[];
-      knownColumns.forEach((colName, i) => {
-        obj[colName] = r[i];
-      });
-      return obj;
-    });
-  }
-
-  return rawRows as ParquetRow[];
+  if (!resp.ok) throw new Error(`Failed to fetch comuni-json: ${resp.status}`);
+  const data = await resp.json();
+  comuniCache = data as ComuneRecord[];
+  console.log(`Loaded ${comuniCache.length} comuni from JSON`);
+  return comuniCache;
 }
 
-// ── onData Parquet URLs ────────────────────────────────────────
-// Correct repo: ondata/dati_catastali (underscore), path: S_0000_ITALIA/anagrafica/
-const PARQUET_BASE =
-  "https://raw.githubusercontent.com/ondata/dati_catastali/main/S_0000_ITALIA/anagrafica/";
-const INDEX_PARQUET_URL = PARQUET_BASE + "index.parquet";
-
-// ── Step 1: map comune name → codice catastale + regionale file ──
-async function lookupComune(comuneName: string): Promise<{
-  codiceComune: string;
-  regioneFile: string;
-} | null> {
-  const buf = await fetchCached(INDEX_PARQUET_URL);
-  const rows = await readParquet(buf, INDEX_COLUMNS);
-
-  if (rows.length > 0) {
-    console.log("Index sample:", JSON.stringify(rows[0]));
-  }
-
-  const searchName = comuneName.toUpperCase().trim();
-  console.log(`Total index rows: ${rows.length}, searching: "${searchName}"`);
-
-  // Debug: log sample of Toscana rows
-  const toscanaRows = rows.filter(r => String(r.file ?? "").includes("Toscana")).slice(0, 3);
-  console.log("Toscana sample rows:", JSON.stringify(toscanaRows));
-
-  // Debug: log any row containing search term parts
-  const partialMatch = rows.filter(r => String(r.DENOMINAZIONE_IT ?? "").toUpperCase().includes("MONTEC")).slice(0, 5);
-  console.log("MONTEC matches:", JSON.stringify(partialMatch));
-
-  // Normalize: remove hyphens and extra spaces for fuzzy comparison
+// Lookup comune name → codice catastale
+async function lookupCodiceComune(comuneName: string): Promise<string | null> {
+  const comuni = await fetchComuniJson();
   const normalize = (s: string) => s.toUpperCase().trim().replace(/[-\s]+/g, " ");
-  const normalizedSearch = normalize(searchName);
+  const search = normalize(comuneName);
 
   // Exact match
-  let found = rows.find((r) => normalize(String(r.DENOMINAZIONE_IT ?? "")) === normalizedSearch);
+  let found = comuni.find((c) => normalize(c.nome) === search);
   // Includes match
-  if (!found) found = rows.find((r) => normalize(String(r.DENOMINAZIONE_IT ?? "")).includes(normalizedSearch));
-  // Reverse includes (stored value is longer, e.g. "MONTECATINI TERME" found in "MONTECATINI TERME VAL DI CECINA")
-  if (!found) found = rows.find((r) => normalizedSearch.includes(normalize(String(r.DENOMINAZIONE_IT ?? ""))) && String(r.DENOMINAZIONE_IT ?? "").length > 4);
+  if (!found) found = comuni.find((c) => normalize(c.nome).includes(search));
+  if (!found) found = comuni.find((c) => search.includes(normalize(c.nome)) && c.nome.length > 4);
 
   if (!found) {
-    console.warn("Comune not found in index.parquet:", comuneName);
+    console.warn("Comune not found in comuni-json:", comuneName);
     return null;
   }
 
-  console.log("Found comune row:", JSON.stringify(found));
-
-  const codiceComune = String(found.comune ?? "").trim();
-  const regioneFile = String(found.file ?? "").trim();
-
-  if (!codiceComune || !regioneFile) {
-    console.warn("Missing codiceComune or regioneFile:", JSON.stringify(found));
-    return null;
-  }
-
-  return { codiceComune, regioneFile };
+  console.log(`Comune lookup: "${comuneName}" → codice ${found.codiceCatastale}`);
+  return found.codiceCatastale;
 }
 
-// ── Step 2: find coordinates via Nominatim (lightweight fallback) ──
-// The regional parquets are 3-5MB and cause edge function compute limits.
-// We use Nominatim to get the commune center, then search via WFS grid.
-async function geocodeViaProxy(comuneName: string): Promise<{ lat: number; lon: number; bbox?: [number, number, number, number] } | null> {
+// ── Geocode via Nominatim ──────────────────────────────────────
+async function geocodeViaProxy(
+  comuneName: string
+): Promise<{ lat: number; lon: number; bbox: [number, number, number, number] } | null> {
   const q = encodeURIComponent(`${comuneName}, Italy`);
   const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=it`;
   const resp = await fetch(url, { headers: { "User-Agent": "GeoVincoli/1.0" } });
@@ -154,43 +64,32 @@ async function geocodeViaProxy(comuneName: string): Promise<{ lat: number; lon: 
   const data = await resp.json();
   if (!data?.length) return null;
   const r = data[0];
-  const bbox = r.boundingbox ? [
-    parseFloat(r.boundingbox[0]), // south
-    parseFloat(r.boundingbox[1]), // north
-    parseFloat(r.boundingbox[2]), // west
-    parseFloat(r.boundingbox[3]), // east
-  ] as [number, number, number, number] : undefined;
-  return { lat: parseFloat(r.lat), lon: parseFloat(r.lon), bbox };
+  const bbox = r.boundingbox
+    ? ([
+        parseFloat(r.boundingbox[0]),
+        parseFloat(r.boundingbox[1]),
+        parseFloat(r.boundingbox[2]),
+        parseFloat(r.boundingbox[3]),
+      ] as [number, number, number, number])
+    : undefined;
+  return {
+    lat: parseFloat(r.lat),
+    lon: parseFloat(r.lon),
+    bbox: bbox ?? [parseFloat(r.lat) - 0.05, parseFloat(r.lat) + 0.05, parseFloat(r.lon) - 0.05, parseFloat(r.lon) + 0.05],
+  };
 }
 
-// ── Progressive search: Comune center → Foglio (CadastralZoning) → Particella ──
-// Step 1: WFS CadastralZoning around comune center to find the specific foglio sheet
-// Step 2: Use foglio bbox to search CadastralParcel for the target particella
-async function wfsQueryZoning(
-  lat: number,
-  lon: number,
-  delta: number
-): Promise<GeoJSON.Feature[]> {
-  const wfsUrl =
-    `https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php` +
-    `?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature` +
-    `&TYPENAMES=CP:CadastralZoning` +
-    `&SRSNAME=urn:ogc:def:crs:EPSG::6706` +
-    `&BBOX=${lat - delta},${lon - delta},${lat + delta},${lon + delta}` +
-    `&COUNT=200`;
-
-  const resp = await fetch(wfsUrl, {
-    headers: {
-      Accept: "application/xml, text/xml",
-      "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
-    },
-  });
-  if (!resp.ok) throw new Error(`WFS zoning ${resp.status}`);
-  const gml = await resp.text();
-  return gmlToGeoJSONZoning(gml);
+// ── GML parsing helpers ────────────────────────────────────────
+function parseGMLCoordinates(posListStr: string): [number, number][] {
+  const nums = posListStr.trim().split(/\s+/).map(Number);
+  const coords: [number, number][] = [];
+  for (let i = 0; i < nums.length - 1; i += 2) {
+    coords.push([nums[i + 1], nums[i]]); // → [lng, lat] for GeoJSON
+  }
+  return coords;
 }
 
-// Parse CadastralZoning GML → features with label (foglio number) and geometry
+// Parse CadastralZoning GML → features with label and nationalRef
 function gmlToGeoJSONZoning(gmlText: string): GeoJSON.Feature[] {
   const features: GeoJSON.Feature[] = [];
   const featureRegex = /<CP:CadastralZoning[\s\S]*?<\/CP:CadastralZoning>/g;
@@ -229,7 +128,10 @@ function gmlToGeoJSONZoning(gmlText: string): GeoJSON.Feature[] {
 
 // Compute bbox of a GeoJSON polygon feature → [south, north, west, east]
 function featureBbox(feat: GeoJSON.Feature): [number, number, number, number] {
-  let south = 90, north = -90, west = 180, east = -180;
+  let south = 90,
+    north = -90,
+    west = 180,
+    east = -180;
   if (feat.geometry?.type === "Polygon") {
     for (const ring of (feat.geometry as GeoJSON.Polygon).coordinates) {
       for (const [lng, lat] of ring) {
@@ -243,195 +145,19 @@ function featureBbox(feat: GeoJSON.Feature): [number, number, number, number] {
   return [south, north, west, east];
 }
 
-// Compute centroid of a GeoJSON polygon feature
-function featureCentroid(feat: GeoJSON.Feature): [number, number] {
-  const [south, north, west, east] = featureBbox(feat);
-  return [(south + north) / 2, (west + east) / 2]; // [lat, lon]
-}
-
-// ── Lookup parcel coordinates from regional parquet ──────────
-// The onData parquets contain pre-computed x,y (lon,lat) for every parcel in Italy
-async function lookupParcelCoordsFromParquet(
-  codiceComune: string,
-  regioneFile: string,
-  foglio: string,
-  particella: string,
-): Promise<{ lat: number; lon: number } | null> {
-  const url = PARQUET_BASE + regioneFile;
-  try {
-    const buf = await fetchCached(url);
-    const rows = await readParquet(buf, REGIONAL_COLUMNS);
-    console.log(`Regional parquet ${regioneFile}: ${rows.length} rows loaded`);
-
-    const foglioNum = parseInt(foglio, 10);
-    const partNum = parseInt(particella, 10);
-
-    // Find matching row: comune + foglio + particella
-    const match = rows.find(r => {
-      if (String(r.comune ?? "").trim() !== codiceComune) return false;
-      if (parseInt(String(r.foglio ?? ""), 10) !== foglioNum) return false;
-      if (parseInt(String(r.particella ?? ""), 10) !== partNum) return false;
-      return true;
-    });
-
-    if (!match) {
-      console.warn(`Parcel not found in parquet: ${codiceComune} Fg.${foglio} Part.${particella}`);
-      return null;
-    }
-
-    const x = parseFloat(String(match.x ?? ""));
-    const y = parseFloat(String(match.y ?? ""));
-    if (isNaN(x) || isNaN(y)) {
-      console.warn("Invalid x,y in parquet row:", match);
-      return null;
-    }
-
-    console.log(`Parquet lookup found: ${codiceComune} Fg.${foglio} Part.${particella} → x=${x}, y=${y}`);
-    return { lat: y, lon: x };
-  } catch (err) {
-    console.warn(`Failed to read regional parquet ${regioneFile}:`, err);
-    return null;
-  }
-}
-
-// Progressive parcel search: parquet coords → WFS bbox at exact location
-async function progressiveParcelSearch(
-  centerLat: number,
-  centerLon: number,
-  foglio: string,
-  particella: string,
-  codiceComune?: string,
-  communeBbox?: [number, number, number, number],
-  regioneFile?: string,
-): Promise<GeoJSON.Feature[]> {
-  console.log(`Progressive search: center=${centerLat},${centerLon} foglio=${foglio} particella=${particella} codice=${codiceComune} regione=${regioneFile}`);
-
-  // ── Strategy 0: Parquet coordinates (like formaps/urbismap) ──
-  // Use the pre-indexed x,y from onData parquets to locate the parcel precisely
-  if (codiceComune && regioneFile) {
-    const parcelCoords = await lookupParcelCoordsFromParquet(codiceComune, regioneFile, foglio, particella);
-    if (parcelCoords) {
-      console.log(`Using parquet coords: lat=${parcelCoords.lat}, lon=${parcelCoords.lon}`);
-      // Search with progressively larger bbox around the exact parcel location
-      for (const delta of [0.0005, 0.001, 0.003, 0.006]) {
-        try {
-          const fc = await wfsQueryBbox(parcelCoords.lat, parcelCoords.lon, delta);
-          console.log(`WFS bbox at parquet coords delta=${delta} → ${fc.features.length} features`);
-          const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
-          if (matched.length > 0) {
-            console.log(`✓ Found particella via parquet coords at delta=${delta}`);
-            return matched;
-          }
-        } catch (err) {
-          console.warn(`WFS query at parquet coords failed (delta=${delta}):`, err);
-        }
-      }
-      console.warn("Parquet coords found but WFS returned no matching parcel");
-    }
-  }
-
-  // ── Strategy 1: CadastralZoning around center (fallback) ──
-  const foglioNum = parseInt(foglio, 10);
-  let foglioFeature: GeoJSON.Feature | null = null;
-  for (const delta of [0.02, 0.05]) {
-    try {
-      const zonings = await wfsQueryZoning(centerLat, centerLon, delta);
-      console.log(`Zoning center delta=${delta} → ${zonings.length} features`);
-      const match = zonings.find(z => {
-        const lbl = String(z.properties?.label ?? "");
-        const ref = String(z.properties?.nationalRef ?? "");
-        // Try label first, then extract from nationalRef
-        if (lbl && parseInt(lbl, 10) === foglioNum) return true;
-        if (ref && codiceComune && ref.startsWith(codiceComune)) {
-          const afterCode = ref.substring(codiceComune.length);
-          const digits = afterCode.replace(/[^0-9]/g, "").substring(0, 4);
-          if (digits && parseInt(digits, 10) === foglioNum) return true;
-        }
-        return false;
-      });
-      if (match) {
-        foglioFeature = match;
-        console.log(`Found foglio ${foglio} at center delta=${delta}`);
-        break;
-      }
-      if (zonings.length === 0 && delta >= 0.05) break;
-    } catch (err) {
-      console.warn(`Zoning query failed at delta=${delta}:`, err);
-    }
-  }
-
-  if (!foglioFeature) {
-    console.warn("Foglio not found, falling back to direct bbox search around center");
-    for (const delta of [0.003, 0.01, 0.03]) {
-      const fc = await wfsQueryBbox(centerLat, centerLon, delta);
-      const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
-      if (matched.length > 0) return matched;
-    }
-    return [];
-  }
-
-  // ── Found foglio: search parcels within its bbox ──
-  const [south, north, west, east] = featureBbox(foglioFeature);
-  const foglioCenterLat = (south + north) / 2;
-  const foglioCenterLon = (west + east) / 2;
-  const foglioDeltaLat = (north - south) / 2 + 0.001;
-  const foglioDeltaLon = (east - west) / 2 + 0.001;
-  const foglioDelta = Math.max(foglioDeltaLat, foglioDeltaLon);
-
-  console.log(`Foglio bbox: ${south.toFixed(4)},${west.toFixed(4)} → ${north.toFixed(4)},${east.toFixed(4)}, delta=${foglioDelta.toFixed(4)}`);
-
-  if (foglioDelta <= 0.01) {
-    const fc = await wfsQueryBbox(foglioCenterLat, foglioCenterLon, foglioDelta);
-    console.log(`Parcel search within foglio → ${fc.features.length} features`);
-    const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
-    if (matched.length > 0) return matched;
-    return [];
-  }
-
-  const STEP = 0.006;
-  for (let lat = south; lat <= north; lat += STEP) {
-    for (let lon = west; lon <= east; lon += STEP) {
-      try {
-        const fc = await wfsQueryBbox(lat + STEP / 2, lon + STEP / 2, STEP / 2);
-        const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
-        if (matched.length > 0) {
-          console.log(`Found particella in foglio subdivision at ${lat.toFixed(4)},${lon.toFixed(4)}`);
-          return matched;
-        }
-      } catch { /* continue */ }
-    }
-  }
-
-  return [];
-}
-
-// ── GML → GeoJSON ─────────────────────────────────────────────
-function parseGMLCoordinates(posListStr: string): [number, number][] {
-  const nums = posListStr.trim().split(/\s+/).map(Number);
-  const coords: [number, number][] = [];
-  for (let i = 0; i < nums.length - 1; i += 2) {
-    coords.push([nums[i + 1], nums[i]]); // → [lng, lat] for GeoJSON
-  }
-  return coords;
-}
-
 // Decode nationalCadastralReference → { foglio, particella }
-// e.g. "H501A0352B0.1018" → { foglio: "352", particella: "1018" }
 function decodeNationalRef(ref: string): { foglio: string; particella: string } | null {
   if (!ref) return null;
   const dotIdx = ref.indexOf(".");
   if (dotIdx < 0) return null;
   const particella = ref.substring(dotIdx + 1);
   const codePart = ref.substring(0, dotIdx);
-  // Remove first 4 chars (codice catastale comune)
   if (codePart.length <= 4) return null;
-  const foglioEncoded = codePart.substring(4); // e.g. "A0017B0"
-  // Positional parsing: pos 0 = sezione (letter), pos 1-4 = foglio (4 digits), pos 5+ = allegato/sviluppo
+  const foglioEncoded = codePart.substring(4);
   let foglioNum: number;
   if (foglioEncoded.length >= 5 && /^\d{4}$/.test(foglioEncoded.substring(1, 5))) {
     foglioNum = parseInt(foglioEncoded.substring(1, 5), 10);
   } else {
-    // Fallback: extract all digits
     const digits = foglioEncoded.replace(/[^0-9]/g, "");
     foglioNum = parseInt(digits, 10);
   }
@@ -444,13 +170,11 @@ function gmlToGeoJSON(gmlText: string): GeoJSON.FeatureCollection {
   const featureRegex = /<CP:CadastralParcel[\s\S]*?<\/CP:CadastralParcel>/g;
   let featureMatch: RegExpExecArray | null;
 
-  // Log first 500 chars of GML for diagnostics
-  console.log("GML raw (first 500):", gmlText.substring(0, 500));
-
   while ((featureMatch = featureRegex.exec(gmlText)) !== null) {
     const featureXml = featureMatch[0];
-    // Support both <base:localId> and <CP:inspireId_localId>
-    const idMatch = featureXml.match(/<(?:base|CP):(?:localId|inspireId_localId)>(.*?)<\/(?:base|CP):(?:localId|inspireId_localId)>/i);
+    const idMatch = featureXml.match(
+      /<(?:base|CP):(?:localId|inspireId_localId)>(.*?)<\/(?:base|CP):(?:localId|inspireId_localId)>/i
+    );
     const localId = idMatch ? idMatch[1] : "unknown";
     const labelMatch = featureXml.match(/<CP:label>(.*?)<\/CP:label>/i);
     const label = labelMatch ? labelMatch[1] : "";
@@ -458,7 +182,6 @@ function gmlToGeoJSON(gmlText: string): GeoJSON.FeatureCollection {
       /<CP:nationalCadastralReference>(.*?)<\/CP:nationalCadastralReference>/i
     );
     const nationalRef = nationalIdMatch ? nationalIdMatch[1] : "";
-    // Extract administrativeUnit (codice catastale comune)
     const adminMatch = featureXml.match(/<CP:administrativeUnit>(.*?)<\/CP:administrativeUnit>/i);
     const adminUnit = adminMatch ? adminMatch[1] : "";
 
@@ -472,18 +195,12 @@ function gmlToGeoJSON(gmlText: string): GeoJSON.FeatureCollection {
 
     if (rings.length === 0) continue;
 
-    // Decode foglio and particella from nationalRef
     const decoded = decodeNationalRef(nationalRef);
-
-    const props: Record<string, string> = {
-      localId, label, nationalRef, adminUnit,
-    };
+    const props: Record<string, string> = { localId, label, nationalRef, adminUnit };
     if (decoded) {
       props._foglio = decoded.foglio;
       props._particella = decoded.particella;
     }
-
-    console.log("Parsed feature:", { localId, label, nationalRef, _foglio: decoded?.foglio, _particella: decoded?.particella });
 
     features.push({
       type: "Feature",
@@ -501,49 +218,35 @@ function featureMatchesFoglioParticella(
   particellaStr: string
 ): boolean {
   const props = f.properties ?? {};
-
-  // Priority 1: decoded fields from proxy
   if (props._foglio && props._particella) {
     if (
       parseInt(props._foglio, 10) === parseInt(foglioStr, 10) &&
       parseInt(props._particella, 10) === parseInt(particellaStr, 10)
-    ) return true;
+    )
+      return true;
   }
-
-  // Priority 2: decode from nationalRef
   const ref: string = props.nationalRef ?? "";
   const decoded = decodeNationalRef(ref);
   if (decoded) {
     if (
       parseInt(decoded.foglio, 10) === parseInt(foglioStr, 10) &&
       parseInt(decoded.particella, 10) === parseInt(particellaStr, 10)
-    ) return true;
+    )
+      return true;
   }
-
-  // Priority 3: old underscore format
-  const refParts = ref.split("_");
-  if (refParts.length >= 3) {
-    if (
-      parseInt(refParts[refParts.length - 2], 10) === parseInt(foglioStr, 10) &&
-      parseInt(refParts[refParts.length - 1], 10) === parseInt(particellaStr, 10)
-    ) return true;
-  }
-
-  // Priority 4: label "foglio/particella"
   const lbl: string = props.label ?? "";
   const lblParts = lbl.split("/");
   if (lblParts.length === 2) {
     if (
       parseInt(lblParts[0], 10) === parseInt(foglioStr, 10) &&
       parseInt(lblParts[1], 10) === parseInt(particellaStr, 10)
-    ) return true;
+    )
+      return true;
   }
-
   return false;
 }
 
 // ── Point-in-polygon (ray casting) ──────────────────────────────
-// Returns true if point [lng, lat] is inside the polygon ring [[lng,lat], ...]
 function pointInPolygon(point: [number, number], ring: [number, number][]): boolean {
   const [px, py] = point;
   let inside = false;
@@ -557,19 +260,16 @@ function pointInPolygon(point: [number, number], ring: [number, number][]): bool
   return inside;
 }
 
-// Find the single feature whose polygon contains the given point
 function findFeatureContainingPoint(
   features: GeoJSON.Feature[],
   lat: number,
   lon: number
 ): GeoJSON.Feature | null {
-  const point: [number, number] = [lon, lat]; // GeoJSON is [lng, lat]
+  const point: [number, number] = [lon, lat];
   for (const feat of features) {
     if (feat.geometry?.type !== "Polygon") continue;
     const rings = (feat.geometry as GeoJSON.Polygon).coordinates;
-    // Check outer ring (first ring)
     if (rings.length > 0 && pointInPolygon(point, rings[0] as [number, number][])) {
-      // Check not inside any hole (subsequent rings)
       let inHole = false;
       for (let h = 1; h < rings.length; h++) {
         if (pointInPolygon(point, rings[h] as [number, number][])) {
@@ -583,7 +283,31 @@ function findFeatureContainingPoint(
   return null;
 }
 
-// ── WFS query with tiny bbox (used for grid search, NOT for click) ──
+// ── WFS queries ────────────────────────────────────────────────
+async function wfsQueryZoning(
+  lat: number,
+  lon: number,
+  delta: number
+): Promise<GeoJSON.Feature[]> {
+  const wfsUrl =
+    `https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php` +
+    `?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature` +
+    `&TYPENAMES=CP:CadastralZoning` +
+    `&SRSNAME=urn:ogc:def:crs:EPSG::6706` +
+    `&BBOX=${lat - delta},${lon - delta},${lat + delta},${lon + delta}` +
+    `&COUNT=200`;
+
+  const resp = await fetch(wfsUrl, {
+    headers: {
+      Accept: "application/xml, text/xml",
+      "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
+    },
+  });
+  if (!resp.ok) throw new Error(`WFS zoning ${resp.status}`);
+  const gml = await resp.text();
+  return gmlToGeoJSONZoning(gml);
+}
+
 async function wfsQueryBbox(
   lat: number,
   lon: number,
@@ -603,12 +327,150 @@ async function wfsQueryBbox(
       "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
     },
   });
-
   if (!resp.ok) throw new Error(`WFS ${resp.status}`);
   const gml = await resp.text();
   return gmlToGeoJSON(gml);
 }
 
+// ── Progressive parcel search ──────────────────────────────────
+// Strategy: grid-scan CadastralZoning across commune bbox to find the foglio,
+// then search parcels within the foglio's bbox.
+async function progressiveParcelSearch(
+  centerLat: number,
+  centerLon: number,
+  foglio: string,
+  particella: string,
+  codiceComune: string,
+  communeBbox: [number, number, number, number] // [south, north, west, east]
+): Promise<GeoJSON.Feature[]> {
+  const foglioNum = parseInt(foglio, 10);
+  console.log(
+    `Progressive search: codice=${codiceComune} foglio=${foglio} particella=${particella} bbox=${communeBbox.join(",")}`
+  );
+
+  // Helper: check if a zoning feature matches our target foglio
+  const matchesFoglio = (z: GeoJSON.Feature): boolean => {
+    const lbl = String(z.properties?.label ?? "");
+    const ref = String(z.properties?.nationalRef ?? "");
+    if (lbl && parseInt(lbl, 10) === foglioNum) return true;
+    if (ref && codiceComune && ref.startsWith(codiceComune)) {
+      const afterCode = ref.substring(codiceComune.length);
+      const digits = afterCode.replace(/[^0-9]/g, "").substring(0, 4);
+      if (digits && parseInt(digits, 10) === foglioNum) return true;
+    }
+    return false;
+  };
+
+  // ── Step 1: Try center first (quick check) ──
+  let foglioFeature: GeoJSON.Feature | null = null;
+  for (const delta of [0.02, 0.04]) {
+    try {
+      const zonings = await wfsQueryZoning(centerLat, centerLon, delta);
+      console.log(`Zoning center delta=${delta} → ${zonings.length} features`);
+      const match = zonings.find(matchesFoglio);
+      if (match) {
+        foglioFeature = match;
+        console.log(`Found foglio ${foglio} at center delta=${delta}`);
+        break;
+      }
+      if (zonings.length === 0) break; // WFS limit hit, don't try larger
+    } catch (err) {
+      console.warn(`Zoning query failed at delta=${delta}:`, err);
+    }
+  }
+
+  // ── Step 2: Grid scan across commune bbox ──
+  if (!foglioFeature) {
+    const [south, north, west, east] = communeBbox;
+    const SCAN_DELTA = 0.015; // Each tile covers ~0.03° (~3km)
+    const maxTiles = 30; // Safety limit
+    let tileCount = 0;
+
+    console.log(`Grid scanning commune bbox: ${south.toFixed(4)},${west.toFixed(4)} → ${north.toFixed(4)},${east.toFixed(4)}`);
+
+    outerLoop:
+    for (let lat = south; lat <= north + SCAN_DELTA; lat += SCAN_DELTA * 1.8) {
+      for (let lon = west; lon <= east + SCAN_DELTA; lon += SCAN_DELTA * 1.8) {
+        if (tileCount >= maxTiles) {
+          console.warn("Grid scan tile limit reached");
+          break outerLoop;
+        }
+        tileCount++;
+        try {
+          const zonings = await wfsQueryZoning(lat + SCAN_DELTA, lon + SCAN_DELTA, SCAN_DELTA);
+          if (zonings.length > 0) {
+            const match = zonings.find(matchesFoglio);
+            if (match) {
+              foglioFeature = match;
+              console.log(`Found foglio ${foglio} via grid scan at tile ${tileCount}`);
+              break outerLoop;
+            }
+          }
+        } catch {
+          // Continue scanning
+        }
+      }
+    }
+  }
+
+  if (!foglioFeature) {
+    console.warn("Foglio not found via center or grid scan, trying direct bbox fallback");
+    // Last resort: search parcels directly around center
+    for (const delta of [0.003, 0.01]) {
+      try {
+        const fc = await wfsQueryBbox(centerLat, centerLon, delta);
+        const matched = fc.features.filter((f) => featureMatchesFoglioParticella(f, foglio, particella));
+        if (matched.length > 0) return matched;
+      } catch { /* continue */ }
+    }
+    return [];
+  }
+
+  // ── Step 3: Search parcels within foglio bbox ──
+  const [fSouth, fNorth, fWest, fEast] = featureBbox(foglioFeature);
+  const foglioCenterLat = (fSouth + fNorth) / 2;
+  const foglioCenterLon = (fWest + fEast) / 2;
+  const foglioDeltaLat = (fNorth - fSouth) / 2 + 0.001;
+  const foglioDeltaLon = (fEast - fWest) / 2 + 0.001;
+  const foglioDelta = Math.max(foglioDeltaLat, foglioDeltaLon);
+
+  console.log(
+    `Foglio bbox: ${fSouth.toFixed(4)},${fWest.toFixed(4)} → ${fNorth.toFixed(4)},${fEast.toFixed(4)}, delta=${foglioDelta.toFixed(4)}`
+  );
+
+  // If foglio is small enough, single query
+  if (foglioDelta <= 0.012) {
+    try {
+      const fc = await wfsQueryBbox(foglioCenterLat, foglioCenterLon, foglioDelta);
+      console.log(`Parcel search within foglio → ${fc.features.length} features`);
+      const matched = fc.features.filter((f) => featureMatchesFoglioParticella(f, foglio, particella));
+      if (matched.length > 0) return matched;
+    } catch (err) {
+      console.warn("Foglio parcel search failed:", err);
+    }
+  }
+
+  // Subdivide foglio into smaller tiles
+  const STEP = 0.008;
+  for (let lat = fSouth; lat <= fNorth; lat += STEP) {
+    for (let lon = fWest; lon <= fEast; lon += STEP) {
+      try {
+        const fc = await wfsQueryBbox(lat + STEP / 2, lon + STEP / 2, STEP / 2 + 0.001);
+        const matched = fc.features.filter((f) => featureMatchesFoglioParticella(f, foglio, particella));
+        if (matched.length > 0) {
+          console.log(`Found particella in foglio subdivision`);
+          return matched;
+        }
+      } catch {
+        /* continue */
+      }
+    }
+  }
+
+  return [];
+}
+
+// ── Main handler ───────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -618,7 +480,7 @@ serve(async (req) => {
   const mode = url.searchParams.get("mode") ?? "wfs";
 
   try {
-    // ── mode=parcel: Parquet lookup → tiny WFS bbox ──────────
+    // ── mode=parcel: JSON lookup → CadastralZoning grid → parcel ──
     if (mode === "parcel") {
       const comune = url.searchParams.get("comune") ?? "";
       const foglio = url.searchParams.get("foglio") ?? "";
@@ -631,18 +493,16 @@ serve(async (req) => {
         );
       }
 
-      const comuneInfo = await lookupComune(comune);
-      if (!comuneInfo) {
+      // Step 1: Get codice catastale from lightweight JSON
+      const codiceComune = await lookupCodiceComune(comune);
+      if (!codiceComune) {
         return new Response(
-          JSON.stringify({ error: `Comune not found in cadastral index: ${comune}` }),
+          JSON.stringify({ error: `Comune not found: ${comune}` }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const { codiceComune, regioneFile } = comuneInfo;
-      console.log(`Looking up parcel via grid search: ${comune} (${codiceComune}/${regioneFile}) Fg.${foglio} Part.${particella}`);
-
-      // Step 1: geocode commune center via Nominatim
+      // Step 2: Geocode commune center + bbox
       const center = await geocodeViaProxy(comune);
       if (!center) {
         return new Response(
@@ -651,8 +511,19 @@ serve(async (req) => {
         );
       }
 
-      // Step 2: Progressive search — Parquet coords → Foglio (CadastralZoning) → Particella
-      const found = await progressiveParcelSearch(center.lat, center.lon, foglio, particella, codiceComune, center.bbox, regioneFile);
+      console.log(
+        `Parcel search: ${comune} (${codiceComune}) Fg.${foglio} Part.${particella} center=${center.lat},${center.lon}`
+      );
+
+      // Step 3: Progressive search
+      const found = await progressiveParcelSearch(
+        center.lat,
+        center.lon,
+        foglio,
+        particella,
+        codiceComune,
+        center.bbox
+      );
 
       found.forEach((f) => {
         if (f.properties) {
@@ -714,7 +585,7 @@ serve(async (req) => {
       );
     }
 
-    // ── mode=wfs_point: bbox + server-side point-in-polygon for precise click ──
+    // ── mode=wfs_point: bbox + server-side point-in-polygon ──
     if (mode === "wfs_point") {
       const lat = parseFloat(url.searchParams.get("lat") ?? "");
       const lng = parseFloat(url.searchParams.get("lng") ?? "");
@@ -725,19 +596,12 @@ serve(async (req) => {
         );
       }
 
-      // Fetch parcels in a small bbox around the click point
-      // Try progressively larger bbox until we find a containing polygon
       for (const delta of [0.0003, 0.001, 0.003]) {
         try {
           const fc = await wfsQueryBbox(lat, lng, delta);
-          console.log(`wfs_point bbox delta=${delta} → ${fc.features.length} features`);
-          
           if (fc.features.length === 0) continue;
-
-          // Server-side point-in-polygon: find exactly which parcel contains the click
           const match = findFeatureContainingPoint(fc.features, lat, lng);
           if (match) {
-            console.log(`Point-in-polygon match: ${match.properties?.label ?? match.properties?.localId}`);
             return new Response(
               JSON.stringify({ type: "FeatureCollection", features: [match] }),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -748,19 +612,16 @@ serve(async (req) => {
         }
       }
 
-      // No match found
       return new Response(
         JSON.stringify({ type: "FeatureCollection", features: [] }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ── mode=getfeatureinfo: WMS GetFeatureInfo per click preciso ──
+    // ── mode=getfeatureinfo ──────────────────────────────────
     if (mode === "getfeatureinfo") {
       const lat = parseFloat(url.searchParams.get("lat") ?? "");
       const lng = parseFloat(url.searchParams.get("lng") ?? "");
-      const zoom = parseInt(url.searchParams.get("zoom") ?? "17", 10);
-
       if (isNaN(lat) || isNaN(lng)) {
         return new Response(
           JSON.stringify({ error: "Missing lat/lng" }),
@@ -768,17 +629,12 @@ serve(async (req) => {
         );
       }
 
-      // Convert lat/lng to tile pixel coordinates for GetFeatureInfo
-      // Use a fixed 256x256 tile, compute the pixel position of the clicked point
       const tileSize = 256;
-      // Build a small bbox centered on click point (±~25m at zoom 17)
       const delta = 0.0003;
       const south = lat - delta;
       const north = lat + delta;
       const west = lng - delta;
       const east = lng + delta;
-
-      // Pixel position of clicked point within the bbox
       const i = Math.round(((lng - west) / (east - west)) * tileSize);
       const j = Math.round(((north - lat) / (north - south)) * tileSize);
 
@@ -799,8 +655,6 @@ serve(async (req) => {
       });
 
       const gfiUrl = `https://wms.cartografia.agenziaentrate.gov.it/inspire/wms/ows01.php?${gfiParams.toString()}`;
-      console.log("GetFeatureInfo URL:", gfiUrl.substring(0, 300));
-
       const gfiResp = await fetch(gfiUrl, {
         headers: {
           "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
@@ -817,32 +671,23 @@ serve(async (req) => {
       }
 
       const text = await gfiResp.text();
-      console.log("GFI raw response (first 800):", text.substring(0, 800));
-
-      // Check for ServiceException (error from WMS)
       if (text.includes("ServiceException")) {
-        console.warn("GFI ServiceException:", text.substring(0, 300));
         return new Response(
-          JSON.stringify({ error: "WMS GetFeatureInfo not supported for this layer", raw: text.substring(0, 200) }),
+          JSON.stringify({ error: "WMS GetFeatureInfo not supported" }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Parse XML/GML response to extract localId, label, nationalCadastralReference
       const localIdMatch = text.match(/<base:localId>(.*?)<\/base:localId>/);
       const labelMatch = text.match(/<CP:label>(.*?)<\/CP:label>/);
       const natRefMatch = text.match(/<CP:nationalCadastralReference>(.*?)<\/CP:nationalCadastralReference>/);
-      
-      // Also try INSPIRE ID pattern: <inspire:localId> or <gml:identifier>
       const inspireIdMatch = text.match(/<inspire(?:id)?:localId>(.*?)<\/inspire(?:id)?:localId>/i);
-      const gmlIdMatch = text.match(/gml:id="([^"]+)"/);
 
       const localId = localIdMatch?.[1] ?? inspireIdMatch?.[1] ?? "";
       const label = labelMatch?.[1] ?? "";
       const nationalRef = natRefMatch?.[1] ?? "";
 
       if (!localId && !label && !nationalRef) {
-        // Try to extract any identifier from the XML
         const anyIdMatch = text.match(/(?:localId|INSPIREID_LOCALID|inspireId)[>\s]*([A-Z0-9._]+)/i);
         if (anyIdMatch) {
           return new Response(
@@ -851,7 +696,7 @@ serve(async (req) => {
           );
         }
         return new Response(
-          JSON.stringify({ error: "No feature found at click point", raw: text.substring(0, 200) }),
+          JSON.stringify({ error: "No feature found at click point" }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -862,7 +707,7 @@ serve(async (req) => {
       );
     }
 
-    // ── mode=wfs_by_id: WFS GetFeature by RESOURCEID (exact parcel geometry) ──
+    // ── mode=wfs_by_id ───────────────────────────────────────
     if (mode === "wfs_by_id") {
       const resourceId = url.searchParams.get("resourceId") ?? "";
       if (!resourceId) {
@@ -878,8 +723,6 @@ serve(async (req) => {
         `&TYPENAMES=CP:CadastralParcel` +
         `&SRSNAME=urn:ogc:def:crs:EPSG::6706` +
         `&RESOURCEID=${encodeURIComponent(resourceId)}`;
-
-      console.log("WFS by RESOURCEID:", wfsUrl.substring(0, 300));
 
       const wfsResp = await fetch(wfsUrl, {
         headers: {
@@ -897,31 +740,27 @@ serve(async (req) => {
 
       const gml = await wfsResp.text();
       const geojson = gmlToGeoJSON(gml);
-      console.log(`WFS by RESOURCEID found ${geojson.features.length} features`);
-
-      return new Response(
-        JSON.stringify(geojson),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify(geojson), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // ── mode=wms_ext: proxy for external WMS servers (PCN, ISPRA, MiC, etc.) ──
+    // ── mode=wms_ext: proxy for external WMS servers ─────────
     if (mode === "wms_ext") {
       const targetUrl = url.searchParams.get("url");
       if (!targetUrl) {
         return new Response(JSON.stringify({ error: "Missing url parameter" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Allowlist of trusted WMS domains
       const allowedDomains = [
         "wms.pcn.minambiente.it",
         "www.pcn.minambiente.it",
         "geodata.mit.gov.it",
         "wms.cartografia.agenziaentrate.gov.it",
         "idrogeo.isprambiente.it",
-        // Regional geoportals
         "webapps.sit.puglia.it",
         "www502.regione.toscana.it",
         "www.cartografia.servizirl.it",
@@ -935,14 +774,18 @@ serve(async (req) => {
         "geoportale.regione.calabria.it",
       ];
       let parsedUrl: URL;
-      try { parsedUrl = new URL(targetUrl); } catch {
+      try {
+        parsedUrl = new URL(targetUrl);
+      } catch {
         return new Response(JSON.stringify({ error: "Invalid url" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (!allowedDomains.some(d => parsedUrl.hostname === d || parsedUrl.hostname.endsWith("." + d))) {
+      if (!allowedDomains.some((d) => parsedUrl.hostname === d || parsedUrl.hostname.endsWith("." + d))) {
         return new Response(JSON.stringify({ error: "Domain not allowed" }), {
-          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
@@ -963,7 +806,8 @@ serve(async (req) => {
         });
       } catch (err) {
         return new Response(JSON.stringify({ error: "WMS fetch failed", detail: String(err) }), {
-          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
     }
@@ -1056,12 +900,9 @@ serve(async (req) => {
 
     const gmlText = await response.text();
     const geojson = gmlToGeoJSON(gmlText);
-    console.log("Parsed features:", geojson.features.length);
 
     if (geojson.features.length > 0 && foglio && particella) {
-      const matched = geojson.features.filter((f) =>
-        featureMatchesFoglioParticella(f, foglio, particella)
-      );
+      const matched = geojson.features.filter((f) => featureMatchesFoglioParticella(f, foglio, particella));
       if (matched.length > 0) {
         return new Response(
           JSON.stringify({ type: "FeatureCollection", features: matched }),
