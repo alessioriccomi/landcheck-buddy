@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Particella, PARCEL_COLORS } from "@/types/vincoli";
 import { Satellite, Map, Loader2, MousePointer } from "lucide-react";
 import { cn } from "@/lib/utils";
 import area from "@turf/area";
+import turfUnion from "@turf/union";
 import { ALL_LAYERS } from "@/lib/layerDefinitions";
 import { toast } from "@/hooks/use-toast";
 
@@ -225,6 +226,9 @@ interface MapViewProps {
   onParcelGeometries?: (geoms: Record<string, L.LatLngExpression[][]>) => void;
   onParcelAreaUpdate?: (id: string, mq: number) => void;
   onAddParticella?: (p: Particella) => void;
+  selectedParcelIds: string[];
+  onToggleSelectParcel: (id: string) => void;
+  onClearSelection: () => void;
 }
 
 type ParcelStatus = "idle" | "loading" | "real" | "placeholder";
@@ -235,6 +239,9 @@ export function MapView({
   onParcelGeometries,
   onParcelAreaUpdate,
   onAddParticella,
+  selectedParcelIds,
+  onToggleSelectParcel,
+  onClearSelection,
 }: MapViewProps) {
   const showCatasto = activeLayers["catasto"] ?? true;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -248,16 +255,19 @@ export function MapView({
   const catastoFabbricatiRef = useRef<L.TileLayer | null>(null);  // CP.CadastralBuilding (arancione scuro)
   const catastoLabelsRef = useRef<L.TileLayer | null>(null);      // CP.CadastralParcel labels (numeri particella)
   const catastoGraffeRef = useRef<L.TileLayer | null>(null);      // CP.CadastralZoning graffe subalterni
-  // Selected parcel highlight
-  const selectedParcelLayerRef = useRef<L.Layer | null>(null);
+  // Selected parcel highlights (multi-select)
+  const selectedHighlightLayersRef = useRef<L.Layer[]>([]);
+  const unionLayerRef = useRef<L.Layer | null>(null);
   const activeBaseRef = useRef<BasemapId>("osm");
   const [activeBase, setActiveBase] = useState<BasemapId>("osm");
   const [parcelStatuses, setParcelStatuses] = useState<Record<string, ParcelStatus>>({});
   // Local area map: parcelId → mq (avoids triggering re-render loop in parent)
   const [localAreas, setLocalAreas] = useState<Record<string, number>>({});
+  // Store raw GeoJSON features per parcel for union computation
+  const parcelFeaturesRef = useRef<Record<string, GeoJSON.Feature[]>>({});
+  const [selectionArea, setSelectionArea] = useState<{ mq: number; count: number } | null>(null);
   const [clickLoading, setClickLoading] = useState(false);
   const [clickMode, setClickMode] = useState(false);
-  const [selectedParcelInfo, setSelectedParcelInfo] = useState<{ foglio: string; particella: string; mq: number } | null>(null);
   // Track parcel IDs already drawn/fetched to prevent redundant re-runs
   const drawnParcelIdsRef = useRef<string>("");
 
@@ -554,36 +564,32 @@ export function MapView({
   }, [clickMode]);
 
   // ── Catasto parcel selection (click when NOT in add-mode) ────
+  // Clicking on map in normal mode adds a new parcel to the list (same as card input)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (clickMode) return; // add-mode handles clicks
+    if (clickMode) return; // add-mode handles clicks differently
 
     const handleCatastoClick = async (e: L.LeafletMouseEvent) => {
+      if (!onAddParticellaRef.current) return;
       const { lat, lng } = e.latlng;
       const zoom = map.getZoom();
       if (zoom < 15) return;
 
       setClickLoading(true);
       try {
-        // bbox + server-side point-in-polygon → exactly 1 parcel
         const features = await fetchParcelAtPoint(lat, lng);
-        if (features.length === 0) {
-          setClickLoading(false);
-          return;
-        }
+        if (features.length === 0) { setClickLoading(false); return; }
 
         const feat = features[0];
         const props = feat.properties ?? {};
 
-        // Extract foglio/particella using decoded fields from proxy (priority)
         let foglio = "—";
         let particella = "—";
         if (props._foglio && props._particella) {
           foglio = props._foglio;
           particella = props._particella;
         } else {
-          // Fallback: try decoding nationalRef client-side
           const nationalRef: string = props.nationalRef ?? "";
           if (nationalRef && nationalRef.includes(".")) {
             const dotIdx = nationalRef.indexOf(".");
@@ -595,7 +601,6 @@ export function MapView({
               if (!isNaN(num)) foglio = String(num);
             }
           }
-          // Fallback: label "foglio/particella"
           if (foglio === "—") {
             const label: string = props.label ?? "";
             const labelParts = label.split("/");
@@ -608,36 +613,46 @@ export function MapView({
           }
         }
 
-        const mq = calcAreaMq([feat]);
+        // Check if this parcel is already in the list
+        const existingP = particelleRef.current.find(
+          p => p.foglio === foglio && p.particella === particella
+        );
+        if (existingP) {
+          // Toggle selection of existing parcel
+          onToggleSelectParcel(existingP.id);
+          // Zoom to it
+          const rings: L.LatLngExpression[][] = feat.geometry?.type === "Polygon"
+            ? (feat.geometry as GeoJSON.Polygon).coordinates.map(ring =>
+                ring.map(([lng2, lat2]) => [lat2, lng2] as L.LatLngExpression))
+            : [];
+          if (rings.length > 0) {
+            const poly = L.polygon(rings);
+            map.flyToBounds(poly.getBounds(), { padding: [80, 80], maxZoom: 17, duration: 0.5 });
+          }
+        } else {
+          // Add as new parcel and auto-select it
+          const mq = calcAreaMq([feat]);
+          const clickCoords: [number, number][][] = feat.geometry?.type === "Polygon"
+            ? (feat.geometry as GeoJSON.Polygon).coordinates.map(
+                ring => ring.map(([lng2, lat2]) => [lat2, lng2] as [number, number]))
+            : [];
 
-        if (selectedParcelLayerRef.current) {
-          try { map.removeLayer(selectedParcelLayerRef.current); } catch {}
-          selectedParcelLayerRef.current = null;
-        }
+          let bestComune = "Sconosciuto";
+          try { bestComune = await reverseGeocodeComune(lat, lng); } catch {}
 
-        const rings: L.LatLngExpression[][] = feat.geometry?.type === "Polygon"
-          ? (feat.geometry as GeoJSON.Polygon).coordinates.map(ring =>
-              ring.map(([lng2, lat2]) => [lat2, lng2] as L.LatLngExpression)
-            )
-          : [];
-
-        if (rings.length > 0) {
-          const highlight = L.polygon(rings, {
-            color: "#1d4ed8",
-            fillColor: "#3b82f6",
-            fillOpacity: 0.3,
-            weight: 2.5,
-            opacity: 1,
-            pane: "parcelsPane",
-          });
-          highlight.bindPopup(
-            `<strong>Particella selezionata</strong><br>` +
-            `Foglio <b>${foglio}</b> / Particella <b>${particella}</b>` +
-            (mq > 0 ? `<br><span style="font-weight:600">Superficie: ${formatArea(mq)}</span>` : "")
-          ).openPopup();
-          highlight.addTo(map);
-          selectedParcelLayerRef.current = highlight;
-          setSelectedParcelInfo({ foglio, particella, mq });
+          const newP: Particella = {
+            id: crypto.randomUUID(),
+            comune: bestComune,
+            provincia: "",
+            foglio,
+            particella,
+            color: PARCEL_COLORS[particelleRef.current.length % PARCEL_COLORS.length],
+            superficieMq: mq > 0 ? mq : undefined,
+            _clickGeometry: clickCoords.length > 0 ? clickCoords : undefined,
+          } as Particella & { _clickGeometry?: [number, number][][] };
+          onAddParticellaRef.current(newP);
+          // Auto-select the newly added parcel
+          setTimeout(() => onToggleSelectParcel(newP.id), 50);
         }
       } catch (err) {
         console.warn("Catasto click error:", err);
@@ -650,7 +665,7 @@ export function MapView({
     return () => {
       map.off("click", handleCatastoClick);
     };
-  }, [clickMode]);
+  }, [clickMode, onToggleSelectParcel]);
 
 
   useEffect(() => {
@@ -735,6 +750,7 @@ export function MapView({
     // Remove previous layers
     parcelLayersRef.current.forEach(layer => { try { map.removeLayer(layer); } catch {} });
     parcelLayersRef.current = [];
+    parcelFeaturesRef.current = {};
     setLocalAreas({});
 
     if (particelle.length === 0) {
@@ -777,6 +793,18 @@ export function MapView({
           setLocalAreas(prev => ({ ...prev, [p.id]: mq }));
           onParcelAreaUpdate?.(p.id, mq);
         }
+        // Store GeoJSON feature for union computation
+        const geojsonFeature: GeoJSON.Feature<GeoJSON.Polygon> = {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "Polygon",
+            coordinates: pAny._clickGeometry!.map(ring =>
+              ring.map(([lat2, lng2]) => [lng2, lat2])
+            ),
+          },
+        };
+        parcelFeaturesRef.current[p.id] = [geojsonFeature];
         setParcelStatuses(prev => ({ ...prev, [p.id]: "real" }));
         if (idx === 0) {
           try { map.flyToBounds(poly.getBounds(), { padding: [80, 80], maxZoom: 17, duration: 0.8 }); } catch {}
@@ -859,6 +887,11 @@ export function MapView({
         let totalMq = 0;
         let firstPoly: L.Polygon | null = null;
 
+        // Store raw GeoJSON features for union computation
+        parcelFeaturesRef.current[p.id] = features.filter(
+          f => f.geometry && f.geometry.type === "Polygon"
+        );
+
         // The server already filtered by foglio+particella; render all returned features
         features.forEach(feat => {
           if (!feat.geometry || feat.geometry.type !== "Polygon") return;
@@ -926,6 +959,102 @@ export function MapView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [particelle]);
 
+  // ── Selection highlight + union effect ──────────────────────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Clear previous highlights
+    selectedHighlightLayersRef.current.forEach(l => { try { map.removeLayer(l); } catch {} });
+    selectedHighlightLayersRef.current = [];
+    if (unionLayerRef.current) {
+      try { map.removeLayer(unionLayerRef.current); } catch {};
+      unionLayerRef.current = null;
+    }
+
+    if (selectedParcelIds.length === 0) {
+      setSelectionArea(null);
+      return;
+    }
+
+    // Draw highlight borders for selected parcels
+    const allFeatures: GeoJSON.Feature<GeoJSON.Polygon>[] = [];
+    let boundsGroup: L.LatLngBounds | null = null;
+
+    for (const id of selectedParcelIds) {
+      const feats = parcelFeaturesRef.current[id];
+      if (!feats || feats.length === 0) continue;
+      for (const feat of feats) {
+        if (!feat.geometry || feat.geometry.type !== "Polygon") continue;
+        allFeatures.push(feat as GeoJSON.Feature<GeoJSON.Polygon>);
+        const rings = (feat.geometry as GeoJSON.Polygon).coordinates.map(ring =>
+          ring.map(([lng2, lat2]) => [lat2, lng2] as L.LatLngExpression)
+        );
+        const highlight = L.polygon(rings, {
+          color: "#1d4ed8",
+          fillColor: "transparent",
+          fillOpacity: 0,
+          weight: 3,
+          opacity: 0.9,
+          dashArray: "6 3",
+          pane: "parcelsPane",
+        });
+        highlight.addTo(map);
+        selectedHighlightLayersRef.current.push(highlight);
+        const b = highlight.getBounds();
+        boundsGroup = boundsGroup ? boundsGroup.extend(b) : b;
+      }
+    }
+
+    // Compute total area of selected parcels
+    let totalSelectedMq = 0;
+    for (const feat of allFeatures) {
+      totalSelectedMq += area(feat);
+    }
+    setSelectionArea({ mq: Math.round(totalSelectedMq), count: selectedParcelIds.length });
+
+    // Try union for visual display
+    if (allFeatures.length >= 2) {
+      try {
+        let unionResult: GeoJSON.Feature<GeoJSON.Polygon | GeoJSON.MultiPolygon> | null = allFeatures[0] as GeoJSON.Feature<GeoJSON.Polygon>;
+        for (let i = 1; i < allFeatures.length; i++) {
+          const next = allFeatures[i] as GeoJSON.Feature<GeoJSON.Polygon>;
+          const result = turfUnion(
+            { type: "FeatureCollection", features: [unionResult!, next] } as GeoJSON.FeatureCollection<GeoJSON.Polygon>
+          );
+          if (result) unionResult = result;
+        }
+        if (unionResult && unionResult.geometry) {
+          const coords = unionResult.geometry.type === "Polygon"
+            ? [unionResult.geometry.coordinates]
+            : unionResult.geometry.coordinates;
+          for (const polyCoords of coords) {
+            const rings = polyCoords.map((ring: number[][]) =>
+              ring.map(([lng2, lat2]: number[]) => [lat2, lng2] as L.LatLngExpression)
+            );
+            const unionPoly = L.polygon(rings, {
+              color: "#7c3aed",
+              fillColor: "#7c3aed",
+              fillOpacity: 0.12,
+              weight: 2,
+              opacity: 0.6,
+              pane: "parcelsPane",
+            });
+            unionPoly.addTo(map);
+            unionLayerRef.current = unionPoly;
+          }
+        }
+      } catch (e) {
+        console.warn("Union computation failed:", e);
+      }
+    }
+
+    // Fly to selection bounds (only when a new parcel is added to selection)
+    if (boundsGroup && boundsGroup.isValid()) {
+      map.flyToBounds(boundsGroup, { padding: [80, 80], maxZoom: 17, duration: 0.5 });
+    }
+  }, [selectedParcelIds, particelle]);
+
   // ── Total area display (local, avoids parent re-render loop) ─
   const totalMq = Object.values(localAreas).reduce((s, v) => s + v, 0);
 
@@ -949,29 +1078,27 @@ export function MapView({
         </div>
       )}
 
-      {/* Selected parcel info panel */}
-      {selectedParcelInfo && !clickMode && (
-        <div className="absolute top-14 left-3 z-[1000] bg-card/95 backdrop-blur border border-primary/40 rounded-lg px-3 py-2 shadow-md min-w-[180px]">
+      {/* Multi-selection summary panel */}
+      {selectionArea && selectedParcelIds.length > 0 && !clickMode && (
+        <div className="absolute top-14 left-3 z-[1000] bg-card/95 backdrop-blur border border-primary/40 rounded-lg px-3 py-2 shadow-md min-w-[200px]">
           <div className="flex items-center justify-between gap-2 mb-1">
-            <span className="text-xs font-semibold text-foreground">Particella selezionata</span>
+            <span className="text-xs font-semibold text-foreground">
+              {selectionArea.count} particella/e selezionata/e
+            </span>
             <button
-              onClick={() => {
-                setSelectedParcelInfo(null);
-                if (selectedParcelLayerRef.current && mapRef.current) {
-                  try { mapRef.current.removeLayer(selectedParcelLayerRef.current); } catch {}
-                  selectedParcelLayerRef.current = null;
-                }
-              }}
+              onClick={onClearSelection}
               className="text-muted-foreground hover:text-foreground text-xs leading-none"
             >✕</button>
           </div>
-          <p className="text-xs text-foreground">
-            Fg. <span className="font-mono font-bold">{selectedParcelInfo.foglio}</span>
-            {" / "}
-            Part. <span className="font-mono font-bold">{selectedParcelInfo.particella}</span>
-          </p>
-          {selectedParcelInfo.mq > 0 && (
-            <p className="text-[10px] text-muted-foreground mt-0.5">{formatArea(selectedParcelInfo.mq)}</p>
+          {selectionArea.mq > 0 && (
+            <>
+              <p className="text-xs text-foreground font-mono">
+                {selectionArea.mq.toLocaleString("it-IT")} m²
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                {(selectionArea.mq / 10000).toFixed(4)} ha
+              </p>
+            </>
           )}
         </div>
       )}

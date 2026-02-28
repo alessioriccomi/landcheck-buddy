@@ -20,6 +20,9 @@ interface GeocodeSuggestion {
 interface ParcelInputProps {
   particelle: Particella[];
   onChange: (p: Particella[]) => void;
+  selectedIds: string[];
+  onToggleSelect: (id: string) => void;
+  onClearSelection: () => void;
 }
 
 const EMPTY_FORM = { comune: "", provincia: "", foglio: "", particella: "", subalterno: "" };
@@ -34,7 +37,7 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced;
 }
 
-export function ParcelInput({ particelle, onChange }: ParcelInputProps) {
+export function ParcelInput({ particelle, onChange, selectedIds, onToggleSelect, onClearSelection }: ParcelInputProps) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([]);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -296,40 +299,59 @@ export function ParcelInput({ particelle, onChange }: ParcelInputProps) {
       {/* Lista particelle inserite */}
       {particelle.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Particelle ({particelle.length})
-          </p>
-          {particelle.map((p) => (
-            <div
-              key={p.id}
-              className="flex items-center gap-2 bg-card border border-border rounded-md px-3 py-2 group"
-            >
-              <div
-                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: p.color }}
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium truncate">
-                  {p.comune} {p.provincia && `(${p.provincia})`}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Fg. <span className="font-mono">{p.foglio}</span> / Part. <span className="font-mono">{p.particella}</span>
-                  {p.subalterno && ` / Sub. ${p.subalterno}`}
-                </p>
-                {p.superficieMq && p.superficieMq > 0 && (
-                  <p className="text-[10px] font-semibold text-safe mt-0.5">
-                    ✓ {formatArea(p.superficieMq)}
-                  </p>
-                )}
-              </div>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Particelle ({particelle.length})
+            </p>
+            {selectedIds.length > 0 && (
               <button
-                onClick={() => removeParticella(p.id)}
-                className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                onClick={onClearSelection}
+                className="text-[10px] text-muted-foreground hover:text-foreground underline"
               >
-                <Trash2 size={13} />
+                Deseleziona ({selectedIds.length})
               </button>
-            </div>
-          ))}
+            )}
+          </div>
+          {particelle.map((p) => {
+            const isSelected = selectedIds.includes(p.id);
+            return (
+              <div
+                key={p.id}
+                onClick={() => onToggleSelect(p.id)}
+                className={cn(
+                  "flex items-center gap-2 border rounded-md px-3 py-2 group cursor-pointer transition-all",
+                  isSelected
+                    ? "bg-primary/10 border-primary/40 ring-1 ring-primary/30"
+                    : "bg-card border-border hover:bg-muted/50"
+                )}
+              >
+                <div
+                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: p.color }}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium truncate">
+                    {p.comune} {p.provincia && `(${p.provincia})`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Fg. <span className="font-mono">{p.foglio}</span> / Part. <span className="font-mono">{p.particella}</span>
+                    {p.subalterno && ` / Sub. ${p.subalterno}`}
+                  </p>
+                  {p.superficieMq && p.superficieMq > 0 && (
+                    <p className="text-[10px] font-semibold text-safe mt-0.5">
+                      ✓ {formatArea(p.superficieMq)}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); removeParticella(p.id); }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            );
+          })}
 
           {/* Totale superficie */}
           {totalMq > 0 && (
