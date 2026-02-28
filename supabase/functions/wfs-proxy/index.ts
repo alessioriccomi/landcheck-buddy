@@ -242,24 +242,98 @@ function featureCentroid(feat: GeoJSON.Feature): [number, number] {
   return [(south + north) / 2, (west + east) / 2]; // [lat, lon]
 }
 
-// Progressive parcel search: comune → foglio → particella
+// ── Direct WFS query by nationalCadastralReference (no bbox needed) ──
+async function wfsQueryByNationalRef(nationalRef: string): Promise<GeoJSON.FeatureCollection> {
+  const filter = `<Filter xmlns="http://www.opengis.net/fes/2.0"><PropertyIsEqualTo><ValueReference>nationalCadastralReference</ValueReference><Literal>${nationalRef}</Literal></PropertyIsEqualTo></Filter>`;
+  const wfsUrl =
+    `https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php` +
+    `?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature` +
+    `&TYPENAMES=CP:CadastralParcel` +
+    `&SRSNAME=urn:ogc:def:crs:EPSG::6706` +
+    `&COUNT=10` +
+    `&FILTER=${encodeURIComponent(filter)}`;
+
+  console.log(`WFS query by nationalRef: ${nationalRef}`);
+  const resp = await fetch(wfsUrl, {
+    headers: {
+      Accept: "application/xml, text/xml",
+      "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
+    },
+  });
+  if (!resp.ok) throw new Error(`WFS nationalRef ${resp.status}`);
+  const gml = await resp.text();
+  return gmlToGeoJSON(gml);
+}
+
+async function wfsQueryByNationalRefLike(pattern: string): Promise<GeoJSON.FeatureCollection> {
+  const filter = `<Filter xmlns="http://www.opengis.net/fes/2.0"><PropertyIsLike wildCard="*" singleChar="?" escapeChar="\\"><ValueReference>nationalCadastralReference</ValueReference><Pattern>${pattern}</Pattern></PropertyIsLike></Filter>`;
+  const wfsUrl =
+    `https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php` +
+    `?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature` +
+    `&TYPENAMES=CP:CadastralParcel` +
+    `&SRSNAME=urn:ogc:def:crs:EPSG::6706` +
+    `&COUNT=10` +
+    `&FILTER=${encodeURIComponent(filter)}`;
+
+  console.log(`WFS query by nationalRef LIKE: ${pattern}`);
+  const resp = await fetch(wfsUrl, {
+    headers: {
+      Accept: "application/xml, text/xml",
+      "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
+    },
+  });
+  if (!resp.ok) throw new Error(`WFS nationalRef LIKE ${resp.status}`);
+  const gml = await resp.text();
+  return gmlToGeoJSON(gml);
+}
+
+// Progressive parcel search: try direct nationalRef query first, then fallback to bbox
 async function progressiveParcelSearch(
   centerLat: number,
   centerLon: number,
   foglio: string,
-  particella: string
+  particella: string,
+  codiceComune?: string
 ): Promise<GeoJSON.Feature[]> {
   const foglioNum = parseInt(foglio, 10);
-  console.log(`Progressive search: center=${centerLat},${centerLon} foglio=${foglio} particella=${particella}`);
+  console.log(`Progressive search: center=${centerLat},${centerLon} foglio=${foglio} particella=${particella} codice=${codiceComune ?? "N/A"}`);
 
+  // ── Strategy 1: Direct query by nationalCadastralReference (no bbox!) ──
+  if (codiceComune) {
+    const foglioPadded = String(foglioNum).padStart(4, "0");
+    // Try exact match with allegato "00"
+    const exactRef = `${codiceComune}_${foglioPadded}00.${particella}`;
+    try {
+      const fc = await wfsQueryByNationalRef(exactRef);
+      if (fc.features.length > 0) {
+        console.log(`Found ${fc.features.length} features via exact nationalRef: ${exactRef}`);
+        return fc.features;
+      }
+    } catch (err) {
+      console.warn(`Exact nationalRef query failed:`, err);
+    }
+
+    // Try LIKE pattern (allegato could be different from "00")
+    const likePattern = `${codiceComune}_${foglioPadded}*.${particella}`;
+    try {
+      const fc = await wfsQueryByNationalRefLike(likePattern);
+      if (fc.features.length > 0) {
+        console.log(`Found ${fc.features.length} features via LIKE nationalRef: ${likePattern}`);
+        return fc.features;
+      }
+    } catch (err) {
+      console.warn(`LIKE nationalRef query failed:`, err);
+    }
+    console.warn("Direct nationalRef queries returned no results, falling back to bbox search");
+  }
+
+  // ── Strategy 2: Fallback — Foglio (CadastralZoning) bbox search ──
   // Step 1: Find the foglio (CadastralZoning) near the comune center
-  // Try expanding deltas: 0.02° (~2km), 0.05° (~5km), 0.1° (~10km)
   let foglioFeature: GeoJSON.Feature | null = null;
   for (const delta of [0.02, 0.05, 0.1, 0.2]) {
     try {
       const zonings = await wfsQueryZoning(centerLat, centerLon, delta);
       console.log(`Zoning delta=${delta} → ${zonings.length} features`);
-      // Match foglio by label number
       const match = zonings.find(z => {
         const lbl = String(z.properties?.label ?? "");
         return parseInt(lbl, 10) === foglioNum;
@@ -276,7 +350,6 @@ async function progressiveParcelSearch(
 
   if (!foglioFeature) {
     console.warn("Foglio not found via CadastralZoning, falling back to wider bbox search");
-    // Fallback: search parcels directly with expanding bbox
     for (const delta of [0.003, 0.01, 0.03, 0.05]) {
       const fc = await wfsQueryBbox(centerLat, centerLon, delta);
       const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
@@ -289,23 +362,20 @@ async function progressiveParcelSearch(
   const [south, north, west, east] = featureBbox(foglioFeature);
   const foglioCenterLat = (south + north) / 2;
   const foglioCenterLon = (west + east) / 2;
-  const foglioDeltaLat = (north - south) / 2 + 0.001; // small padding
+  const foglioDeltaLat = (north - south) / 2 + 0.001;
   const foglioDeltaLon = (east - west) / 2 + 0.001;
   const foglioDelta = Math.max(foglioDeltaLat, foglioDeltaLon);
 
   console.log(`Foglio bbox: ${south},${west} → ${north},${east}, searching parcels with delta=${foglioDelta.toFixed(4)}`);
 
-  // If foglio is small enough, query it in one shot
   if (foglioDelta <= 0.01) {
     const fc = await wfsQueryBbox(foglioCenterLat, foglioCenterLon, foglioDelta);
     console.log(`Parcel search within foglio → ${fc.features.length} features`);
     const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
     if (matched.length > 0) return matched;
-    // If not matched by filter but features exist, scan by label
     return [];
   }
 
-  // If foglio is large, subdivide into smaller cells
   const STEP = 0.006;
   for (let lat = south; lat <= north; lat += STEP) {
     for (let lon = west; lon <= east; lon += STEP) {
@@ -570,7 +640,7 @@ serve(async (req) => {
       }
 
       // Step 2: Progressive search — Comune center → Foglio (CadastralZoning) → Particella
-      const found = await progressiveParcelSearch(center.lat, center.lon, foglio, particella);
+      const found = await progressiveParcelSearch(center.lat, center.lon, foglio, particella, codiceComune);
 
       found.forEach((f) => {
         if (f.properties) {
