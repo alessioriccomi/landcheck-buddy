@@ -343,10 +343,16 @@ function decodeNationalRef(ref: string): { foglio: string; particella: string } 
   const codePart = ref.substring(0, dotIdx);
   // Remove first 4 chars (codice catastale comune)
   if (codePart.length <= 4) return null;
-  const foglioEncoded = codePart.substring(4); // e.g. "A0352B0"
-  // Extract digits → foglio number
-  const digits = foglioEncoded.replace(/[^0-9]/g, "");
-  const foglioNum = parseInt(digits, 10);
+  const foglioEncoded = codePart.substring(4); // e.g. "A0017B0"
+  // Positional parsing: pos 0 = sezione (letter), pos 1-4 = foglio (4 digits), pos 5+ = allegato/sviluppo
+  let foglioNum: number;
+  if (foglioEncoded.length >= 5 && /^\d{4}$/.test(foglioEncoded.substring(1, 5))) {
+    foglioNum = parseInt(foglioEncoded.substring(1, 5), 10);
+  } else {
+    // Fallback: extract all digits
+    const digits = foglioEncoded.replace(/[^0-9]/g, "");
+    foglioNum = parseInt(digits, 10);
+  }
   if (isNaN(foglioNum)) return null;
   return { foglio: String(foglioNum), particella };
 }
