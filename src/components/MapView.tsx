@@ -97,8 +97,12 @@ async function searchParcelByAttribute(
   comune: string,
   foglio: string,
   particella: string,
+  bbox?: [number, number, number, number],
 ): Promise<GeoJSON.Feature[]> {
   const params = new URLSearchParams({ mode: "parcel", comune, foglio, particella });
+  if (bbox) {
+    params.set("bbox", bbox.join(","));
+  }
   const url = `${SUPABASE_URL}/functions/v1/wfs-proxy?${params.toString()}`;
   const resp = await fetch(url, {
     headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
