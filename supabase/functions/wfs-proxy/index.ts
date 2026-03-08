@@ -300,9 +300,18 @@ async function wfsQueryZoning(
       "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
     },
   });
-  if (!resp.ok) throw new Error(`WFS zoning ${resp.status}`);
+  if (!resp.ok) {
+    const body = await resp.text();
+    console.warn(`WFS zoning ${resp.status} at [${lat.toFixed(4)},${lon.toFixed(4)}]: ${body.substring(0, 200)}`);
+    throw new Error(`WFS zoning ${resp.status}`);
+  }
   const gml = await resp.text();
-  return gmlToGeoJSONZoning(gml);
+  const features = gmlToGeoJSONZoning(gml);
+  if (features.length > 0) {
+    const refs = features.slice(0, 5).map(f => `${f.properties?.label}(${f.properties?.nationalRef})`).join(", ");
+    console.log(`Zoning at [${lat.toFixed(4)},${lon.toFixed(4)}] d=${delta}: ${features.length} found: ${refs}`);
+  }
+  return features;
 }
 
 async function wfsQueryBbox(
