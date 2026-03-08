@@ -268,6 +268,9 @@ export default function Index() {
           {/* Layer control */}
           <LayerControl onChange={(next) => setLayerState(prev => ({ ...prev, ...next }))} />
 
+          {/* WMS Legend for active vincoli layers */}
+          <WmsLegend activeLayers={layerState} />
+
           {/* Empty state */}
           {particelle.length === 0 && step === "input" && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
