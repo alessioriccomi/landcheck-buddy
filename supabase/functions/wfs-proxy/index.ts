@@ -422,122 +422,36 @@ async function wfsQueryBbox(
   return gmlToGeoJSON(gml);
 }
 
-// ── Direct WFS query by nationalCadastralReference ─────────────
-// Tries multiple approaches since AdE WFS has limited filter support
-async function wfsQueryByNationalRef(
-  codiceComune: string,
-  foglio: string,
-  particella: string
-): Promise<GeoJSON.FeatureCollection> {
-  const foglioPadded = foglio.padStart(4, "0");
-  const allegato = "00";
-  const nationalRef = `${codiceComune}_${foglioPadded}${allegato}.${particella}`;
-  const wfsBase = "https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php";
-
-  console.log(`Direct WFS query attempts for nationalRef = "${nationalRef}"`);
-
-  // Attempt 1: RESOURCEID (some WFS servers support this)
-  // The localId format in AdE responses appears to be like "IT.AGE.PLA.{ref}"
-  for (const resId of [
-    `CP:CadastralParcel.IT.AGE.PLA.${nationalRef}`,
-    `IT.AGE.PLA.${nationalRef}`,
-  ]) {
-    try {
-      const url = `${wfsBase}?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=CP:CadastralParcel&SRSNAME=urn:ogc:def:crs:EPSG::6706&RESOURCEID=${encodeURIComponent(resId)}`;
-      const resp = await fetch(url, {
-        headers: { Accept: "application/xml, text/xml", "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)" },
-      });
-      if (resp.ok) {
-        const gml = await resp.text();
-        if (!gml.includes("ExceptionReport") && !gml.includes("ServiceException")) {
-          const fc = gmlToGeoJSON(gml);
-          if (fc.features.length > 0) {
-            console.log(`RESOURCEID match found with "${resId}": ${fc.features.length} features`);
-            return fc;
-          }
-        } else {
-          console.log(`RESOURCEID "${resId}" → exception`);
-        }
-      }
-    } catch (err) {
-      console.warn(`RESOURCEID attempt failed:`, err);
-    }
-  }
-
-  // Attempt 2: First find the foglio via CadastralZoning RESOURCEID, 
-  // then search parcels within the foglio bbox
-  const zoningRef = `${codiceComune}_${foglioPadded}${allegato}`;
-  for (const resId of [
-    `CP:CadastralZoning.IT.AGE.PLA.${zoningRef}`,
-    `IT.AGE.PLA.${zoningRef}`,
-  ]) {
-    try {
-      const url = `${wfsBase}?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=CP:CadastralZoning&SRSNAME=urn:ogc:def:crs:EPSG::6706&RESOURCEID=${encodeURIComponent(resId)}`;
-      const resp = await fetch(url, {
-        headers: { Accept: "application/xml, text/xml", "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)" },
-      });
-      if (resp.ok) {
-        const gml = await resp.text();
-        if (!gml.includes("ExceptionReport") && !gml.includes("ServiceException")) {
-          const zonings = gmlToGeoJSONZoning(gml);
-          if (zonings.length > 0) {
-            console.log(`Found foglio via RESOURCEID "${resId}"`);
-            // Search parcels within foglio bbox
-            const [fSouth, fNorth, fWest, fEast] = featureBbox(zonings[0]);
-            return await searchParcelsInBbox(fSouth, fNorth, fWest, fEast, foglio, particella);
-          }
-        } else {
-          console.log(`Zoning RESOURCEID "${resId}" → exception: ${gml.substring(0, 200)}`);
-        }
-      }
-    } catch (err) {
-      console.warn(`Zoning RESOURCEID attempt failed:`, err);
-    }
-  }
-
-  console.warn("All direct query attempts failed");
-  return { type: "FeatureCollection", features: [] };
-}
-
-// Search parcels within a known foglio bbox
-async function searchParcelsInBbox(
-  south: number, north: number, west: number, east: number,
-  foglio: string, particella: string
-): Promise<GeoJSON.FeatureCollection> {
-  const centerLat = (south + north) / 2;
-  const centerLon = (west + east) / 2;
-  const delta = Math.max((north - south) / 2, (east - west) / 2) + 0.001;
-
-  // If small enough, single query
-  if (delta <= 0.012) {
-    try {
-      const fc = await wfsQueryBbox(centerLat, centerLon, delta);
-      const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
-      if (matched.length > 0) return { type: "FeatureCollection", features: matched };
-    } catch {}
-  }
-
-  // Subdivide into tiles
-  const STEP = 0.008;
-  for (let lat = south; lat <= north; lat += STEP) {
-    for (let lon = west; lon <= east; lon += STEP) {
-      try {
-        const fc = await wfsQueryBbox(lat + STEP / 2, lon + STEP / 2, STEP / 2 + 0.001);
-        const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
-        if (matched.length > 0) {
-          console.log(`Found particella in foglio bbox subdivision`);
-          return { type: "FeatureCollection", features: matched };
-        }
-      } catch {}
-    }
-  }
-
-  return { type: "FeatureCollection", features: [] };
-}
-
-// ── Parcel search (direct query by nationalRef) ────────────────
+// ── Parcel search: onData parquet coords → tiny bbox WFS ───────
 async function directParcelSearch(
   codiceComune: string,
+  foglio: string,
+  particella: string,
+  regione: string
+): Promise<GeoJSON.Feature[]> {
+  // Step 1: Get coordinates from onData parquet (HTTP range requests)
+  const coords = await lookupParcelCoords(codiceComune, foglio, particella, regione);
+  if (coords) {
+    console.log(`Using onData coords: lat=${coords.lat}, lon=${coords.lon}`);
+    // Step 2: Tiny bbox WFS query around the known point
+    for (const delta of [0.0003, 0.001, 0.003]) {
+      try {
+        const fc = await wfsQueryBbox(coords.lat, coords.lon, delta);
+        const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
+        if (matched.length > 0) {
+          console.log(`Found ${matched.length} features via onData+WFS at delta=${delta}`);
+          return matched;
+        }
+        // Try point-in-polygon if we got features but none matched by name
+        if (fc.features.length > 0) {
+          const pip = findFeatureContainingPoint(fc.features, coords.lat, coords.lon);
+          if (pip) return [pip];
+        }
+      } catch { /* continue */ }
+    }
+  }
+  return [];
+}
   foglio: string,
   particella: string
 ): Promise<GeoJSON.Feature[]> {
