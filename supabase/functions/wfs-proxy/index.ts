@@ -113,18 +113,25 @@ function parseGMLCoordinates(posListStr: string): [number, number][] {
 // Parse CadastralZoning GML → features with label and nationalRef
 function gmlToGeoJSONZoning(gmlText: string): GeoJSON.Feature[] {
   const features: GeoJSON.Feature[] = [];
-  const featureRegex = /<CP:CadastralZoning[\s\S]*?<\/CP:CadastralZoning>/g;
+  // Try both CP: and cp: namespace prefixes
+  const featureRegex = /<(?:CP|cp):CadastralZoning[\s\S]*?<\/(?:CP|cp):CadastralZoning>/gi;
   let featureMatch: RegExpExecArray | null;
+  let debugLogged = false;
 
   while ((featureMatch = featureRegex.exec(gmlText)) !== null) {
     const featureXml = featureMatch[0];
-    const labelMatch = featureXml.match(/<CP:label>(.*?)<\/CP:label>/);
+    if (!debugLogged) {
+      console.log(`[ZoningGML] First feature sample (500 chars): ${featureXml.substring(0, 500)}`);
+      debugLogged = true;
+    }
+    // Case-insensitive matching for label and nationalRef
+    const labelMatch = featureXml.match(/<(?:CP|cp):label>(.*?)<\/(?:CP|cp):label>/i);
     const label = labelMatch ? labelMatch[1] : "";
     const nationalIdMatch = featureXml.match(
-      /<CP:nationalCadastralReference>(.*?)<\/CP:nationalCadastralReference>/
+      /<(?:CP|cp):nationalCadastralReference>(.*?)<\/(?:CP|cp):nationalCadastralReference>/i
     );
     const nationalRef = nationalIdMatch ? nationalIdMatch[1] : "";
-    const levelMatch = featureXml.match(/<CP:level[^>]*>(.*?)<\/CP:level>/);
+    const levelMatch = featureXml.match(/<(?:CP|cp):level[^>]*>(.*?)<\/(?:CP|cp):level>/i);
     const level = levelMatch ? levelMatch[1] : "";
 
     const rings: [number, number][][] = [];
