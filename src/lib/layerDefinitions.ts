@@ -206,7 +206,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         label: "PGRA - Classi di rischio alluvionale",
         color: "#1e40af",
         defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_Classi_di__di__di__di__di__di__di__di__di__di__di_Rischio/MapServer",
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_Classi_di_Rischio/MapServer",
         opacity: 0.5,
         description: "Classi di rischio alluvionale (Dir. 2007/60/CE)",
       },
