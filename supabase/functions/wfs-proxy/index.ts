@@ -641,7 +641,7 @@ serve(async (req) => {
       const comuneBbox: [number, number, number, number] = geo.bbox;
 
       // Step 3: Direct parcel scan
-      const found = await directParcelSearch(codiceComune, foglio, particella, comuneBbox);
+      const found = await gfiParcelSearch(codiceComune, foglio, particella, comuneBbox);
 
       found.forEach((f) => {
         if (f.properties) {
