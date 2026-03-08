@@ -14,6 +14,7 @@ interface ComuneRecord {
   nome: string;
   codiceCatastale: string;
   regione?: { nome: string };
+  coordinate?: { lat: number; lng: number };
 }
 
 let comuniCache: ComuneRecord[] | null = null;
@@ -31,8 +32,8 @@ async function fetchComuniJson(): Promise<ComuneRecord[]> {
   return comuniCache;
 }
 
-// Lookup comune name → { codiceCatastale, regione }
-async function lookupComune(comuneName: string): Promise<{ codice: string; regione: string } | null> {
+// Lookup comune name → { codiceCatastale, regione, lat, lng }
+async function lookupComune(comuneName: string): Promise<{ codice: string; regione: string; lat?: number; lng?: number } | null> {
   const comuni = await fetchComuniJson();
   const normalize = (s: string) => s.toUpperCase().trim().replace(/[-\s]+/g, " ");
   const search = normalize(comuneName);
@@ -46,8 +47,13 @@ async function lookupComune(comuneName: string): Promise<{ codice: string; regio
     return null;
   }
 
-  console.log(`Comune lookup: "${comuneName}" → codice ${found.codiceCatastale}, regione ${found.regione?.nome}`);
-  return { codice: found.codiceCatastale, regione: found.regione?.nome ?? "" };
+  console.log(`Comune lookup: "${comuneName}" → codice ${found.codiceCatastale}, regione ${found.regione?.nome}, coords ${found.coordinate?.lat},${found.coordinate?.lng}`);
+  return {
+    codice: found.codiceCatastale,
+    regione: found.regione?.nome ?? "",
+    lat: found.coordinate?.lat,
+    lng: found.coordinate?.lng,
+  };
 }
 
 // ── Geocode via Nominatim (with retry) ──────────────────────────
