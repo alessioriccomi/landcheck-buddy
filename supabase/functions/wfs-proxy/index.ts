@@ -452,13 +452,8 @@ async function directParcelSearch(
   }
   return [];
 }
-  foglio: string,
-  particella: string
-): Promise<GeoJSON.Feature[]> {
-  console.log(`Direct parcel search: codice=${codiceComune} foglio=${foglio} particella=${particella}`);
-  const fc = await wfsQueryByNationalRef(codiceComune, foglio, particella);
-  return fc.features;
-}
+
+
 
 // ── Main handler ───────────────────────────────────────────────
 serve(async (req) => {
