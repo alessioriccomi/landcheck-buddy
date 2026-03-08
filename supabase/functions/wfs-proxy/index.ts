@@ -569,21 +569,32 @@ serve(async (req) => {
       const codiceComune = comuneInfo.codice;
       console.log(`Parcel search: ${comune} (${codiceComune}) Fg.${foglio} Part.${particella}`);
 
-      // Use Nominatim for bbox, fallback to comuni-json coordinates
+      // Use client-provided bbox first, then Nominatim, then comuni-json
       let comuneBbox: [number, number, number, number];
-      const geo = await geocodeViaProxy(comune);
-      if (geo) {
-        comuneBbox = geo.bbox;
-      } else if (comuneInfo.lat && comuneInfo.lng) {
-        // Fallback: use comuni-json coords with ~5km estimated bbox
-        console.log(`Using comuni-json coords as fallback: ${comuneInfo.lat}, ${comuneInfo.lng}`);
-        const d = 0.05; // ~5km
-        comuneBbox = [comuneInfo.lat - d, comuneInfo.lat + d, comuneInfo.lng - d, comuneInfo.lng + d];
-      } else {
-        return new Response(
-          JSON.stringify({ error: `Cannot geocode: ${comune}` }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      const clientBbox = url.searchParams.get("bbox");
+      if (clientBbox) {
+        const parts = clientBbox.split(",").map(Number);
+        if (parts.length === 4 && parts.every(n => !isNaN(n))) {
+          comuneBbox = parts as [number, number, number, number];
+          console.log(`Using client-provided bbox: [${comuneBbox.join(",")}]`);
+        } else {
+          comuneBbox = null as any; // fall through
+        }
+      }
+      if (!comuneBbox) {
+        const geo = await geocodeViaProxy(comune);
+        if (geo) {
+          comuneBbox = geo.bbox;
+        } else if (comuneInfo.lat && comuneInfo.lng) {
+          console.log(`Using comuni-json coords as fallback: ${comuneInfo.lat}, ${comuneInfo.lng}`);
+          const d = 0.05;
+          comuneBbox = [comuneInfo.lat - d, comuneInfo.lat + d, comuneInfo.lng - d, comuneInfo.lng + d];
+        } else {
+          return new Response(
+            JSON.stringify({ error: `Cannot geocode: ${comune}` }),
+            { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
 
       const found = await zoningParcelSearch(codiceComune, foglio, particella, comuneBbox);
