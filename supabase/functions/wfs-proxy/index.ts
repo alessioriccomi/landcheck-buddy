@@ -361,11 +361,14 @@ async function wfsQueryByNationalRef(
     });
     if (resp.ok) {
       const gml = await resp.text();
+      console.log(`Exact filter response (first 500 chars): ${gml.substring(0, 500)}`);
       const fc = gmlToGeoJSON(gml);
       if (fc.features.length > 0) {
         console.log(`Exact nationalRef match found: ${fc.features.length} features`);
         return fc;
       }
+    } else {
+      console.warn(`Exact filter HTTP ${resp.status}`);
     }
   } catch (err) {
     console.warn("Exact nationalRef query failed:", err);
