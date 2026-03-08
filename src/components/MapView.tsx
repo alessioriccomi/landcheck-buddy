@@ -246,7 +246,7 @@ export function MapView({
   const showCatasto = activeLayers["catasto"] ?? true;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const wmsLayersRef = useRef<Record<string, L.GridLayer>>({});
+  const wmsLayersRef = useRef<Record<string, L.TileLayer | L.GridLayer>>({});
   const parcelLayersRef = useRef<L.Layer[]>([]);
   const basemapRef = useRef<L.TileLayer | null>(null);
   // Catasto overlay refs (order: foglio → terreno → fabbricato → labels → graffe)
@@ -374,13 +374,13 @@ export function MapView({
 
 
     // ── Dynamic layers from ALL_LAYERS definitions ──
-    // Uses L.GridLayer.extend + createTile to avoid _map null race condition
-    const makeProxiedWmsLayer = (wmsBaseUrl: string, wmsLayerName: string, opacity: number): L.GridLayer => {
-      const GridLayerClass = L.GridLayer.extend({
-        createTile(coords: L.Coords, done: (err: Error | null, tile: HTMLElement) => void): HTMLElement {
-          const tile = document.createElement("img");
-          const m = this._map as L.Map;
-          const sz = this.getTileSize().x;
+    // Uses L.TileLayer.extend + getTileUrl (same proven pattern as catasto layers)
+    const makeProxiedWmsLayer = (wmsBaseUrl: string, wmsLayerName: string, opacity: number): L.TileLayer => {
+      const TileLayerClass = L.TileLayer.extend({
+        getTileUrl(coords: L.Coords): string {
+          const m = (this as unknown as { _map: L.Map })._map;
+          if (!m) return "";
+          const sz = 256;
           const nw = m.unproject([coords.x * sz, coords.y * sz], coords.z);
           const se = m.unproject([(coords.x + 1) * sz, (coords.y + 1) * sz], coords.z);
           const south = Math.min(nw.lat, se.lat);
@@ -389,53 +389,37 @@ export function MapView({
           const east = Math.max(nw.lng, se.lng);
           const sep = wmsBaseUrl.includes("?") ? "&" : "?";
           const targetUrl = `${wmsBaseUrl}${sep}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${encodeURIComponent(wmsLayerName)}&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:4326&WIDTH=${sz}&HEIGHT=${sz}&BBOX=${south},${west},${north},${east}`;
-          const proxyUrl = `${proxyBase}?${new URLSearchParams({ mode: "wms_ext", url: targetUrl }).toString()}`;
-          tile.crossOrigin = "anonymous";
-          tile.onload = () => done(null as unknown as Error, tile);
-          tile.onerror = () => { tile.src = ""; done(new Error("tile load failed"), tile); };
-          tile.src = proxyUrl;
-          return tile;
+          return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}`;
         },
       });
-      return new (GridLayerClass as any)({
-        opacity, pane: "wmsPane", tileSize: 256, maxZoom: 19,
-        attribution: "Geoportale Nazionale/ISPRA/MASE",
-      });
+      return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
+        proxyBase,
+        { opacity, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: "Geoportale Nazionale/ISPRA/MASE" } as L.TileLayerOptions & { pane: string }
+      );
     };
 
-    // ArcGIS REST MapServer export — uses L.GridLayer.extend + createTile
-    const makeArcGISLayer = (arcgisUrl: string, arcgisLayers: string | undefined, opacity: number): L.GridLayer => {
-      const GridLayerClass = L.GridLayer.extend({
-        createTile(coords: L.Coords, done: (err: Error | null, tile: HTMLElement) => void): HTMLElement {
-          const tile = document.createElement("img");
-          const m = this._map as L.Map;
-          const sz = this.getTileSize().x;
+    // ArcGIS REST MapServer export — uses L.TileLayer.extend + getTileUrl
+    const makeArcGISLayer = (arcgisUrl: string, arcgisLayers: string | undefined, opacity: number): L.TileLayer => {
+      const TileLayerClass = L.TileLayer.extend({
+        getTileUrl(coords: L.Coords): string {
+          const m = (this as unknown as { _map: L.Map })._map;
+          if (!m) return "";
+          const sz = 256;
           const nw = m.unproject([coords.x * sz, coords.y * sz], coords.z);
           const se = m.unproject([(coords.x + 1) * sz, (coords.y + 1) * sz], coords.z);
           const south = Math.min(nw.lat, se.lat);
           const north = Math.max(nw.lat, se.lat);
           const west = Math.min(nw.lng, se.lng);
           const east = Math.max(nw.lng, se.lng);
-          const exportParams = new URLSearchParams({
-            bbox: `${west},${south},${east},${north}`,
-            bboxSR: "4326", imageSR: "4326",
-            size: `${sz},${sz}`, format: "png32",
-            transparent: "true", f: "image",
-          });
-          if (arcgisLayers) exportParams.set("layers", arcgisLayers);
-          const targetUrl = `${arcgisUrl}/export?${exportParams.toString()}`;
-          const proxyUrl = `${proxyBase}?${new URLSearchParams({ mode: "wms_ext", url: targetUrl }).toString()}`;
-          tile.crossOrigin = "anonymous";
-          tile.onload = () => done(null as unknown as Error, tile);
-          tile.onerror = () => { tile.src = ""; done(new Error("tile load failed"), tile); };
-          tile.src = proxyUrl;
-          return tile;
+          let targetUrl = `${arcgisUrl}/export?bbox=${west},${south},${east},${north}&bboxSR=4326&imageSR=4326&size=${sz},${sz}&format=png32&transparent=true&f=image`;
+          if (arcgisLayers) targetUrl += `&layers=${encodeURIComponent(arcgisLayers)}`;
+          return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}`;
         },
       });
-      return new (GridLayerClass as any)({
-        opacity, pane: "wmsPane", tileSize: 256, maxZoom: 19,
-        attribution: "Geoportale Nazionale (PCN)",
-      });
+      return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
+        proxyBase,
+        { opacity, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: "Geoportale Nazionale (PCN)" } as L.TileLayerOptions & { pane: string }
+      );
     };
 
     const dynamicLayers: Record<string, L.GridLayer> = {};
