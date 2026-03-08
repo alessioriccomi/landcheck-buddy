@@ -423,32 +423,15 @@ async function wfsQueryByNationalRef(
   return { type: "FeatureCollection", features: [] };
 }
 
-// ── Parcel search (direct query, no grid scan) ─────────────────
-async function progressiveParcelSearch(
-  centerLat: number,
-  centerLon: number,
-  foglio: string,
-  particella: string,
+// ── Parcel search (direct query by nationalRef) ────────────────
+async function directParcelSearch(
   codiceComune: string,
-  _communeBbox: [number, number, number, number]
+  foglio: string,
+  particella: string
 ): Promise<GeoJSON.Feature[]> {
-  console.log(`Parcel search: codice=${codiceComune} foglio=${foglio} particella=${particella}`);
-
-  // Primary: direct WFS query by nationalCadastralReference
+  console.log(`Direct parcel search: codice=${codiceComune} foglio=${foglio} particella=${particella}`);
   const fc = await wfsQueryByNationalRef(codiceComune, foglio, particella);
-  if (fc.features.length > 0) return fc.features;
-
-  // Fallback: small bbox around commune center
-  console.warn("Direct query returned nothing, trying bbox fallback around center");
-  for (const delta of [0.003, 0.01, 0.02]) {
-    try {
-      const bboxFc = await wfsQueryBbox(centerLat, centerLon, delta);
-      const matched = bboxFc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
-      if (matched.length > 0) return matched;
-    } catch { /* continue */ }
-  }
-
-  return [];
+  return fc.features;
 }
 
 // ── Main handler ───────────────────────────────────────────────
