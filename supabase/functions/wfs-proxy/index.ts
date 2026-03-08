@@ -95,9 +95,8 @@ async function lookupParcelCoords(
   console.log(`Querying onData parquet: ${fileName} for ${codiceComune}/${foglioPadded}/${particella}`);
 
   try {
-    // Use hyparquet with HTTP range requests (only fetches needed bytes)
     const { asyncBufferFromUrl, parquetRead } = await import(
-      "https://cdn.jsdelivr.net/npm/hyparquet@1.7.1/src/hyparquet.min.js"
+      "https://esm.sh/hyparquet@1.7.1"
     );
 
     const file = await asyncBufferFromUrl({ url });
