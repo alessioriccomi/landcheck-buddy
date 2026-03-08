@@ -411,15 +411,9 @@ export function MapView({
           const north = Math.max(nw.lat, se.lat);
           const west = Math.min(nw.lng, se.lng);
           const east = Math.max(nw.lng, se.lng);
-          const exportParams = new URLSearchParams({
-            bbox: `${west},${south},${east},${north}`,
-            bboxSR: "4326", imageSR: "4326",
-            size: `${sz},${sz}`, format: "png32",
-            transparent: "true", f: "image",
-          });
-          if (arcgisLayers) exportParams.set("layers", arcgisLayers);
-          const targetUrl = `${arcgisUrl}/export?${exportParams.toString()}`;
-          return `${proxyBase}?${new URLSearchParams({ mode: "wms_ext", url: targetUrl }).toString()}`;
+          let targetUrl = `${arcgisUrl}/export?bbox=${west},${south},${east},${north}&bboxSR=4326&imageSR=4326&size=${sz},${sz}&format=png32&transparent=true&f=image`;
+          if (arcgisLayers) targetUrl += `&layers=${encodeURIComponent(arcgisLayers)}`;
+          return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}`;
         },
       });
       return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
