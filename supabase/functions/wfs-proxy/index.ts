@@ -513,8 +513,8 @@ serve(async (req) => {
       // bbox from Nominatim: [south, north, west, east]
       const comuneBbox: [number, number, number, number] = geo.bbox;
 
-      // Step 3: Grid scan for foglio → query parcels
-      const found = await gridScanParcelSearch(codiceComune, foglio, particella, comuneBbox);
+      // Step 3: Direct parcel scan
+      const found = await directParcelSearch(codiceComune, foglio, particella, comuneBbox);
 
       found.forEach((f) => {
         if (f.properties) {
