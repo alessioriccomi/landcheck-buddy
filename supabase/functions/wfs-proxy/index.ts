@@ -332,8 +332,8 @@ async function wfsQueryBbox(
   return gmlToGeoJSON(gml);
 }
 
-// ── Direct WFS query by nationalCadastralReference (POST) ──────
-// Format: CODICE_FFFFAA.PPPP (e.g. A561_000100.2)
+// ── Direct WFS query by nationalCadastralReference ─────────────
+// Tries multiple approaches since AdE WFS has limited filter support
 async function wfsQueryByNationalRef(
   codiceComune: string,
   foglio: string,
@@ -342,82 +342,106 @@ async function wfsQueryByNationalRef(
   const foglioPadded = foglio.padStart(4, "0");
   const allegato = "00";
   const nationalRef = `${codiceComune}_${foglioPadded}${allegato}.${particella}`;
+  const wfsBase = "https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php";
 
-  console.log(`Direct WFS POST query: nationalCadastralReference = "${nationalRef}"`);
+  console.log(`Direct WFS query attempts for nationalRef = "${nationalRef}"`);
 
-  const wfsUrl = "https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php";
-
-  // Build WFS GetFeature XML POST body
-  const buildPostBody = (filterXml: string) => `<?xml version="1.0" encoding="UTF-8"?>
-<wfs:GetFeature xmlns:wfs="http://www.opengis.net/wfs/2.0"
-  xmlns:fes="http://www.opengis.net/fes/2.0"
-  service="WFS" version="2.0.0" count="10">
-  <wfs:Query typeNames="CP:CadastralParcel" srsName="urn:ogc:def:crs:EPSG::6706">
-    ${filterXml}
-  </wfs:Query>
-</wfs:GetFeature>`;
-
-  // Try exact match first
-  const exactFilterXml = `<fes:Filter><fes:PropertyIsEqualTo><fes:ValueReference>nationalCadastralReference</fes:ValueReference><fes:Literal>${nationalRef}</fes:Literal></fes:PropertyIsEqualTo></fes:Filter>`;
-
-  try {
-    const resp = await fetch(wfsUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/xml",
-        Accept: "application/xml, text/xml",
-        "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
-      },
-      body: buildPostBody(exactFilterXml),
-    });
-    if (resp.ok) {
-      const gml = await resp.text();
-      console.log(`POST exact response (first 300 chars): ${gml.substring(0, 300)}`);
-      const fc = gmlToGeoJSON(gml);
-      if (fc.features.length > 0) {
-        console.log(`Exact nationalRef match found: ${fc.features.length} features`);
-        return fc;
+  // Attempt 1: RESOURCEID (some WFS servers support this)
+  // The localId format in AdE responses appears to be like "IT.AGE.PLA.{ref}"
+  for (const resId of [
+    `CP:CadastralParcel.IT.AGE.PLA.${nationalRef}`,
+    `IT.AGE.PLA.${nationalRef}`,
+  ]) {
+    try {
+      const url = `${wfsBase}?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=CP:CadastralParcel&SRSNAME=urn:ogc:def:crs:EPSG::6706&RESOURCEID=${encodeURIComponent(resId)}`;
+      const resp = await fetch(url, {
+        headers: { Accept: "application/xml, text/xml", "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)" },
+      });
+      if (resp.ok) {
+        const gml = await resp.text();
+        if (!gml.includes("ExceptionReport") && !gml.includes("ServiceException")) {
+          const fc = gmlToGeoJSON(gml);
+          if (fc.features.length > 0) {
+            console.log(`RESOURCEID match found with "${resId}": ${fc.features.length} features`);
+            return fc;
+          }
+        } else {
+          console.log(`RESOURCEID "${resId}" → exception`);
+        }
       }
-    } else {
-      console.warn(`POST exact HTTP ${resp.status}`);
+    } catch (err) {
+      console.warn(`RESOURCEID attempt failed:`, err);
     }
-  } catch (err) {
-    console.warn("POST exact nationalRef query failed:", err);
   }
 
-  // Fallback: try LIKE pattern (allegato might not be "00")
-  const likePattern = `${codiceComune}_${foglioPadded}%.${particella}`;
-  console.log(`Trying LIKE pattern via POST: "${likePattern}"`);
+  // Attempt 2: First find the foglio via CadastralZoning RESOURCEID, 
+  // then search parcels within the foglio bbox
+  const zoningRef = `${codiceComune}_${foglioPadded}${allegato}`;
+  for (const resId of [
+    `CP:CadastralZoning.IT.AGE.PLA.${zoningRef}`,
+    `IT.AGE.PLA.${zoningRef}`,
+  ]) {
+    try {
+      const url = `${wfsBase}?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=CP:CadastralZoning&SRSNAME=urn:ogc:def:crs:EPSG::6706&RESOURCEID=${encodeURIComponent(resId)}`;
+      const resp = await fetch(url, {
+        headers: { Accept: "application/xml, text/xml", "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)" },
+      });
+      if (resp.ok) {
+        const gml = await resp.text();
+        if (!gml.includes("ExceptionReport") && !gml.includes("ServiceException")) {
+          const zonings = gmlToGeoJSONZoning(gml);
+          if (zonings.length > 0) {
+            console.log(`Found foglio via RESOURCEID "${resId}"`);
+            // Search parcels within foglio bbox
+            const [fSouth, fNorth, fWest, fEast] = featureBbox(zonings[0]);
+            return await searchParcelsInBbox(fSouth, fNorth, fWest, fEast, foglio, particella);
+          }
+        } else {
+          console.log(`Zoning RESOURCEID "${resId}" → exception: ${gml.substring(0, 200)}`);
+        }
+      }
+    } catch (err) {
+      console.warn(`Zoning RESOURCEID attempt failed:`, err);
+    }
+  }
 
-  const likeFilterXml = `<fes:Filter><fes:PropertyIsLike wildCard="%" singleChar="_" escapeChar="\\"><fes:ValueReference>nationalCadastralReference</fes:ValueReference><fes:Literal>${likePattern}</fes:Literal></fes:PropertyIsLike></fes:Filter>`;
+  console.warn("All direct query attempts failed");
+  return { type: "FeatureCollection", features: [] };
+}
 
-  try {
-    const resp = await fetch(wfsUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/xml",
-        Accept: "application/xml, text/xml",
-        "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
-      },
-      body: buildPostBody(likeFilterXml),
-    });
-    if (resp.ok) {
-      const gml = await resp.text();
-      console.log(`POST LIKE response (first 300 chars): ${gml.substring(0, 300)}`);
-      const fc = gmlToGeoJSON(gml);
-      if (fc.features.length > 0) {
-        console.log(`LIKE nationalRef match found: ${fc.features.length} features`);
+// Search parcels within a known foglio bbox
+async function searchParcelsInBbox(
+  south: number, north: number, west: number, east: number,
+  foglio: string, particella: string
+): Promise<GeoJSON.FeatureCollection> {
+  const centerLat = (south + north) / 2;
+  const centerLon = (west + east) / 2;
+  const delta = Math.max((north - south) / 2, (east - west) / 2) + 0.001;
+
+  // If small enough, single query
+  if (delta <= 0.012) {
+    try {
+      const fc = await wfsQueryBbox(centerLat, centerLon, delta);
+      const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
+      if (matched.length > 0) return { type: "FeatureCollection", features: matched };
+    } catch {}
+  }
+
+  // Subdivide into tiles
+  const STEP = 0.008;
+  for (let lat = south; lat <= north; lat += STEP) {
+    for (let lon = west; lon <= east; lon += STEP) {
+      try {
+        const fc = await wfsQueryBbox(lat + STEP / 2, lon + STEP / 2, STEP / 2 + 0.001);
         const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
-        return { type: "FeatureCollection", features: matched.length > 0 ? matched : fc.features };
-      }
-    } else {
-      console.warn(`POST LIKE HTTP ${resp.status}`);
+        if (matched.length > 0) {
+          console.log(`Found particella in foglio bbox subdivision`);
+          return { type: "FeatureCollection", features: matched };
+        }
+      } catch {}
     }
-  } catch (err) {
-    console.warn("POST LIKE nationalRef query failed:", err);
   }
 
-  console.warn("No results from direct nationalRef POST query");
   return { type: "FeatureCollection", features: [] };
 }
 
