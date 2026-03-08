@@ -335,7 +335,8 @@ async function wfsQueryZoning(
 async function wfsQueryBbox(
   lat: number,
   lon: number,
-  delta = 0.0003
+  delta = 0.0003,
+  count = 50
 ): Promise<GeoJSON.FeatureCollection> {
   const wfsUrl =
     `https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php` +
@@ -357,17 +358,14 @@ async function wfsQueryBbox(
 }
 
 // ── Direct parcel scan: search CadastralParcel across comune bbox ──
-// CadastralZoning is unreliable, so we scan CadastralParcel directly
-// matching by nationalRef prefix (codice + foglio)
 async function directParcelSearch(
   codiceComune: string,
   foglio: string,
   particella: string,
-  comuneBbox: [number, number, number, number] // [south, north, west, east]
+  comuneBbox: [number, number, number, number]
 ): Promise<GeoJSON.Feature[]> {
   const targetFoglio = parseInt(foglio, 10);
   const foglioPadded = String(targetFoglio).padStart(4, "0");
-  // nationalRef pattern: CODE_FFFFxx.PART (xx = allegato, usually 00)
   const refPrefix = `${codiceComune}_${foglioPadded}`;
   const [south, north, west, east] = comuneBbox;
 
@@ -375,16 +373,13 @@ async function directParcelSearch(
 
   const latSpan = north - south;
   const lonSpan = east - west;
-  const comuneArea = latSpan * lonSpan;
 
-  // Use small tiles so WFS COUNT=50 covers each tile well
-  // 0.005° ≈ 500m side, each tile gets ~all parcels in that area
-  const tileDelta = 0.005;
-  // Compute how many tiles needed to cover the bbox
-  const tilesNeededLat = Math.ceil(latSpan / (tileDelta * 1.6));
-  const tilesNeededLon = Math.ceil(lonSpan / (tileDelta * 1.6));
-  const totalNeeded = tilesNeededLat * tilesNeededLon;
-  const maxTiles = Math.min(totalNeeded + 10, 300);
+  // Medium tiles (0.015°≈1.5km) with COUNT=200 for broad coverage
+  const tileDelta = 0.015;
+  const spacing = tileDelta * 1.8;
+  const tilesLat = Math.ceil(latSpan / spacing) + 1;
+  const tilesLon = Math.ceil(lonSpan / spacing) + 1;
+  const maxTiles = Math.min(tilesLat * tilesLon + 5, 80);
 
   // Generate grid centers in spiral
   const centerLat = (south + north) / 2;
