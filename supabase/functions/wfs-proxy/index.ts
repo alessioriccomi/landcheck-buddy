@@ -50,30 +50,48 @@ async function lookupComune(comuneName: string): Promise<{ codice: string; regio
   return { codice: found.codiceCatastale, regione: found.regione?.nome ?? "" };
 }
 
-// ── Geocode via Nominatim ──────────────────────────────────────
+// ── Geocode via Nominatim (with retry) ──────────────────────────
 async function geocodeViaProxy(
-  comuneName: string
+  comuneName: string,
+  retries = 3
 ): Promise<{ lat: number; lon: number; bbox: [number, number, number, number] } | null> {
-  const q = encodeURIComponent(`${comuneName}, Italy`);
-  const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=it`;
-  const resp = await fetch(url, { headers: { "User-Agent": "GeoVincoli/1.0" } });
-  if (!resp.ok) return null;
-  const data = await resp.json();
-  if (!data?.length) return null;
-  const r = data[0];
-  const bbox = r.boundingbox
-    ? ([
-        parseFloat(r.boundingbox[0]),
-        parseFloat(r.boundingbox[1]),
-        parseFloat(r.boundingbox[2]),
-        parseFloat(r.boundingbox[3]),
-      ] as [number, number, number, number])
-    : undefined;
-  return {
-    lat: parseFloat(r.lat),
-    lon: parseFloat(r.lon),
-    bbox: bbox ?? [parseFloat(r.lat) - 0.05, parseFloat(r.lat) + 0.05, parseFloat(r.lon) - 0.05, parseFloat(r.lon) + 0.05],
-  };
+  for (let attempt = 0; attempt < retries; attempt++) {
+    if (attempt > 0) {
+      console.log(`Geocode retry ${attempt + 1} for "${comuneName}"...`);
+      await new Promise(r => setTimeout(r, 1200 * attempt)); // wait 1.2s, 2.4s
+    }
+    try {
+      const q = encodeURIComponent(`${comuneName}, Italy`);
+      const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=it`;
+      const resp = await fetch(url, { headers: { "User-Agent": "GeoVincoli/1.0" } });
+      if (!resp.ok) {
+        console.warn(`Nominatim ${resp.status} on attempt ${attempt + 1}`);
+        continue;
+      }
+      const data = await resp.json();
+      if (!data?.length) {
+        console.warn(`Nominatim empty on attempt ${attempt + 1}`);
+        continue;
+      }
+      const r = data[0];
+      const bbox = r.boundingbox
+        ? ([
+            parseFloat(r.boundingbox[0]),
+            parseFloat(r.boundingbox[1]),
+            parseFloat(r.boundingbox[2]),
+            parseFloat(r.boundingbox[3]),
+          ] as [number, number, number, number])
+        : undefined;
+      return {
+        lat: parseFloat(r.lat),
+        lon: parseFloat(r.lon),
+        bbox: bbox ?? [parseFloat(r.lat) - 0.05, parseFloat(r.lat) + 0.05, parseFloat(r.lon) - 0.05, parseFloat(r.lon) + 0.05],
+      };
+    } catch (err) {
+      console.warn(`Geocode attempt ${attempt + 1} failed:`, err);
+    }
+  }
+  return null;
 }
 
 // ── GML parsing helpers ────────────────────────────────────────
