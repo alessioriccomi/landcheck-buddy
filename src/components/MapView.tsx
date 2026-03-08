@@ -246,7 +246,7 @@ export function MapView({
   const showCatasto = activeLayers["catasto"] ?? true;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const wmsLayersRef = useRef<Record<string, L.GridLayer>>({});
+  const wmsLayersRef = useRef<Record<string, L.TileLayer | L.GridLayer>>({});
   const parcelLayersRef = useRef<L.Layer[]>([]);
   const basemapRef = useRef<L.TileLayer | null>(null);
   // Catasto overlay refs (order: foglio → terreno → fabbricato → labels → graffe)
