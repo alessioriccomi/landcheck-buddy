@@ -343,7 +343,7 @@ async function wfsQueryBbox(
     `&TYPENAMES=CP:CadastralParcel` +
     `&SRSNAME=urn:ogc:def:crs:EPSG::6706` +
     `&BBOX=${lat - delta},${lon - delta},${lat + delta},${lon + delta}` +
-    `&COUNT=50`;
+    `&COUNT=${count}`;
 
   const resp = await fetch(wfsUrl, {
     headers: {
