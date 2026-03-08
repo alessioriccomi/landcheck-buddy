@@ -811,9 +811,11 @@ export function MapView({
 
       // 1. Geocode just for map centering + placeholder position
       let center: [number, number] = [42.8333, 12.8333];
+      let geocodeBbox: [number, number, number, number] | undefined;
       try {
         const geocodeResult = await geocodeComuneWithBbox(p.comune);
         center = [geocodeResult.lat, geocodeResult.lng];
+        geocodeBbox = geocodeResult.bbox;
       } catch {
         // use Italy center fallback
       }
@@ -861,7 +863,7 @@ export function MapView({
 
       // 3. Fetch real geometry via Parquet lookup + tiny WFS bbox (mode=parcel)
       try {
-        const features = await searchParcelByAttribute(p.comune, p.foglio, p.particella);
+        const features = await searchParcelByAttribute(p.comune, p.foglio, p.particella, geocodeBbox);
 
         if (features.length === 0) {
           // Remove placeholder — parcel not found
