@@ -413,7 +413,7 @@ async function directParcelSearch(
     if (directMatch) break; // Already found exact match
     const batch = gridCenters.slice(batchStart, batchStart + BATCH_SIZE);
     const results = await Promise.allSettled(
-      batch.map(([lat, lon]) => wfsQueryBbox(lat, lon, tileDelta))
+      batch.map(([lat, lon]) => wfsQueryBbox(lat, lon, tileDelta, 200))
     );
 
     for (const result of results) {
