@@ -478,19 +478,20 @@ serve(async (req) => {
         );
       }
 
-      // Step 1: Get codice catastale from lightweight JSON
-      const codiceComune = await lookupCodiceComune(comune);
-      if (!codiceComune) {
+      // Step 1: Get codice catastale + regione from lightweight JSON
+      const comuneInfo = await lookupComune(comune);
+      if (!comuneInfo) {
         return new Response(
           JSON.stringify({ error: `Comune not found: ${comune}` }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      const codiceComune = comuneInfo.codice;
 
-      console.log(`Parcel search: ${comune} (${codiceComune}) Fg.${foglio} Part.${particella}`);
+      console.log(`Parcel search: ${comune} (${codiceComune}, ${comuneInfo.regione}) Fg.${foglio} Part.${particella}`);
 
-      // Step 2: Direct WFS query by nationalCadastralReference (no geocoding needed)
-      const found = await directParcelSearch(codiceComune, foglio, particella);
+      // Step 2: onData parquet lookup → tiny bbox WFS (no grid scan)
+      const found = await directParcelSearch(codiceComune, foglio, particella, comuneInfo.regione);
 
       // If direct query failed and we have no results, try geocoding for bbox fallback
       if (found.length === 0) {
