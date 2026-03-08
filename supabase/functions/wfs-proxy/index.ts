@@ -483,28 +483,37 @@ serve(async (req) => {
         );
       }
 
-      // Step 2: Geocode commune center + bbox
-      const center = await geocodeViaProxy(comune);
-      if (!center) {
-        return new Response(
-          JSON.stringify({ error: `Cannot geocode comune: ${comune}` }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      console.log(`Parcel search: ${comune} (${codiceComune}) Fg.${foglio} Part.${particella}`);
 
-      console.log(
-        `Parcel search: ${comune} (${codiceComune}) Fg.${foglio} Part.${particella} center=${center.lat},${center.lon}`
-      );
-
-      // Step 3: Progressive search
+      // Step 2: Direct WFS query by nationalCadastralReference (no geocoding needed)
       const found = await progressiveParcelSearch(
-        center.lat,
-        center.lon,
+        0, 0, // center coords only used for fallback; geocode lazily if needed
         foglio,
         particella,
         codiceComune,
-        center.bbox
+        [0, 0, 0, 0]
       );
+
+      // If direct query failed and we have no results, try geocoding for bbox fallback
+      if (found.length === 0) {
+        console.log("Direct query failed, trying geocode + bbox fallback");
+        const center = await geocodeViaProxy(comune);
+        if (center) {
+          for (const delta of [0.003, 0.01, 0.02]) {
+            try {
+              const bboxFc = await wfsQueryBbox(center.lat, center.lon, delta);
+              const matched = bboxFc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
+              if (matched.length > 0) {
+                matched.forEach(f => { if (f.properties) { f.properties._comune = comune; f.properties._foglio = foglio; f.properties._particella = particella; }});
+                return new Response(
+                  JSON.stringify({ type: "FeatureCollection", features: matched }),
+                  { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+              }
+            } catch { /* continue */ }
+          }
+        }
+      }
 
       found.forEach((f) => {
         if (f.properties) {
