@@ -453,7 +453,7 @@ async function directParcelSearch(
     // Search with expanding radius around the found foglio location
     for (const searchDelta of [0.003, 0.006, 0.01, 0.015, 0.02]) {
       try {
-        const fc = await wfsQueryBbox(fCenterLat, fCenterLon, searchDelta);
+        const fc = await wfsQueryBbox(fCenterLat, fCenterLon, searchDelta, 200);
         const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
         if (matched.length > 0) {
           console.log(`Found ${matched.length} matches at delta=${searchDelta}`);
