@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ParcelInput } from "@/components/ParcelInput";
 import { ConstraintPanel } from "@/components/ConstraintPanel";
 import { LayerControl, ALL_LAYERS } from "@/components/LayerControl";
+import { WmsLegend } from "@/components/WmsLegend";
 import { MapView } from "@/components/MapView";
 import { Particella, AnalisiVincolistica } from "@/types/vincoli";
 import { runAnalisiVincolistica } from "@/lib/analisiVincoli";
@@ -266,6 +267,9 @@ export default function Index() {
 
           {/* Layer control */}
           <LayerControl onChange={(next) => setLayerState(prev => ({ ...prev, ...next }))} />
+
+          {/* WMS Legend for active vincoli layers */}
+          <WmsLegend activeLayers={layerState} />
 
           {/* Empty state */}
           {particelle.length === 0 && step === "input" && (
