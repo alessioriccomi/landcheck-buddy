@@ -523,6 +523,50 @@ async function zoningParcelSearch(
   return [];
 }
 
+// ── Main handler ───────────────────────────────────────────────
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  const url = new URL(req.url);
+  const mode = url.searchParams.get("mode") ?? "wfs";
+
+  try {
+    // ── mode=parcel: lookup → zoning → WFS parcel ──
+    if (mode === "parcel") {
+      const comune = url.searchParams.get("comune") ?? "";
+      const foglio = url.searchParams.get("foglio") ?? "";
+      const particella = url.searchParams.get("particella") ?? "";
+
+      if (!comune || !foglio || !particella) {
+        return new Response(
+          JSON.stringify({ error: "Missing comune, foglio or particella" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const comuneInfo = await lookupComune(comune);
+      if (!comuneInfo) {
+        return new Response(
+          JSON.stringify({ error: `Comune not found: ${comune}` }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const codiceComune = comuneInfo.codice;
+      console.log(`Parcel search: ${comune} (${codiceComune}) Fg.${foglio} Part.${particella}`);
+
+      const geo = await geocodeViaProxy(comune);
+      if (!geo) {
+        return new Response(
+          JSON.stringify({ error: `Cannot geocode: ${comune}` }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const comuneBbox: [number, number, number, number] = geo.bbox;
+      const found = await zoningParcelSearch(codiceComune, foglio, particella, comuneBbox);
+
       found.forEach((f) => {
         if (f.properties) {
           f.properties._comune = comune;
