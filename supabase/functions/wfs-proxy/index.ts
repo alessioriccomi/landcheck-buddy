@@ -330,6 +330,7 @@ async function wfsQueryBbox(
 }
 
 // ── Optimized grid scan: find foglio via CadastralZoning, then query parcels ──
+// Parallelized to avoid timeouts on large comuni
 async function gridScanParcelSearch(
   codiceComune: string,
   foglio: string,
@@ -341,14 +342,10 @@ async function gridScanParcelSearch(
 
   console.log(`Grid scan: looking for foglio ${targetFoglio} of ${codiceComune} in bbox [${south},${north},${west},${east}]`);
 
-  // Strategy: scan CadastralZoning tiles across the comune bbox to find the target foglio
-  // Use adaptive tile sizes based on comune area
   const latSpan = north - south;
   const lonSpan = east - west;
   const comuneArea = latSpan * lonSpan;
 
-  // For small comuni (<0.01 deg²), use fewer larger tiles
-  // For large comuni (>0.05 deg²), use a grid of smaller tiles
   let tileDelta: number;
   let maxTiles: number;
   if (comuneArea < 0.005) {
@@ -356,67 +353,57 @@ async function gridScanParcelSearch(
     maxTiles = 9;
   } else if (comuneArea < 0.05) {
     tileDelta = 0.03;
-    maxTiles = 30;
+    maxTiles = 40;
   } else {
-    tileDelta = 0.02;
-    maxTiles = 80;
+    tileDelta = 0.025;
+    maxTiles = 120;
   }
 
-  // Generate grid centers in a spiral pattern from the commune center
+  // Generate grid centers in spiral pattern
   const centerLat = (south + north) / 2;
   const centerLon = (west + east) / 2;
-
-  const gridCenters: [number, number][] = [];
-  // Spiral scan: center first, then expanding rings
-  const stepsLat = Math.ceil(latSpan / (tileDelta * 1.5)) + 1;
-  const stepsLon = Math.ceil(lonSpan / (tileDelta * 1.5)) + 1;
+  const gridCenters: [number, number][] = [[centerLat, centerLon]];
+  const spacing = tileDelta * 1.8;
+  const stepsLat = Math.ceil(latSpan / spacing) + 1;
+  const stepsLon = Math.ceil(lonSpan / spacing) + 1;
   const maxRing = Math.max(stepsLat, stepsLon);
 
-  // Center tile
-  gridCenters.push([centerLat, centerLon]);
-
-  // Expanding rings
-  for (let ring = 1; ring <= maxRing; ring++) {
+  for (let ring = 1; ring <= maxRing && gridCenters.length < maxTiles; ring++) {
     for (let dy = -ring; dy <= ring; dy++) {
       for (let dx = -ring; dx <= ring; dx++) {
-        if (Math.abs(dy) !== ring && Math.abs(dx) !== ring) continue; // only perimeter
-        const lat = centerLat + dy * tileDelta * 1.5;
-        const lon = centerLon + dx * tileDelta * 1.5;
-        // Skip if outside bbox (with padding)
+        if (Math.abs(dy) !== ring && Math.abs(dx) !== ring) continue;
+        const lat = centerLat + dy * spacing;
+        const lon = centerLon + dx * spacing;
         if (lat < south - tileDelta || lat > north + tileDelta) continue;
         if (lon < west - tileDelta || lon > east + tileDelta) continue;
         gridCenters.push([lat, lon]);
       }
     }
-    if (gridCenters.length >= maxTiles) break;
   }
+  if (gridCenters.length > maxTiles) gridCenters.length = maxTiles;
 
-  console.log(`Grid scan: ${gridCenters.length} tiles to scan (tileDelta=${tileDelta})`);
+  console.log(`Grid scan: ${gridCenters.length} tiles (tileDelta=${tileDelta}, parallel batches of 10)`);
 
-  // Step 1: Scan for CadastralZoning (foglio) matching the target
+  // Step 1: Scan in parallel batches for CadastralZoning matching target foglio
+  const BATCH_SIZE = 10;
   let targetZoningFeature: GeoJSON.Feature | null = null;
-  let tilesScanned = 0;
 
-  for (const [lat, lon] of gridCenters) {
-    if (tilesScanned >= maxTiles) break;
-    tilesScanned++;
-    try {
-      const zonings = await wfsQueryZoning(lat, lon, tileDelta);
-      if (zonings.length === 0) continue;
+  for (let batchStart = 0; batchStart < gridCenters.length && !targetZoningFeature; batchStart += BATCH_SIZE) {
+    const batch = gridCenters.slice(batchStart, batchStart + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map(([lat, lon]) => wfsQueryZoning(lat, lon, tileDelta))
+    );
 
-      // Filter by codice comune and target foglio
-      for (const z of zonings) {
+    for (const result of results) {
+      if (result.status !== "fulfilled" || !result.value.length) continue;
+      for (const z of result.value) {
         const ref = z.properties?.nationalRef ?? "";
         const label = z.properties?.label ?? "";
-
-        // Check if this zoning belongs to our comune
         if (ref && !ref.startsWith(codiceComune)) continue;
 
-        // Check if foglio matches
         let zoningFoglio = -1;
         if (label) zoningFoglio = parseInt(label, 10);
         if (zoningFoglio < 0 && ref) {
-          // Try to extract from nationalRef: CODE_FFFF or CODE_FFFFAA
           const afterCode = ref.substring(codiceComune.length);
           const digits = afterCode.replace(/[^0-9]/g, "");
           if (digits.length >= 4) zoningFoglio = parseInt(digits.substring(0, 4), 10);
@@ -425,29 +412,24 @@ async function gridScanParcelSearch(
 
         if (zoningFoglio === targetFoglio) {
           targetZoningFeature = z;
-          console.log(`Found foglio ${targetFoglio} at tile ${tilesScanned}/${gridCenters.length}`);
+          console.log(`Found foglio ${targetFoglio} at batch ${Math.floor(batchStart / BATCH_SIZE) + 1}`);
           break;
         }
       }
       if (targetZoningFeature) break;
-    } catch (err) {
-      console.warn(`Zoning query failed at tile ${tilesScanned}:`, err);
     }
   }
 
   if (!targetZoningFeature) {
-    console.warn(`Foglio ${targetFoglio} not found after scanning ${tilesScanned} tiles`);
+    console.warn(`Foglio ${targetFoglio} not found after scanning ${gridCenters.length} tiles`);
     return [];
   }
 
-  // Step 2: Use the foglio's bbox to query CadastralParcel within it
+  // Step 2: Query parcels within the foglio's bbox
   const [fSouth, fNorth, fWest, fEast] = featureBbox(targetZoningFeature);
-  const fPadding = 0.001;
-
   console.log(`Querying parcels in foglio bbox: [${fSouth},${fNorth},${fWest},${fEast}]`);
 
-  // Query with progressive bbox sizes to handle parcels near edges
-  for (const pad of [fPadding, fPadding * 3, fPadding * 10]) {
+  for (const pad of [0.001, 0.003, 0.01]) {
     try {
       const fCenterLat = (fSouth + fNorth) / 2;
       const fCenterLon = (fWest + fEast) / 2;
