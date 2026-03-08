@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { asyncBufferFromUrl, parquetRead } from "https://cdn.jsdelivr.net/npm/hyparquet@1.7.1/src/hyparquet.min.js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,8 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ── Comuni JSON cache (lightweight alternative to Parquet) ────
-// Source: matteocontrini/comuni-json — plain JSON, no ZSTD decompression needed
+// ── Comuni JSON cache ────────────────────────────────────────
 const COMUNI_JSON_URL =
   "https://raw.githubusercontent.com/matteocontrini/comuni-json/master/comuni.json";
 
@@ -33,15 +31,13 @@ async function fetchComuniJson(): Promise<ComuneRecord[]> {
   return comuniCache;
 }
 
-// Lookup comune name → codice catastale
-async function lookupCodiceComune(comuneName: string): Promise<string | null> {
+// Lookup comune name → { codiceCatastale, regione }
+async function lookupComune(comuneName: string): Promise<{ codice: string; regione: string } | null> {
   const comuni = await fetchComuniJson();
   const normalize = (s: string) => s.toUpperCase().trim().replace(/[-\s]+/g, " ");
   const search = normalize(comuneName);
 
-  // Exact match
   let found = comuni.find((c) => normalize(c.nome) === search);
-  // Includes match
   if (!found) found = comuni.find((c) => normalize(c.nome).includes(search));
   if (!found) found = comuni.find((c) => search.includes(normalize(c.nome)) && c.nome.length > 4);
 
@@ -50,8 +46,101 @@ async function lookupCodiceComune(comuneName: string): Promise<string | null> {
     return null;
   }
 
-  console.log(`Comune lookup: "${comuneName}" → codice ${found.codiceCatastale}`);
-  return found.codiceCatastale;
+  console.log(`Comune lookup: "${comuneName}" → codice ${found.codiceCatastale}, regione ${found.regione?.nome}`);
+  return { codice: found.codiceCatastale, regione: found.regione?.nome ?? "" };
+}
+
+// ── onData parquet coordinate lookup ─────────────────────────
+// Maps region name → parquet filename on onData GitHub
+const REGION_FILE_MAP: Record<string, string> = {
+  "Piemonte": "01_Piemonte.parquet",
+  "Valle d'Aosta": "02_Valle_dAosta.parquet",
+  "Lombardia": "03_Lombardia.parquet",
+  "Trentino-Alto Adige": "04_Trentino_Alto_Adige.parquet",
+  "Veneto": "05_Veneto.parquet",
+  "Friuli-Venezia Giulia": "06_Friuli_Venezia_Giulia.parquet",
+  "Liguria": "07_Liguria.parquet",
+  "Emilia-Romagna": "08_Emilia_Romagna.parquet",
+  "Toscana": "09_Toscana.parquet",
+  "Umbria": "10_Umbria.parquet",
+  "Marche": "11_Marche.parquet",
+  "Lazio": "12_Lazio.parquet",
+  "Abruzzo": "13_Abruzzo.parquet",
+  "Molise": "14_Molise.parquet",
+  "Campania": "15_Campania.parquet",
+  "Puglia": "16_Puglia.parquet",
+  "Basilicata": "17_Basilicata.parquet",
+  "Calabria": "18_Calabria.parquet",
+  "Sicilia": "19_Sicilia.parquet",
+  "Sardegna": "20_Sardegna.parquet",
+};
+
+const ONDATA_BASE = "https://raw.githubusercontent.com/ondata/dati_catastali/main/S_0000_ITALIA/anagrafica";
+
+// Lookup coordinates from onData parquet (HTTP range requests, no full download)
+async function lookupParcelCoords(
+  codiceComune: string,
+  foglio: string,
+  particella: string,
+  regione: string
+): Promise<{ lat: number; lon: number } | null> {
+  const fileName = REGION_FILE_MAP[regione];
+  if (!fileName) {
+    console.warn(`No parquet file mapping for region: ${regione}`);
+    return null;
+  }
+
+  const foglioPadded = foglio.padStart(4, "0");
+  const url = `${ONDATA_BASE}/${fileName}`;
+  console.log(`Querying onData parquet: ${fileName} for ${codiceComune}/${foglioPadded}/${particella}`);
+
+  try {
+    // Use hyparquet with HTTP range requests (only fetches needed bytes)
+    const { asyncBufferFromUrl, parquetRead } = await import(
+      "https://cdn.jsdelivr.net/npm/hyparquet@1.7.1/src/hyparquet.min.js"
+    );
+
+    const file = await asyncBufferFromUrl({ url });
+    let result: { lat: number; lon: number } | null = null;
+
+    await parquetRead({
+      file,
+      columns: ["comune", "foglio", "particella", "x", "y"],
+      rowFormat: "object",
+      onComplete: (rows: any[]) => {
+        for (const row of rows) {
+          if (
+            row.comune === codiceComune &&
+            row.foglio === foglioPadded &&
+            String(row.particella) === String(particella)
+          ) {
+            // Coordinates are stored as integers: lon*1e6, lat*1e6
+            result = {
+              lon: Number(row.x) / 1_000_000,
+              lat: Number(row.y) / 1_000_000,
+            };
+            break;
+          }
+        }
+      },
+    });
+
+    if (result) {
+      console.log(`onData found coords: lat=${result.lat}, lon=${result.lon}`);
+    } else {
+      console.warn("Parcel not found in onData parquet");
+    }
+    return result;
+  } catch (err) {
+    console.warn("onData parquet lookup failed:", err);
+    return null;
+  }
+}
+
+// Keep backward-compatible function name
+async function lookupCodiceComune(comuneName: string): Promise<string | null> {
+  const result = await lookupComune(comuneName);
+  return result?.codice ?? null;
 }
 
 // ── Geocode via Nominatim ──────────────────────────────────────
