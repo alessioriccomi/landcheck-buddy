@@ -409,7 +409,7 @@ async function directParcelSearch(
   let directMatch: GeoJSON.Feature | null = null;
 
   for (let batchStart = 0; batchStart < gridCenters.length; batchStart += BATCH_SIZE) {
-    if (directMatch) break; // Already found exact match
+    if (directMatch || foundInFoglio) break; // Stop scanning once we locate the foglio
     const batch = gridCenters.slice(batchStart, batchStart + BATCH_SIZE);
     const results = await Promise.allSettled(
       batch.map(([lat, lon]) => wfsQueryBbox(lat, lon, tileDelta, 200))
@@ -422,20 +422,18 @@ async function directParcelSearch(
         const ref = f.properties?.nationalRef ?? "";
         if (!ref.startsWith(refPrefix)) continue;
 
-        // Found a parcel in the right foglio!
         if (!foundInFoglio) {
           foundInFoglio = f;
           console.log(`Found parcel in foglio at batch ${Math.floor(batchStart / BATCH_SIZE) + 1}, ref=${ref}`);
         }
 
-        // Check if it's the exact parcel we want
         if (featureMatchesFoglioParticella(f, foglio, particella)) {
           directMatch = f;
           console.log(`Direct match found! ref=${ref}`);
           break;
         }
       }
-      if (directMatch) break;
+      if (directMatch || foundInFoglio) break;
     }
   }
 
