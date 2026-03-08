@@ -224,7 +224,9 @@ export const LAYER_GROUPS: LayerGroup[] = [
         label: "PGRA - Elementi a rischio",
         color: "#6366f1",
         defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambien_a_te.it_ate.it/arcgte.it/arcgis/rest/services/Alluvioni_Ele        description: "Elementi esposti al rischio di alluvione",
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_ElementiRischio/MapServer",
+        opacity: 0.5,
+        description: "Elementi esposti al rischio di alluvione",
       },
       {
         id: "vincolo_idrogeologico",
