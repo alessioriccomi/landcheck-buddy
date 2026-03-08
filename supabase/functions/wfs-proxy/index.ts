@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { asyncBufferFromUrl, parquetRead } from "https://cdn.jsdelivr.net/npm/hyparquet@1.7.1/src/hyparquet.min.js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
