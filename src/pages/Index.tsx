@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ParcelInput } from "@/components/ParcelInput";
 import { ConstraintPanel } from "@/components/ConstraintPanel";
 import { LayerControl, ALL_LAYERS } from "@/components/LayerControl";
+import { WmsLegend } from "@/components/WmsLegend";
 import { MapView } from "@/components/MapView";
 import { Particella, AnalisiVincolistica } from "@/types/vincoli";
 import { runAnalisiVincolistica } from "@/lib/analisiVincoli";
