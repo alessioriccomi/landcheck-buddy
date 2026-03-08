@@ -338,45 +338,52 @@ async function wfsQueryBbox(
   return gmlToGeoJSON(gml);
 }
 
-// ── Optimized grid scan: find foglio via CadastralZoning, then query parcels ──
-// Parallelized to avoid timeouts on large comuni
-async function gridScanParcelSearch(
+// ── Direct parcel scan: search CadastralParcel across comune bbox ──
+// CadastralZoning is unreliable, so we scan CadastralParcel directly
+// matching by nationalRef prefix (codice + foglio)
+async function directParcelSearch(
   codiceComune: string,
   foglio: string,
   particella: string,
   comuneBbox: [number, number, number, number] // [south, north, west, east]
 ): Promise<GeoJSON.Feature[]> {
   const targetFoglio = parseInt(foglio, 10);
+  const foglioPadded = String(targetFoglio).padStart(4, "0");
+  // nationalRef pattern: CODE_FFFFxx.PART (xx = allegato, usually 00)
+  const refPrefix = `${codiceComune}_${foglioPadded}`;
   const [south, north, west, east] = comuneBbox;
 
-  console.log(`Grid scan: looking for foglio ${targetFoglio} of ${codiceComune} in bbox [${south},${north},${west},${east}]`);
+  console.log(`Direct parcel scan: ${codiceComune} fg=${foglio} part=${particella}, refPrefix=${refPrefix}`);
 
   const latSpan = north - south;
   const lonSpan = east - west;
   const comuneArea = latSpan * lonSpan;
 
+  // Use small tiles (0.005°≈500m) for parcel queries
+  // CadastralParcel returns max 50 features per query
   let tileDelta: number;
   let maxTiles: number;
   if (comuneArea < 0.005) {
-    tileDelta = Math.max(latSpan, lonSpan) * 0.6;
+    tileDelta = Math.max(latSpan, lonSpan) * 0.5;
     maxTiles = 9;
-  } else if (comuneArea < 0.05) {
-    tileDelta = 0.03;
-    maxTiles = 40;
-  } else {
-    tileDelta = 0.025;
+  } else if (comuneArea < 0.02) {
+    tileDelta = 0.008;
+    maxTiles = 60;
+  } else if (comuneArea < 0.1) {
+    tileDelta = 0.008;
     maxTiles = 120;
+  } else {
+    tileDelta = 0.008;
+    maxTiles = 200;
   }
 
-  // Generate grid centers in spiral pattern
+  // Generate grid centers in spiral
   const centerLat = (south + north) / 2;
   const centerLon = (west + east) / 2;
   const gridCenters: [number, number][] = [[centerLat, centerLon]];
-  const spacing = tileDelta * 1.8;
-  const stepsLat = Math.ceil(latSpan / spacing) + 1;
-  const stepsLon = Math.ceil(lonSpan / spacing) + 1;
-  const maxRing = Math.max(stepsLat, stepsLon);
+  const spacing = tileDelta * 1.6;
 
+  const maxRing = Math.ceil(Math.max(latSpan, lonSpan) / spacing) + 1;
   for (let ring = 1; ring <= maxRing && gridCenters.length < maxTiles; ring++) {
     for (let dy = -ring; dy <= ring; dy++) {
       for (let dx = -ring; dx <= ring; dx++) {
@@ -391,75 +398,71 @@ async function gridScanParcelSearch(
   }
   if (gridCenters.length > maxTiles) gridCenters.length = maxTiles;
 
-  console.log(`Grid scan: ${gridCenters.length} tiles (tileDelta=${tileDelta}, parallel batches of 10)`);
+  console.log(`Scanning ${gridCenters.length} tiles (delta=${tileDelta}) for parcels with ref prefix ${refPrefix}`);
 
-  // Step 1: Scan in parallel batches for CadastralZoning matching target foglio
+  // Phase 1: Find ANY parcel in the target foglio to get approximate location
   const BATCH_SIZE = 10;
-  let targetZoningFeature: GeoJSON.Feature | null = null;
+  let foundInFoglio: GeoJSON.Feature | null = null;
+  let directMatch: GeoJSON.Feature | null = null;
 
-  for (let batchStart = 0; batchStart < gridCenters.length && !targetZoningFeature; batchStart += BATCH_SIZE) {
+  for (let batchStart = 0; batchStart < gridCenters.length; batchStart += BATCH_SIZE) {
+    if (directMatch) break; // Already found exact match
     const batch = gridCenters.slice(batchStart, batchStart + BATCH_SIZE);
     const results = await Promise.allSettled(
-      batch.map(([lat, lon]) => wfsQueryZoning(lat, lon, tileDelta))
+      batch.map(([lat, lon]) => wfsQueryBbox(lat, lon, tileDelta))
     );
 
     for (const result of results) {
-      if (result.status !== "fulfilled" || !result.value.length) continue;
-      for (const z of result.value) {
-        const ref = z.properties?.nationalRef ?? "";
-        const label = z.properties?.label ?? "";
-        if (ref && !ref.startsWith(codiceComune)) continue;
+      if (result.status !== "fulfilled") continue;
+      const fc = result.value;
+      for (const f of fc.features) {
+        const ref = f.properties?.nationalRef ?? "";
+        if (!ref.startsWith(refPrefix)) continue;
 
-        let zoningFoglio = -1;
-        if (label) zoningFoglio = parseInt(label, 10);
-        if (zoningFoglio < 0 && ref) {
-          const afterCode = ref.substring(codiceComune.length);
-          const digits = afterCode.replace(/[^0-9]/g, "");
-          if (digits.length >= 4) zoningFoglio = parseInt(digits.substring(0, 4), 10);
-          else if (digits.length > 0) zoningFoglio = parseInt(digits, 10);
+        // Found a parcel in the right foglio!
+        if (!foundInFoglio) {
+          foundInFoglio = f;
+          console.log(`Found parcel in foglio at batch ${Math.floor(batchStart / BATCH_SIZE) + 1}, ref=${ref}`);
         }
 
-        if (zoningFoglio === targetFoglio) {
-          targetZoningFeature = z;
-          console.log(`Found foglio ${targetFoglio} at batch ${Math.floor(batchStart / BATCH_SIZE) + 1}`);
+        // Check if it's the exact parcel we want
+        if (featureMatchesFoglioParticella(f, foglio, particella)) {
+          directMatch = f;
+          console.log(`Direct match found! ref=${ref}`);
           break;
         }
       }
-      if (targetZoningFeature) break;
+      if (directMatch) break;
     }
   }
 
-  if (!targetZoningFeature) {
-    console.warn(`Foglio ${targetFoglio} not found after scanning ${gridCenters.length} tiles`);
-    return [];
-  }
+  if (directMatch) return [directMatch];
 
-  // Step 2: Query parcels within the foglio's bbox
-  const [fSouth, fNorth, fWest, fEast] = featureBbox(targetZoningFeature);
-  console.log(`Querying parcels in foglio bbox: [${fSouth},${fNorth},${fWest},${fEast}]`);
+  // Phase 2: If we found the foglio area but not the exact parcel, 
+  // do a focused search around that location
+  if (foundInFoglio) {
+    const [fSouth, fNorth, fWest, fEast] = featureBbox(foundInFoglio);
+    const fCenterLat = (fSouth + fNorth) / 2;
+    const fCenterLon = (fWest + fEast) / 2;
 
-  for (const pad of [0.001, 0.003, 0.01]) {
-    try {
-      const fCenterLat = (fSouth + fNorth) / 2;
-      const fCenterLon = (fWest + fEast) / 2;
-      const fDeltaLat = (fNorth - fSouth) / 2 + pad;
-      const fDeltaLon = (fEast - fWest) / 2 + pad;
-      const delta = Math.max(fDeltaLat, fDeltaLon);
+    console.log(`Focused search around foglio area [${fCenterLat.toFixed(4)},${fCenterLon.toFixed(4)}]`);
 
-      const fc = await wfsQueryBbox(fCenterLat, fCenterLon, delta);
-      if (fc.features.length === 0) continue;
-
-      const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
-      if (matched.length > 0) {
-        console.log(`Found ${matched.length} parcel features in foglio ${targetFoglio}`);
-        return matched;
+    // Search with expanding radius around the found foglio location
+    for (const searchDelta of [0.003, 0.006, 0.01, 0.015, 0.02]) {
+      try {
+        const fc = await wfsQueryBbox(fCenterLat, fCenterLon, searchDelta);
+        const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
+        if (matched.length > 0) {
+          console.log(`Found ${matched.length} matches at delta=${searchDelta}`);
+          return matched;
+        }
+      } catch (err) {
+        console.warn(`Focused search at delta=${searchDelta} failed:`, err);
       }
-    } catch (err) {
-      console.warn(`Parcel query in foglio bbox failed:`, err);
     }
   }
 
-  console.warn(`Particella ${particella} not found in foglio ${targetFoglio}`);
+  console.warn(`Parcel ${codiceComune} fg${foglio} pt${particella} not found after ${gridCenters.length} tiles`);
   return [];
 }
 
