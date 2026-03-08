@@ -377,23 +377,14 @@ async function directParcelSearch(
   const lonSpan = east - west;
   const comuneArea = latSpan * lonSpan;
 
-  // Use small tiles (0.005°≈500m) for parcel queries
-  // CadastralParcel returns max 50 features per query
-  let tileDelta: number;
-  let maxTiles: number;
-  if (comuneArea < 0.005) {
-    tileDelta = Math.max(latSpan, lonSpan) * 0.5;
-    maxTiles = 9;
-  } else if (comuneArea < 0.02) {
-    tileDelta = 0.008;
-    maxTiles = 60;
-  } else if (comuneArea < 0.1) {
-    tileDelta = 0.008;
-    maxTiles = 120;
-  } else {
-    tileDelta = 0.008;
-    maxTiles = 200;
-  }
+  // Use small tiles so WFS COUNT=50 covers each tile well
+  // 0.005° ≈ 500m side, each tile gets ~all parcels in that area
+  const tileDelta = 0.005;
+  // Compute how many tiles needed to cover the bbox
+  const tilesNeededLat = Math.ceil(latSpan / (tileDelta * 1.6));
+  const tilesNeededLon = Math.ceil(lonSpan / (tileDelta * 1.6));
+  const totalNeeded = tilesNeededLat * tilesNeededLon;
+  const maxTiles = Math.min(totalNeeded + 10, 300);
 
   // Generate grid centers in spiral
   const centerLat = (south + north) / 2;
