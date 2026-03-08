@@ -271,20 +271,6 @@ export default function Index() {
           {/* WMS Legend for active vincoli layers */}
           <WmsLegend activeLayers={layerState} />
 
-          {/* Empty state */}
-          {particelle.length === 0 && step === "input" && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="bg-card/90 backdrop-blur border border-border rounded-2xl px-8 py-6 text-center shadow-xl max-w-sm">
-                <div className="w-12 h-12 bg-primary-muted rounded-xl flex items-center justify-center mx-auto mb-3">
-                  <Map size={22} className="text-primary" />
-                </div>
-                <h3 className="font-semibold text-foreground text-sm mb-1">Inserisci le particelle catastali</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Utilizza il pannello laterale per inserire i dati catastali. Il perimetro verrà ricercato nel WFS del Catasto e visualizzato su questa mappa.
-                </p>
-              </div>
-            </div>
-          )}
         </main>
       </div>
     </div>

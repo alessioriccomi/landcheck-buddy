@@ -50,9 +50,6 @@ async function lookupComune(comuneName: string): Promise<{ codice: string; regio
   return { codice: found.codiceCatastale, regione: found.regione?.nome ?? "" };
 }
 
-
-
-
 // ── Geocode via Nominatim ──────────────────────────────────────
 async function geocodeViaProxy(
   comuneName: string
@@ -332,38 +329,148 @@ async function wfsQueryBbox(
   return gmlToGeoJSON(gml);
 }
 
-// ── Parcel search: onData parquet coords → tiny bbox WFS ───────
-async function directParcelSearch(
+// ── Optimized grid scan: find foglio via CadastralZoning, then query parcels ──
+async function gridScanParcelSearch(
   codiceComune: string,
   foglio: string,
   particella: string,
-  regione: string
+  comuneBbox: [number, number, number, number] // [south, north, west, east]
 ): Promise<GeoJSON.Feature[]> {
-  // Step 1: Get coordinates from onData parquet (HTTP range requests)
-  const coords = await lookupParcelCoords(codiceComune, foglio, particella, regione);
-  if (coords) {
-    console.log(`Using onData coords: lat=${coords.lat}, lon=${coords.lon}`);
-    // Step 2: Tiny bbox WFS query around the known point
-    for (const delta of [0.0003, 0.001, 0.003]) {
-      try {
-        const fc = await wfsQueryBbox(coords.lat, coords.lon, delta);
-        const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
-        if (matched.length > 0) {
-          console.log(`Found ${matched.length} features via onData+WFS at delta=${delta}`);
-          return matched;
+  const targetFoglio = parseInt(foglio, 10);
+  const [south, north, west, east] = comuneBbox;
+
+  console.log(`Grid scan: looking for foglio ${targetFoglio} of ${codiceComune} in bbox [${south},${north},${west},${east}]`);
+
+  // Strategy: scan CadastralZoning tiles across the comune bbox to find the target foglio
+  // Use adaptive tile sizes based on comune area
+  const latSpan = north - south;
+  const lonSpan = east - west;
+  const comuneArea = latSpan * lonSpan;
+
+  // For small comuni (<0.01 deg²), use fewer larger tiles
+  // For large comuni (>0.05 deg²), use a grid of smaller tiles
+  let tileDelta: number;
+  let maxTiles: number;
+  if (comuneArea < 0.005) {
+    tileDelta = Math.max(latSpan, lonSpan) * 0.6;
+    maxTiles = 9;
+  } else if (comuneArea < 0.05) {
+    tileDelta = 0.03;
+    maxTiles = 30;
+  } else {
+    tileDelta = 0.02;
+    maxTiles = 80;
+  }
+
+  // Generate grid centers in a spiral pattern from the commune center
+  const centerLat = (south + north) / 2;
+  const centerLon = (west + east) / 2;
+
+  const gridCenters: [number, number][] = [];
+  // Spiral scan: center first, then expanding rings
+  const stepsLat = Math.ceil(latSpan / (tileDelta * 1.5)) + 1;
+  const stepsLon = Math.ceil(lonSpan / (tileDelta * 1.5)) + 1;
+  const maxRing = Math.max(stepsLat, stepsLon);
+
+  // Center tile
+  gridCenters.push([centerLat, centerLon]);
+
+  // Expanding rings
+  for (let ring = 1; ring <= maxRing; ring++) {
+    for (let dy = -ring; dy <= ring; dy++) {
+      for (let dx = -ring; dx <= ring; dx++) {
+        if (Math.abs(dy) !== ring && Math.abs(dx) !== ring) continue; // only perimeter
+        const lat = centerLat + dy * tileDelta * 1.5;
+        const lon = centerLon + dx * tileDelta * 1.5;
+        // Skip if outside bbox (with padding)
+        if (lat < south - tileDelta || lat > north + tileDelta) continue;
+        if (lon < west - tileDelta || lon > east + tileDelta) continue;
+        gridCenters.push([lat, lon]);
+      }
+    }
+    if (gridCenters.length >= maxTiles) break;
+  }
+
+  console.log(`Grid scan: ${gridCenters.length} tiles to scan (tileDelta=${tileDelta})`);
+
+  // Step 1: Scan for CadastralZoning (foglio) matching the target
+  let targetZoningFeature: GeoJSON.Feature | null = null;
+  let tilesScanned = 0;
+
+  for (const [lat, lon] of gridCenters) {
+    if (tilesScanned >= maxTiles) break;
+    tilesScanned++;
+    try {
+      const zonings = await wfsQueryZoning(lat, lon, tileDelta);
+      if (zonings.length === 0) continue;
+
+      // Filter by codice comune and target foglio
+      for (const z of zonings) {
+        const ref = z.properties?.nationalRef ?? "";
+        const label = z.properties?.label ?? "";
+
+        // Check if this zoning belongs to our comune
+        if (ref && !ref.startsWith(codiceComune)) continue;
+
+        // Check if foglio matches
+        let zoningFoglio = -1;
+        if (label) zoningFoglio = parseInt(label, 10);
+        if (zoningFoglio < 0 && ref) {
+          // Try to extract from nationalRef: CODE_FFFF or CODE_FFFFAA
+          const afterCode = ref.substring(codiceComune.length);
+          const digits = afterCode.replace(/[^0-9]/g, "");
+          if (digits.length >= 4) zoningFoglio = parseInt(digits.substring(0, 4), 10);
+          else if (digits.length > 0) zoningFoglio = parseInt(digits, 10);
         }
-        // Try point-in-polygon if we got features but none matched by name
-        if (fc.features.length > 0) {
-          const pip = findFeatureContainingPoint(fc.features, coords.lat, coords.lon);
-          if (pip) return [pip];
+
+        if (zoningFoglio === targetFoglio) {
+          targetZoningFeature = z;
+          console.log(`Found foglio ${targetFoglio} at tile ${tilesScanned}/${gridCenters.length}`);
+          break;
         }
-      } catch { /* continue */ }
+      }
+      if (targetZoningFeature) break;
+    } catch (err) {
+      console.warn(`Zoning query failed at tile ${tilesScanned}:`, err);
     }
   }
+
+  if (!targetZoningFeature) {
+    console.warn(`Foglio ${targetFoglio} not found after scanning ${tilesScanned} tiles`);
+    return [];
+  }
+
+  // Step 2: Use the foglio's bbox to query CadastralParcel within it
+  const [fSouth, fNorth, fWest, fEast] = featureBbox(targetZoningFeature);
+  const fPadding = 0.001;
+
+  console.log(`Querying parcels in foglio bbox: [${fSouth},${fNorth},${fWest},${fEast}]`);
+
+  // Query with progressive bbox sizes to handle parcels near edges
+  for (const pad of [fPadding, fPadding * 3, fPadding * 10]) {
+    try {
+      const fCenterLat = (fSouth + fNorth) / 2;
+      const fCenterLon = (fWest + fEast) / 2;
+      const fDeltaLat = (fNorth - fSouth) / 2 + pad;
+      const fDeltaLon = (fEast - fWest) / 2 + pad;
+      const delta = Math.max(fDeltaLat, fDeltaLon);
+
+      const fc = await wfsQueryBbox(fCenterLat, fCenterLon, delta);
+      if (fc.features.length === 0) continue;
+
+      const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
+      if (matched.length > 0) {
+        console.log(`Found ${matched.length} parcel features in foglio ${targetFoglio}`);
+        return matched;
+      }
+    } catch (err) {
+      console.warn(`Parcel query in foglio bbox failed:`, err);
+    }
+  }
+
+  console.warn(`Particella ${particella} not found in foglio ${targetFoglio}`);
   return [];
 }
-
-
 
 // ── Main handler ───────────────────────────────────────────────
 serve(async (req) => {
@@ -375,7 +482,7 @@ serve(async (req) => {
   const mode = url.searchParams.get("mode") ?? "wfs";
 
   try {
-    // ── mode=parcel: JSON lookup → CadastralZoning grid → parcel ──
+    // ── mode=parcel: JSON lookup → grid scan CadastralZoning → parcel ──
     if (mode === "parcel") {
       const comune = url.searchParams.get("comune") ?? "";
       const foglio = url.searchParams.get("foglio") ?? "";
@@ -388,7 +495,7 @@ serve(async (req) => {
         );
       }
 
-      // Step 1: Get codice catastale + regione from lightweight JSON
+      // Step 1: Get codice catastale from lightweight JSON
       const comuneInfo = await lookupComune(comune);
       if (!comuneInfo) {
         return new Response(
@@ -398,31 +505,22 @@ serve(async (req) => {
       }
       const codiceComune = comuneInfo.codice;
 
-      console.log(`Parcel search: ${comune} (${codiceComune}, ${comuneInfo.regione}) Fg.${foglio} Part.${particella}`);
+      console.log(`Parcel search: ${comune} (${codiceComune}) Fg.${foglio} Part.${particella}`);
 
-      // Step 2: onData parquet lookup → tiny bbox WFS (no grid scan)
-      const found = await directParcelSearch(codiceComune, foglio, particella, comuneInfo.regione);
-
-      // If direct query failed and we have no results, try geocoding for bbox fallback
-      if (found.length === 0) {
-        console.log("Direct query failed, trying geocode + bbox fallback");
-        const center = await geocodeViaProxy(comune);
-        if (center) {
-          for (const delta of [0.003, 0.01, 0.02]) {
-            try {
-              const bboxFc = await wfsQueryBbox(center.lat, center.lon, delta);
-              const matched = bboxFc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
-              if (matched.length > 0) {
-                matched.forEach(f => { if (f.properties) { f.properties._comune = comune; f.properties._foglio = foglio; f.properties._particella = particella; }});
-                return new Response(
-                  JSON.stringify({ type: "FeatureCollection", features: matched }),
-                  { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-                );
-              }
-            } catch { /* continue */ }
-          }
-        }
+      // Step 2: Geocode to get the comune bounding box
+      const geo = await geocodeViaProxy(comune);
+      if (!geo) {
+        return new Response(
+          JSON.stringify({ error: `Cannot geocode: ${comune}` }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
+
+      // bbox from Nominatim: [south, north, west, east]
+      const comuneBbox: [number, number, number, number] = geo.bbox;
+
+      // Step 3: Grid scan for foglio → query parcels
+      const found = await gridScanParcelSearch(codiceComune, foglio, particella, comuneBbox);
 
       found.forEach((f) => {
         if (f.properties) {
@@ -671,6 +769,10 @@ serve(async (req) => {
         "servizimoka.regione.emilia-romagna.it",
         "webgis2.regione.sardegna.it",
         "geoportale.regione.calabria.it",
+        // MiC / Vincoli in Rete
+        "wms.minicultura.it",
+        "culturaitalia.it",
+        "vincoliinrete.beniculturali.it",
       ];
       let parsedUrl: URL;
       try {
