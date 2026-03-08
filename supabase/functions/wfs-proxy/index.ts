@@ -469,13 +469,7 @@ serve(async (req) => {
       console.log(`Parcel search: ${comune} (${codiceComune}) Fg.${foglio} Part.${particella}`);
 
       // Step 2: Direct WFS query by nationalCadastralReference (no geocoding needed)
-      const found = await progressiveParcelSearch(
-        0, 0, // center coords only used for fallback; geocode lazily if needed
-        foglio,
-        particella,
-        codiceComune,
-        [0, 0, 0, 0]
-      );
+      const found = await directParcelSearch(codiceComune, foglio, particella);
 
       // If direct query failed and we have no results, try geocoding for bbox fallback
       if (found.length === 0) {
