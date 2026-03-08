@@ -332,7 +332,7 @@ async function wfsQueryBbox(
   return gmlToGeoJSON(gml);
 }
 
-// ── Direct WFS query by nationalCadastralReference ─────────────
+// ── Direct WFS query by nationalCadastralReference (POST) ──────
 // Format: CODICE_FFFFAA.PPPP (e.g. A561_000100.2)
 async function wfsQueryByNationalRef(
   codiceComune: string,
@@ -343,66 +343,83 @@ async function wfsQueryByNationalRef(
   const allegato = "00";
   const nationalRef = `${codiceComune}_${foglioPadded}${allegato}.${particella}`;
 
-  console.log(`Direct WFS query: nationalCadastralReference = "${nationalRef}"`);
+  console.log(`Direct WFS POST query: nationalCadastralReference = "${nationalRef}"`);
+
+  const wfsUrl = "https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php";
+
+  // Build WFS GetFeature XML POST body with exact filter
+  const buildPostBody = (filterXml: string) => `<?xml version="1.0" encoding="UTF-8"?>
+<wfs:GetFeature xmlns:wfs="http://www.opengis.net/wfs/2.0"
+  xmlns:fes="http://www.opengis.net/fes/2.0"
+  xmlns:CP="urn:x-inspire:specification:gmlas:CadastralParcels:3.0"
+  service="WFS" version="2.0.0" count="10"
+  outputFormat="application/gml+xml; version=3.2">
+  <wfs:Query typeNames="CP:CadastralParcel" srsName="urn:ogc:def:crs:EPSG::6706">
+    ${filterXml}
+  </wfs:Query>
+</wfs:GetFeature>`;
 
   // Try exact match first
-  const exactFilter = `<Filter xmlns="http://www.opengis.net/fes/2.0"><PropertyIsEqualTo><ValueReference>nationalCadastralReference</ValueReference><Literal>${nationalRef}</Literal></PropertyIsEqualTo></Filter>`;
+  const exactFilterXml = `<fes:Filter><fes:PropertyIsEqualTo><fes:ValueReference>nationalCadastralReference</fes:ValueReference><fes:Literal>${nationalRef}</fes:Literal></fes:PropertyIsEqualTo></fes:Filter>`;
 
-  const baseUrl = "https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php";
-  const baseParams = "?language=ita&SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=CP:CadastralParcel&SRSNAME=urn:ogc:def:crs:EPSG::6706&COUNT=10";
-
-  const exactUrl = `${baseUrl}${baseParams}&FILTER=${encodeURIComponent(exactFilter)}`;
   try {
-    const resp = await fetch(exactUrl, {
+    const resp = await fetch(wfsUrl, {
+      method: "POST",
       headers: {
+        "Content-Type": "application/xml",
         Accept: "application/xml, text/xml",
         "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
       },
+      body: buildPostBody(exactFilterXml),
     });
     if (resp.ok) {
       const gml = await resp.text();
-      console.log(`Exact filter response (first 500 chars): ${gml.substring(0, 500)}`);
+      console.log(`POST exact response (first 300 chars): ${gml.substring(0, 300)}`);
       const fc = gmlToGeoJSON(gml);
       if (fc.features.length > 0) {
         console.log(`Exact nationalRef match found: ${fc.features.length} features`);
         return fc;
       }
     } else {
-      console.warn(`Exact filter HTTP ${resp.status}`);
+      console.warn(`POST exact HTTP ${resp.status}`);
     }
   } catch (err) {
-    console.warn("Exact nationalRef query failed:", err);
+    console.warn("POST exact nationalRef query failed:", err);
   }
 
   // Fallback: try LIKE pattern (allegato might not be "00")
-  const likePattern = `${codiceComune}_${foglioPadded}*.${particella}`;
-  console.log(`Trying LIKE pattern: "${likePattern}"`);
+  const likePattern = `${codiceComune}_${foglioPadded}%.${particella}`;
+  console.log(`Trying LIKE pattern via POST: "${likePattern}"`);
 
-  const likeFilter = `<Filter xmlns="http://www.opengis.net/fes/2.0"><PropertyIsLike wildCard="*" singleChar="?" escapeChar="\\"><ValueReference>nationalCadastralReference</ValueReference><Pattern>${likePattern}</Pattern></PropertyIsLike></Filter>`;
+  const likeFilterXml = `<fes:Filter><fes:PropertyIsLike wildCard="%" singleChar="_" escapeChar="\\"><fes:ValueReference>nationalCadastralReference</fes:ValueReference><fes:Literal>${likePattern}</fes:Literal></fes:PropertyIsLike></fes:Filter>`;
 
-  const likeUrl = `${baseUrl}${baseParams}&FILTER=${encodeURIComponent(likeFilter)}`;
   try {
-    const resp = await fetch(likeUrl, {
+    const resp = await fetch(wfsUrl, {
+      method: "POST",
       headers: {
+        "Content-Type": "application/xml",
         Accept: "application/xml, text/xml",
         "User-Agent": "Mozilla/5.0 (compatible; LandcheckProxy/1.0)",
       },
+      body: buildPostBody(likeFilterXml),
     });
     if (resp.ok) {
       const gml = await resp.text();
+      console.log(`POST LIKE response (first 300 chars): ${gml.substring(0, 300)}`);
       const fc = gmlToGeoJSON(gml);
       if (fc.features.length > 0) {
         console.log(`LIKE nationalRef match found: ${fc.features.length} features`);
-        // Filter to exact particella match
         const matched = fc.features.filter(f => featureMatchesFoglioParticella(f, foglio, particella));
         return { type: "FeatureCollection", features: matched.length > 0 ? matched : fc.features };
       }
+    } else {
+      console.warn(`POST LIKE HTTP ${resp.status}`);
     }
   } catch (err) {
-    console.warn("LIKE nationalRef query failed:", err);
+    console.warn("POST LIKE nationalRef query failed:", err);
   }
 
-  console.warn("No results from direct nationalRef query");
+  console.warn("No results from direct nationalRef POST query");
   return { type: "FeatureCollection", features: [] };
 }
 
