@@ -389,7 +389,7 @@ export function MapView({
           const east = Math.max(nw.lng, se.lng);
           const sep = wmsBaseUrl.includes("?") ? "&" : "?";
           const targetUrl = `${wmsBaseUrl}${sep}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${encodeURIComponent(wmsLayerName)}&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:4326&WIDTH=${sz}&HEIGHT=${sz}&BBOX=${south},${west},${north},${east}`;
-          return `${proxyBase}?${new URLSearchParams({ mode: "wms_ext", url: targetUrl }).toString()}`;
+          return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}`;
         },
       });
       return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
