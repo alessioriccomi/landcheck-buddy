@@ -206,7 +206,8 @@ export const LAYER_GROUPS: LayerGroup[] = [
         label: "PGRA - Classi di rischio alluvionale",
         color: "#1e40af",
         defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_Classi_di_,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_Classi_di_Rischio/MapServer",
+        opacity: 0.5,
         description: "Classi di rischio alluvionale (Dir. 2007/60/CE)",
       },
       {
@@ -214,9 +215,9 @@ export const LAYER_GROUPS: LayerGroup[] = [
         label: "PGRA - Caratteristiche idrauliche",
         color: "#3b82f6",
         defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_Caratteristrver",
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_Caratteristiche_Idrauliche/MapServer",
         opacity: 0.5,
-        desiche_Idrauliche/MapSecription: "Caratteristiche idrauliche delle aree allagabili",
+        description: "Caratteristiche idrauliche delle aree allagabili",
       },
       {
         id: "alluvioni_elementi",
