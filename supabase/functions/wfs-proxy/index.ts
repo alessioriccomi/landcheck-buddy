@@ -374,12 +374,12 @@ async function directParcelSearch(
   const latSpan = north - south;
   const lonSpan = east - west;
 
-  // Medium tiles (0.015°≈1.5km) with COUNT=200 for broad coverage
-  const tileDelta = 0.015;
+  // Small tiles (0.005°≈500m) so WFS COUNT covers all parcels per tile
+  const tileDelta = 0.005;
   const spacing = tileDelta * 1.8;
   const tilesLat = Math.ceil(latSpan / spacing) + 1;
   const tilesLon = Math.ceil(lonSpan / spacing) + 1;
-  const maxTiles = Math.min(tilesLat * tilesLon + 5, 80);
+  const maxTiles = Math.min(tilesLat * tilesLon + 5, 100);
 
   // Generate grid centers in spiral
   const centerLat = (south + north) / 2;
