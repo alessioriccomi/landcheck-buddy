@@ -385,7 +385,6 @@ async function directParcelSearch(
   const centerLat = (south + north) / 2;
   const centerLon = (west + east) / 2;
   const gridCenters: [number, number][] = [[centerLat, centerLon]];
-  const spacing = tileDelta * 1.6;
 
   const maxRing = Math.ceil(Math.max(latSpan, lonSpan) / spacing) + 1;
   for (let ring = 1; ring <= maxRing && gridCenters.length < maxTiles; ring++) {
