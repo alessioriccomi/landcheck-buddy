@@ -701,18 +701,27 @@ export function MapView({
       const mapN = mapBounds.getNorth();
       const mapE = mapBounds.getEast();
 
+      const layerCount = Object.keys(wmsLayersRef.current).length;
+      const activeIds = Object.entries(activeLayers).filter(([, v]) => v).map(([k]) => k);
+      console.log(`[LayerToggle] ${layerCount} layers in ref, ${activeIds.length} active: ${activeIds.join(", ")}`);
+
       for (const [id, layer] of Object.entries(wmsLayersRef.current)) {
         const isActive = activeLayers[id] ?? false;
         const lb = boundsLookup[id];
-        // If layer has bounds, check if current viewport intersects
         let inBounds = true;
         if (lb && isActive) {
           const [lS, lW, lN, lE] = lb;
           inBounds = !(mapN < lS || mapS > lN || mapE < lW || mapW > lE);
         }
         const shouldShow = isActive && inBounds;
-        if (shouldShow && !map.hasLayer(layer)) map.addLayer(layer);
-        if (!shouldShow && map.hasLayer(layer)) map.removeLayer(layer);
+        if (shouldShow && !map.hasLayer(layer)) {
+          console.log(`[LayerToggle] Adding layer: ${id}`);
+          map.addLayer(layer);
+        }
+        if (!shouldShow && map.hasLayer(layer)) {
+          console.log(`[LayerToggle] Removing layer: ${id}`);
+          map.removeLayer(layer);
+        }
       }
     };
 
