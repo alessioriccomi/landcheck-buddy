@@ -215,7 +215,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         label: "PGRA - Caratteristiche idrauliche",
         color: "#3b82f6",
         defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis_/res_t/se_rvic_es/A_lluv_ioni__Car_atte_rist_icheIdrauliche/MapServer",
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_CaratteristicheIdrauliche/MapServer",
         opacity: 0.5,
         description: "Caratteristiche idrauliche delle aree allagabili",
       },
