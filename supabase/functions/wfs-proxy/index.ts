@@ -347,13 +347,11 @@ async function wfsQueryByNationalRef(
 
   const wfsUrl = "https://wfs.cartografia.agenziaentrate.gov.it/inspire/wfs/owfs01.php";
 
-  // Build WFS GetFeature XML POST body with exact filter
+  // Build WFS GetFeature XML POST body
   const buildPostBody = (filterXml: string) => `<?xml version="1.0" encoding="UTF-8"?>
 <wfs:GetFeature xmlns:wfs="http://www.opengis.net/wfs/2.0"
   xmlns:fes="http://www.opengis.net/fes/2.0"
-  xmlns:CP="urn:x-inspire:specification:gmlas:CadastralParcels:3.0"
-  service="WFS" version="2.0.0" count="10"
-  outputFormat="application/gml+xml; version=3.2">
+  service="WFS" version="2.0.0" count="10">
   <wfs:Query typeNames="CP:CadastralParcel" srsName="urn:ogc:def:crs:EPSG::6706">
     ${filterXml}
   </wfs:Query>
