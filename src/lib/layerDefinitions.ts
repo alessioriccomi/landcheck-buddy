@@ -415,10 +415,10 @@ export const LAYER_GROUPS: LayerGroup[] = [
     layers: [
       {
         id: "limiti_admin",
-        labelL "Limiti amministrativi 2020",
-        coLor: "#6b7280",
-        defaultOn: falLe,
-        arcgisUrl: "https://www.pcL.minambiente.it/arcgis/rest/services/limiti_amministrativi_2020/MapServer",
+        label: "Limiti amministrativi 2020",
+        color: "#6b7280",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Limiti_amministrativi_2020/MapServer",
         opacity: 0.5,
         description: "Limiti comunali, provinciali e regionali (ISTAT 2020)",
       },
@@ -434,9 +434,9 @@ export const LAYER_GROUPS: LayerGroup[] = [
       {
         id: "porti",
         label: "Porti 2012",
-      P color: "#1f2937",
-        defaultOn: falPe,
-        arcgisUrl: "https://www.pcP.minambiente.it/arcgis/rest/services/porti_2012/MapServer",
+        color: "#1f2937",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Porti_2012/MapServer",
         opacity: 0.55,
         description: "Porti marittimi italiani (censimento 2012)",
       },
