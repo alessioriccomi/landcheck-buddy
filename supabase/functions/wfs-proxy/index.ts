@@ -562,15 +562,23 @@ serve(async (req) => {
       const codiceComune = comuneInfo.codice;
       console.log(`Parcel search: ${comune} (${codiceComune}) Fg.${foglio} Part.${particella}`);
 
+      // Use Nominatim for bbox, fallback to comuni-json coordinates
+      let comuneBbox: [number, number, number, number];
       const geo = await geocodeViaProxy(comune);
-      if (!geo) {
+      if (geo) {
+        comuneBbox = geo.bbox;
+      } else if (comuneInfo.lat && comuneInfo.lng) {
+        // Fallback: use comuni-json coords with ~5km estimated bbox
+        console.log(`Using comuni-json coords as fallback: ${comuneInfo.lat}, ${comuneInfo.lng}`);
+        const d = 0.05; // ~5km
+        comuneBbox = [comuneInfo.lat - d, comuneInfo.lat + d, comuneInfo.lng - d, comuneInfo.lng + d];
+      } else {
         return new Response(
           JSON.stringify({ error: `Cannot geocode: ${comune}` }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const comuneBbox: [number, number, number, number] = geo.bbox;
       const found = await zoningParcelSearch(codiceComune, foglio, particella, comuneBbox);
 
       found.forEach((f) => {
