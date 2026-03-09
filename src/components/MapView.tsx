@@ -426,20 +426,19 @@ export function MapView({
       );
     };
 
-    const dynamicLayers: Record<string, L.GridLayer> = {};
+    // Create all WMS layers and populate the ref
     for (const layerDef of ALL_LAYERS) {
       try {
         if (layerDef.arcgisUrl) {
-          dynamicLayers[layerDef.id] = makeArcGISLayer(layerDef.arcgisUrl, layerDef.arcgisLayers, layerDef.opacity ?? 0.5);
+          wmsLayersRef.current[layerDef.id] = makeArcGISLayer(layerDef.arcgisUrl, layerDef.arcgisLayers, layerDef.opacity ?? 0.5);
         } else if (layerDef.wmsUrl && layerDef.wmsLayer) {
-          dynamicLayers[layerDef.id] = makeProxiedWmsLayer(layerDef.wmsUrl, layerDef.wmsLayer, layerDef.opacity ?? 0.5);
+          wmsLayersRef.current[layerDef.id] = makeProxiedWmsLayer(layerDef.wmsUrl, layerDef.wmsLayer, layerDef.opacity ?? 0.5);
         }
+        console.log(`[LayerInit] Created layer: ${layerDef.id}`);
       } catch (err) {
         console.warn(`Failed to create layer ${layerDef.id}:`, err);
       }
     }
-
-    wmsLayersRef.current = dynamicLayers;
     mapRef.current = map;
 
     return () => {
