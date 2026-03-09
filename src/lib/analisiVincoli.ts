@@ -783,7 +783,7 @@ function buildNormativaAgrivoltaico(_particelle: Particella[]): VincoloItem[] {
   ];
 }
 
-function computeRischioComplessivo(analisi: Omit<AnalisiVincolistica, "rischioComplessivo">): AnalisiVincolistica["rischioComplessivo"] {
+function computeRischioComplessivo(analisi: Omit<AnalisiVincolistica, "rischioComplessivo" | "areaUtileLordaHa" | "areaUtileNettaHa">): AnalisiVincolistica["rischioComplessivo"] {
   const allVincoli = [
     ...analisi.vincoliCulturali,
     ...analisi.vincoliPaesaggistici,
