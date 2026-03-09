@@ -743,6 +743,63 @@ export function MapView({
     return () => { map.off("moveend", updateLayers); };
   }, [activeLayers]);
 
+  // ── Custom constraint layers (user-defined WMS/ArcGIS) ───────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const proxyBase = `${SUPABASE_URL}/functions/v1/wfs-proxy`;
+    const currentIds = new Set(customConstraints.map(c => c.id));
+
+    // Remove layers no longer present
+    for (const [id, layer] of Object.entries(customLayersRef.current)) {
+      if (!currentIds.has(id)) {
+        if (map.hasLayer(layer)) map.removeLayer(layer);
+        delete customLayersRef.current[id];
+      }
+    }
+
+    // Add new layers
+    for (const c of customConstraints) {
+      if (customLayersRef.current[c.id]) continue; // already exists
+
+      // Detect if it's ArcGIS MapServer or WMS
+      const isArcGIS = c.url.includes("/MapServer") || c.url.includes("/arcgis/");
+
+      const TileLayerClass = L.TileLayer.extend({
+        getTileUrl(coords: L.Coords): string {
+          const m = (this as unknown as { _map: L.Map })._map;
+          if (!m) return "";
+          const sz = 256;
+          const nw = m.unproject([coords.x * sz, coords.y * sz], coords.z);
+          const se = m.unproject([(coords.x + 1) * sz, (coords.y + 1) * sz], coords.z);
+          const south = Math.min(nw.lat, se.lat);
+          const north = Math.max(nw.lat, se.lat);
+          const west = Math.min(nw.lng, se.lng);
+          const east = Math.max(nw.lng, se.lng);
+
+          let targetUrl: string;
+          if (isArcGIS) {
+            const base = c.url.replace(/\/export$/, "");
+            targetUrl = `${base}/export?bbox=${west},${south},${east},${north}&bboxSR=4326&imageSR=4326&size=${sz},${sz}&format=png&transparent=true&f=image`;
+          } else {
+            const sep = c.url.includes("?") ? "&" : "?";
+            targetUrl = `${c.url}${sep}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:4326&WIDTH=${sz}&HEIGHT=${sz}&BBOX=${south},${west},${north},${east}`;
+          }
+          return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}`;
+        },
+      });
+
+      const layer = new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
+        proxyBase,
+        { opacity: 0.65, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: c.name } as L.TileLayerOptions & { pane: string }
+      );
+
+      customLayersRef.current[c.id] = layer;
+      layer.addTo(map);
+    }
+  }, [customConstraints]);
+
   // ── Draw parcels ────────────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current;
