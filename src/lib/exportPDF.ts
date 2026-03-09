@@ -144,6 +144,83 @@ export function exportReportPDF(analisi: AnalisiVincolistica) {
     y += 4;
   }
 
+  // ── AUL / AUN Summary Box ──────────────────────────────────
+  const aul = analisi.areaUtileLordaHa;
+  const aun = analisi.areaUtileNettaHa;
+  const percNetta = aul > 0 ? (aun / aul) * 100 : 0;
+  const percRiduzione = 100 - percNetta;
+
+  // Draw the box
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(100, 116, 139);
+  doc.roundedRect(margin, y, pageW - margin * 2, 28, 2, 2, "FD");
+
+  // Title
+  doc.setTextColor(22, 47, 99);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "bold");
+  doc.text("Riepilogo Aree", margin + 4, y + 6);
+
+  // AUL box
+  const boxW = 50;
+  const boxH = 16;
+  const boxY = y + 9;
+
+  doc.setFillColor(226, 232, 240);
+  doc.roundedRect(margin + 4, boxY, boxW, boxH, 1, 1, "F");
+  doc.setTextColor(51, 65, 85);
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.text("Area Utile Lorda (AUL)", margin + 4 + boxW / 2, boxY + 5, { align: "center" });
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.text(`${aul.toFixed(2)} ha`, margin + 4 + boxW / 2, boxY + 12, { align: "center" });
+
+  // AUN box
+  const aunColor: [number, number, number] = percNetta >= 50 ? [220, 252, 231] : [254, 226, 226];
+  const aunTextColor: [number, number, number] = percNetta >= 50 ? [22, 101, 52] : [185, 28, 28];
+  doc.setFillColor(...aunColor);
+  doc.roundedRect(margin + 4 + boxW + 6, boxY, boxW, boxH, 1, 1, "F");
+  doc.setTextColor(51, 65, 85);
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.text("Area Utile Netta (AUN)", margin + 4 + boxW + 6 + boxW / 2, boxY + 5, { align: "center" });
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...aunTextColor);
+  doc.text(`${aun.toFixed(2)} ha`, margin + 4 + boxW + 6 + boxW / 2, boxY + 12, { align: "center" });
+
+  // Reduction bar visualization
+  const barX = margin + 4 + boxW * 2 + 18;
+  const barW = pageW - margin * 2 - barX + margin - 8;
+  const barH = 8;
+  const barY = boxY + 4;
+
+  doc.setTextColor(51, 65, 85);
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "normal");
+  doc.text("Riduzione vincoli", barX, boxY + 2);
+
+  // Background bar (AUL = 100%)
+  doc.setFillColor(226, 232, 240);
+  doc.roundedRect(barX, barY, barW, barH, 1, 1, "F");
+
+  // Green bar (AUN %)
+  if (percNetta > 0) {
+    doc.setFillColor(34, 197, 94);
+    doc.roundedRect(barX, barY, barW * (percNetta / 100), barH, 1, 1, "F");
+  }
+
+  // Percentage labels
+  doc.setFontSize(7);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(22, 101, 52);
+  doc.text(`${percNetta.toFixed(0)}% netta`, barX + 2, barY + barH + 6);
+  doc.setTextColor(185, 28, 28);
+  doc.text(`-${percRiduzione.toFixed(0)}% vincoli`, barX + barW, barY + barH + 6, { align: "right" });
+
+  y += 34;
+
   // ── Rischio complessivo ───────────────────────────────────
   const rc = RISCHIO_COLOR[analisi.rischioComplessivo] || [100, 100, 100];
   doc.setFillColor(...rc);
