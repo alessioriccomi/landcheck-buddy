@@ -835,6 +835,7 @@ serve(async (req) => {
         "geodata.mit.gov.it",
         "wms.cartografia.agenziaentrate.gov.it",
         "idrogeo.isprambiente.it",
+        "sinacloud.isprambiente.it",
         "webapps.sit.puglia.it",
         "www502.regione.toscana.it",
         "www.cartografia.servizirl.it",
