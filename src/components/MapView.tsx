@@ -224,9 +224,17 @@ function makeBaselayer(id: BasemapId): L.TileLayer {
   }
 }
 
+interface CustomConstraintLayer {
+  id: string;
+  name: string;
+  url: string;
+  color: string;
+}
+
 interface MapViewProps {
   particelle: Particella[];
   activeLayers: Record<string, boolean>;
+  customConstraints?: CustomConstraintLayer[];
   onParcelGeometries?: (geoms: Record<string, L.LatLngExpression[][]>) => void;
   onParcelAreaUpdate?: (id: string, mq: number) => void;
   onAddParticella?: (p: Particella) => void;
