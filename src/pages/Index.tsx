@@ -1,11 +1,18 @@
 import { useState, useCallback } from "react";
-import { Search, FileSearch, RotateCcw, AlertCircle, ChevronLeft, ChevronRight, Loader2, Map, Download } from "lucide-react";
+import {
+  Search, FileSearch, RotateCcw, AlertCircle, ChevronLeft, ChevronRight,
+  Loader2, Map, Download, LogIn, LogOut, User, Plus, Trash2, Eye, EyeOff,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ParcelInput } from "@/components/ParcelInput";
 import { ConstraintPanel } from "@/components/ConstraintPanel";
 import { LayerControl, ALL_LAYERS } from "@/components/LayerControl";
 import { WmsLegend } from "@/components/WmsLegend";
 import { MapView } from "@/components/MapView";
+import { AuthDialog } from "@/components/AuthDialog";
+import { CustomConstraintDialog } from "@/components/CustomConstraintDialog";
+import { useAuth } from "@/hooks/useAuth";
+import { useCustomConstraints } from "@/hooks/useCustomConstraints";
 import { Particella, AnalisiVincolistica } from "@/types/vincoli";
 import { runAnalisiVincolistica } from "@/lib/analisiVincoli";
 import { exportReportPDF } from "@/lib/exportPDF";
@@ -23,6 +30,11 @@ export default function Index() {
   const [layerState, setLayerState] = useState<Record<string, boolean>>(
     Object.fromEntries(ALL_LAYERS.map(l => [l.id, l.defaultOn]))
   );
+  const [authOpen, setAuthOpen] = useState(false);
+  const [constraintDialogOpen, setConstraintDialogOpen] = useState(false);
+
+  const { user, isAuthenticated, signOut } = useAuth();
+  const { constraints, addConstraint, toggleConstraint, deleteConstraint } = useCustomConstraints(user?.id);
 
   const handleToggleSelectParcel = useCallback((id: string) => {
     setSelectedParcelIds(prev =>
@@ -34,7 +46,6 @@ export default function Index() {
     setSelectedParcelIds([]);
   }, []);
 
-  // Called by MapView to propagate real WFS area back to the parcel list
   const handleParcelAreaUpdate = useCallback((id: string, mq: number) => {
     setParticelle(prev =>
       prev.map(p => p.id === id ? { ...p, superficieMq: mq } : p)
@@ -61,11 +72,7 @@ export default function Index() {
 
   const handleExportPDF = async () => {
     if (!analisi) return;
-    // Pass current particelle with real areas into the analisi object before export
-    const analisiWithAreas: AnalisiVincolistica = {
-      ...analisi,
-      particelle: particelle,
-    };
+    const analisiWithAreas: AnalisiVincolistica = { ...analisi, particelle };
     setPdfLoading(true);
     try {
       exportReportPDF(analisiWithAreas);
@@ -74,9 +81,19 @@ export default function Index() {
     }
   };
 
+  // Custom constraints active in map (only active ones)
+  const activeCustomConstraints = constraints.filter(c => c.active);
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-background">
+      {/* Dialogs */}
+      <AuthDialog open={authOpen} onOpenChange={setAuthOpen} />
+      <CustomConstraintDialog
+        open={constraintDialogOpen}
+        onOpenChange={setConstraintDialogOpen}
+        onSubmit={addConstraint}
+      />
+
       {/* Header */}
       <header className="flex-shrink-0 h-14 flex items-center px-4 gap-3 border-b border-border bg-primary text-primary-foreground z-10">
         <div className="flex items-center gap-2.5">
@@ -114,6 +131,35 @@ export default function Index() {
               Nuova analisi
             </Button>
           </div>
+        )}
+
+        {/* Auth button */}
+        {isAuthenticated ? (
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-xs text-primary-foreground/70">
+              <User size={13} />
+              <span className="hidden md:block max-w-[120px] truncate">{user?.email}</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => signOut()}
+              className="text-primary-foreground/70 hover:text-primary-foreground h-8 gap-1 text-xs"
+              title="Esci"
+            >
+              <LogOut size={13} />
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setAuthOpen(true)}
+            className="text-primary-foreground/80 hover:text-primary-foreground h-8 gap-1.5 text-xs border border-primary-foreground/20"
+          >
+            <LogIn size={13} />
+            Accedi
+          </Button>
         )}
       </header>
 
@@ -158,6 +204,88 @@ export default function Index() {
                     </p>
                   )}
                 </div>
+
+                {/* Vincoli personalizzati */}
+                <div className="pt-2 border-t border-border">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <h2 className="text-sm font-semibold text-foreground">Vincoli personalizzati</h2>
+                      <p className="text-xs text-muted-foreground mt-0.5">Layer WMS/ArcGIS aggiuntivi</p>
+                    </div>
+                    {isAuthenticated ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setConstraintDialogOpen(true)}
+                        className="h-7 text-xs gap-1 flex-shrink-0"
+                      >
+                        <Plus size={11} />
+                        Aggiungi
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setAuthOpen(true)}
+                        className="h-7 text-xs text-muted-foreground gap-1"
+                        title="Accedi per aggiungere vincoli personalizzati"
+                      >
+                        <LogIn size={11} />
+                        Accedi
+                      </Button>
+                    )}
+                  </div>
+
+                  {!isAuthenticated && (
+                    <div className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-3 text-center">
+                      <LogIn size={16} className="mx-auto mb-1 opacity-50" />
+                      Accedi per aggiungere e salvare<br />layer vincolistici personalizzati
+                    </div>
+                  )}
+
+                  {isAuthenticated && constraints.length === 0 && (
+                    <div className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-3 text-center">
+                      Nessun vincolo personalizzato.<br />Aggiungi un URL WMS o ArcGIS.
+                    </div>
+                  )}
+
+                  {isAuthenticated && constraints.length > 0 && (
+                    <div className="space-y-1.5">
+                      {constraints.map(c => (
+                        <div
+                          key={c.id}
+                          className="flex items-center gap-2 bg-card border border-border rounded-md px-2.5 py-2 group"
+                        >
+                          <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: c.color }} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate text-foreground">{c.name}</p>
+                            {c.description && (
+                              <p className="text-[10px] text-muted-foreground truncate">{c.description}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              onClick={() => toggleConstraint(c.id, !c.active)}
+                              className="text-muted-foreground hover:text-foreground transition-colors"
+                              title={c.active ? "Nascondi layer" : "Mostra layer"}
+                            >
+                              {c.active
+                                ? <Eye size={12} className="text-primary" />
+                                : <EyeOff size={12} />}
+                            </button>
+                            <button
+                              onClick={() => deleteConstraint(c.id)}
+                              className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+                              title="Elimina vincolo"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </>
             )}
 
@@ -176,7 +304,7 @@ export default function Index() {
                   </p>
                 </div>
                 <div className="w-full space-y-1.5 text-left bg-muted/30 rounded-lg p-3">
-                {[
+                  {[
                     "Catasto WFS — Agenzia delle Entrate",
                     "Geoportale Nazionale — MiC/Vincoli in Rete",
                     "ISPRA — PAI · Frane · Alluvioni (PGRA)",
@@ -256,6 +384,7 @@ export default function Index() {
           <MapView
             particelle={particelle}
             activeLayers={layerState}
+            customConstraints={activeCustomConstraints}
             onParcelAreaUpdate={handleParcelAreaUpdate}
             selectedParcelIds={selectedParcelIds}
             onToggleSelectParcel={handleToggleSelectParcel}
@@ -270,7 +399,6 @@ export default function Index() {
 
           {/* WMS Legend for active vincoli layers */}
           <WmsLegend activeLayers={layerState} />
-
         </main>
       </div>
     </div>
