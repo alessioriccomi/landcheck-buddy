@@ -27,6 +27,9 @@ interface ParcelInputProps {
 
 const EMPTY_FORM = { comune: "", provincia: "", foglio: "", particella: "", subalterno: "" };
 
+// Geocode cache to avoid duplicate API calls
+const geocodeCache = new Map<string, GeocodeSuggestion[]>();
+
 // Debounce helper
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
