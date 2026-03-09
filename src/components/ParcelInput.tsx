@@ -27,6 +27,9 @@ interface ParcelInputProps {
 
 const EMPTY_FORM = { comune: "", provincia: "", foglio: "", particella: "", subalterno: "" };
 
+// Geocode cache to avoid duplicate API calls
+const geocodeCache = new Map<string, GeocodeSuggestion[]>();
+
 // Debounce helper
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -52,6 +55,16 @@ export function ParcelInput({ particelle, onChange, selectedIds, onToggleSelect,
     if (query.length < 2) {
       setSuggestions([]);
       setSuggestionsOpen(false);
+      return;
+    }
+
+    // Check cache first
+    const cacheKey = query.toLowerCase();
+    if (geocodeCache.has(cacheKey)) {
+      const cachedResults = geocodeCache.get(cacheKey)!;
+      setSuggestions(cachedResults);
+      setSuggestionsOpen(cachedResults.length > 0);
+      setLoadingSuggestions(false);
       return;
     }
 
@@ -81,6 +94,8 @@ export function ParcelInput({ particelle, onChange, selectedIds, onToggleSelect,
           }));
 
         if (!cancelled) {
+          // Cache the results
+          geocodeCache.set(cacheKey, results);
           setSuggestions(results);
           setSuggestionsOpen(results.length > 0);
         }
