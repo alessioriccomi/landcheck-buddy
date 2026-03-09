@@ -520,7 +520,7 @@ function buildVincoliAgricoli(particelle: Particella[]): VincoloItem[] {
       categoria: "Vincoli Agricoli",
       sottocategoria: "🌳 Olivi monumentali (L.R. Puglia 14/2007 - L. 168/2017)",
       normativa: "L. 168/2017 - L.R. Puglia 14/2007 e s.m.i.",
-      presenza: randomPresenza([["verifica", 50], ["presente", 30], ["assente", 20]]),
+      presenza: "verifica",
       descrizione: "Puglia: verifica obbligatoria presenza olivi monumentali. Vietato sradicare, espianto o alterazione delle piante iscritte al Registro Regionale",
       fonte: "Regione Puglia - Registro degli ulivi monumentali",
       note: "ATTENZIONE PUGLIA: L'olivo monumentale è inabbattibile. Le strutture agrivoltaiche devono essere progettate attorno ad essi. Verificare registro comunale e regionale",
