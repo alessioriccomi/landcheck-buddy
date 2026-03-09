@@ -840,20 +840,29 @@ export async function runAnalisiVincolistica(particelle: Particella[]): Promise<
   const areaUtileLordaHa = particelle.reduce((sum, p) => sum + (p.superficieMq ?? 0), 0) / 10_000;
 
   // AUN: stima l'area netta sottraendo una % per ogni vincolo "presente"
-  // Vincoli escludenti (es. beni culturali, aree protette) pesano di più
-  const allVincoli = [
+  // Le "aree idonee" sono POSITIVE (non riducono l'area, anzi la rendono più accessibile)
+  const vincoliNegativi = [
     ...partial.vincoliCulturali, ...partial.vincoliPaesaggistici,
     ...partial.vincoliIdrogeologici, ...partial.vincoliAmbientali,
     ...partial.rischioIdrico, ...partial.serviziReti, ...partial.altriVincoli,
     ...partial.vincoliAgricoli, ...partial.vincoliMilitariRadar,
     ...partial.vincoliForestali, ...partial.vincoliSismici,
     ...partial.vincoliCatastali, ...partial.compatibilitaConnessione,
-    ...partial.areeIdonee, ...partial.normativaAgrivoltaico,
+    ...partial.normativaAgrivoltaico,
   ];
-  const presenti = allVincoli.filter(v => v.presenza === "presente").length;
-  const verificare = allVincoli.filter(v => v.presenza === "verifica").length;
+  // Aree idonee sono positive: se presenti aumentano l'area utile
+  const areeIdoneeFavorevoli = partial.areeIdonee.filter(v => 
+    v.presenza === "presente" && !v.sottocategoria.toLowerCase().includes("esclud") && !v.sottocategoria.toLowerCase().includes("non idonee")
+  ).length;
+  
+  const presenti = vincoliNegativi.filter(v => v.presenza === "presente").length;
+  const verificare = vincoliNegativi.filter(v => v.presenza === "verifica").length;
+  
   // Ogni vincolo presente riduce ~8% dell'area, ogni "verifica" ~2% (cautelativo)
-  const riduzionePerc = Math.min(0.95, presenti * 0.08 + verificare * 0.02);
+  // Ogni area idonea favorevole recupera +5% dell'area
+  const riduzioneBase = presenti * 0.08 + verificare * 0.02;
+  const bonusIdonee = areeIdoneeFavorevoli * 0.05;
+  const riduzionePerc = Math.max(0, Math.min(0.95, riduzioneBase - bonusIdonee));
   const areaUtileNettaHa = Math.max(0, areaUtileLordaHa * (1 - riduzionePerc));
 
   return {
