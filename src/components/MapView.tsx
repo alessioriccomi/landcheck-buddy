@@ -248,6 +248,7 @@ type ParcelStatus = "idle" | "loading" | "real" | "placeholder";
 export function MapView({
   particelle,
   activeLayers,
+  customConstraints = [],
   onParcelGeometries,
   onParcelAreaUpdate,
   onAddParticella,
@@ -259,6 +260,7 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const wmsLayersRef = useRef<Record<string, L.TileLayer | L.GridLayer>>({});
+  const customLayersRef = useRef<Record<string, L.TileLayer>>({});
   const parcelLayersRef = useRef<L.Layer[]>([]);
   const basemapRef = useRef<L.TileLayer | null>(null);
   // Catasto overlay refs (order: foglio → terreno → fabbricato → labels → graffe)
