@@ -43,6 +43,8 @@ export interface AnalisiVincolistica {
   areeIdonee: VincoloItem[];
   normativaAgrivoltaico: VincoloItem[];
   rischioComplessivo: RischioLevel;
+  areaUtileLordaHa: number;   // AUL – somma superfici particelle (ha)
+  areaUtileNettaHa: number;   // AUN – area al netto dei vincoli (ha)
 }
 
 export const PARCEL_COLORS = [
