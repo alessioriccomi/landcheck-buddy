@@ -58,6 +58,16 @@ export function ParcelInput({ particelle, onChange, selectedIds, onToggleSelect,
       return;
     }
 
+    // Check cache first
+    const cacheKey = query.toLowerCase();
+    if (geocodeCache.has(cacheKey)) {
+      const cachedResults = geocodeCache.get(cacheKey)!;
+      setSuggestions(cachedResults);
+      setSuggestionsOpen(cachedResults.length > 0);
+      setLoadingSuggestions(false);
+      return;
+    }
+
     let cancelled = false;
     setLoadingSuggestions(true);
 
@@ -84,6 +94,8 @@ export function ParcelInput({ particelle, onChange, selectedIds, onToggleSelect,
           }));
 
         if (!cancelled) {
+          // Cache the results
+          geocodeCache.set(cacheKey, results);
           setSuggestions(results);
           setSuggestionsOpen(results.length > 0);
         }
