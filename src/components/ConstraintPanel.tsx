@@ -210,6 +210,36 @@ export function ConstraintPanel({ analisi }: ConstraintPanelProps) {
           </div>
         )}
 
+        {/* AUL / AUN */}
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <div className="bg-muted/40 border border-border rounded-lg p-3 text-center">
+            <p className="text-xs text-muted-foreground mb-0.5">Area Utile Lorda (AUL)</p>
+            <p className="text-lg font-bold text-foreground">
+              {analisi.areaUtileLordaHa.toFixed(2)} <span className="text-xs font-normal text-muted-foreground">ha</span>
+            </p>
+            <p className="text-[10px] text-muted-foreground">{(analisi.areaUtileLordaHa * 10_000).toLocaleString("it-IT", { maximumFractionDigits: 0 })} m²</p>
+          </div>
+          <div className={cn(
+            "border rounded-lg p-3 text-center",
+            analisi.areaUtileNettaHa < analisi.areaUtileLordaHa * 0.5
+              ? "bg-danger-light border-danger/20"
+              : "bg-safe-light border-safe/20"
+          )}>
+            <p className="text-xs text-muted-foreground mb-0.5">Area Utile Netta (AUN)</p>
+            <p className={cn(
+              "text-lg font-bold",
+              analisi.areaUtileNettaHa < analisi.areaUtileLordaHa * 0.5 ? "text-danger" : "text-safe"
+            )}>
+              {analisi.areaUtileNettaHa.toFixed(2)} <span className="text-xs font-normal text-muted-foreground">ha</span>
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              {analisi.areaUtileLordaHa > 0
+                ? `${((analisi.areaUtileNettaHa / analisi.areaUtileLordaHa) * 100).toFixed(0)}% dell'AUL`
+                : "–"}
+            </p>
+          </div>
+        </div>
+
         <p className="text-xs text-muted-foreground mt-2.5">{allVincoli.length} controlli totali · Analisi agrivoltaico completa</p>
       </div>
 

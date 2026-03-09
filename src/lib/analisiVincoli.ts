@@ -783,7 +783,7 @@ function buildNormativaAgrivoltaico(_particelle: Particella[]): VincoloItem[] {
   ];
 }
 
-function computeRischioComplessivo(analisi: Omit<AnalisiVincolistica, "rischioComplessivo">): AnalisiVincolistica["rischioComplessivo"] {
+function computeRischioComplessivo(analisi: Omit<AnalisiVincolistica, "rischioComplessivo" | "areaUtileLordaHa" | "areaUtileNettaHa">): AnalisiVincolistica["rischioComplessivo"] {
   const allVincoli = [
     ...analisi.vincoliCulturali,
     ...analisi.vincoliPaesaggistici,
@@ -834,8 +834,32 @@ export async function runAnalisiVincolistica(particelle: Particella[]): Promise<
     normativaAgrivoltaico: buildNormativaAgrivoltaico(particelle),
   };
 
+  const rischioComplessivo = computeRischioComplessivo(partial);
+
+  // ── AUL / AUN ──
+  const areaUtileLordaHa = particelle.reduce((sum, p) => sum + (p.superficieMq ?? 0), 0) / 10_000;
+
+  // AUN: stima l'area netta sottraendo una % per ogni vincolo "presente"
+  // Vincoli escludenti (es. beni culturali, aree protette) pesano di più
+  const allVincoli = [
+    ...partial.vincoliCulturali, ...partial.vincoliPaesaggistici,
+    ...partial.vincoliIdrogeologici, ...partial.vincoliAmbientali,
+    ...partial.rischioIdrico, ...partial.serviziReti, ...partial.altriVincoli,
+    ...partial.vincoliAgricoli, ...partial.vincoliMilitariRadar,
+    ...partial.vincoliForestali, ...partial.vincoliSismici,
+    ...partial.vincoliCatastali, ...partial.compatibilitaConnessione,
+    ...partial.areeIdonee, ...partial.normativaAgrivoltaico,
+  ];
+  const presenti = allVincoli.filter(v => v.presenza === "presente").length;
+  const verificare = allVincoli.filter(v => v.presenza === "verifica").length;
+  // Ogni vincolo presente riduce ~8% dell'area, ogni "verifica" ~2% (cautelativo)
+  const riduzionePerc = Math.min(0.95, presenti * 0.08 + verificare * 0.02);
+  const areaUtileNettaHa = Math.max(0, areaUtileLordaHa * (1 - riduzionePerc));
+
   return {
     ...partial,
-    rischioComplessivo: computeRischioComplessivo(partial),
+    rischioComplessivo,
+    areaUtileLordaHa: Math.round(areaUtileLordaHa * 1000) / 1000,
+    areaUtileNettaHa: Math.round(areaUtileNettaHa * 1000) / 1000,
   };
 }
