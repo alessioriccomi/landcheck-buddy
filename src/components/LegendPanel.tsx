@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Eye, EyeOff, ChevronDown, ChevronRight, Power, PowerOff, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { Eye, EyeOff, ChevronDown, ChevronRight, Power, PowerOff, RefreshCw, Wifi, WifiOff, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { LAYER_GROUPS, ALL_LAYERS, type LayerGroup } from "@/lib/layerDefinitions";
@@ -59,6 +59,7 @@ export function LegendPanel({
     switch (status) {
       case "online": return <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" title="Server online" />;
       case "offline": return <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0 animate-pulse" title="Server offline" />;
+      case "tls_error": return <ShieldAlert size={10} className="text-amber-500 flex-shrink-0" title="Certificato TLS non valido" />;
       case "checking": return <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0 animate-pulse" title="Verifica in corso..." />;
       default: return <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 flex-shrink-0" title="Stato sconosciuto" />;
     }
@@ -68,6 +69,7 @@ export function LegendPanel({
   const allStatuses = Object.values(serverStatuses);
   const onlineCount = allStatuses.filter(s => s.status === "online").length;
   const offlineCount = allStatuses.filter(s => s.status === "offline").length;
+  const tlsErrorCount = allStatuses.filter(s => s.status === "tls_error").length;
   const checkingCount = allStatuses.filter(s => s.status === "checking").length;
   const totalHosts = allStatuses.length;
 
