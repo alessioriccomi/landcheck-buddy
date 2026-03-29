@@ -264,6 +264,16 @@ export default function Settings() {
   // "Vincoli personalizzati" group for custom layers without a matching group
   const orphanCustom = customLayers.filter(cl => !LAYER_GROUPS.some(g => g.id === cl.groupId));
 
+  const TestBtn = ({ url }: { url: string }) => {
+    const st = testingUrls[url];
+    return (
+      <button onClick={() => testUrl(url)} className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border border-border hover:bg-muted" title="Test connessione">
+        {st === "checking" ? <Loader2 size={8} className="animate-spin" /> : st === "online" ? <Wifi size={8} className="text-green-500" /> : st === "offline" ? <WifiOff size={8} className="text-destructive" /> : <Wifi size={8} />}
+        <span>{st === "checking" ? "..." : st === "online" ? "OK" : st === "offline" ? "KO" : "Test"}</span>
+      </button>
+    );
+  };
+
   const renderLayerRow = (layer: LayerDef | CustomLayer, isCustom: boolean) => {
     const ov = overrides[layer.id] || {};
     const hasOverride = !!overrides[layer.id];
@@ -273,8 +283,11 @@ export default function Settings() {
     const noUrl = !isWms && !isArcgis;
     const effectiveFallbacks = ov.fallbackUrls || (layer as LayerDef).fallbackUrls || [];
     const fbExpanded = expandedFallbacks.has(layer.id);
+    const primaryUrl = isCustom
+      ? ((layer as CustomLayer).wmsUrl || (layer as CustomLayer).arcgisUrl || "")
+      : (ov.wmsUrl || ov.arcgisUrl || layer.wmsUrl || layer.arcgisUrl || "");
 
-    if (isDeleted && search) return null; // hide deleted when searching
+    if (isDeleted && search) return null;
 
     return (
       <div key={layer.id} className={`px-3 py-2.5 space-y-1.5 ${isDeleted ? "opacity-40" : ""}`}>
@@ -285,6 +298,7 @@ export default function Settings() {
             {isCustom && <span className="ml-1 text-[9px] bg-primary/10 text-primary px-1 rounded">custom</span>}
           </span>
           <div className="flex items-center gap-1">
+            {!isDeleted && primaryUrl && <TestBtn url={primaryUrl} />}
             {isDeleted ? (
               <button onClick={() => restoreLayer(layer.id)} className="text-[9px] text-primary hover:underline">Ripristina</button>
             ) : (
@@ -375,6 +389,7 @@ export default function Settings() {
                         ) : (
                           <Input value={fb} onChange={e => updateFallback(layer.id, i, e.target.value)} className="h-5 text-[9px] font-mono flex-1" />
                         )}
+                        {fb && <TestBtn url={fb} />}
                         <button onClick={() => isCustom ? removeCustomFallback(layer.id, i) : removeFallback(layer.id, i)} className="text-muted-foreground hover:text-destructive">
                           <X size={9} />
                         </button>
