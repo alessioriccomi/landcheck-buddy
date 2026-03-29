@@ -857,6 +857,7 @@ serve(async (req) => {
         "www.umbriageo.regione.umbria.it",
         "umbriageo.regione.umbria.it",
         "siat.regione.marche.it",
+        "sitr.regione.marche.it",
         "webgis.regione.taa.it",
         "mappe.regione.vda.it",
         "siat.provincia.tn.it",
@@ -885,51 +886,57 @@ serve(async (req) => {
       }
 
       try {
-        // Follow redirects manually to avoid infinite redirect loops (e.g. sit2.regione.campania.it)
+        // Follow redirects manually to avoid infinite redirect loops
         let currentUrl = targetUrl;
-        let resp: Response | null = null;
-        let redirectCount = 0;
-        const maxRedirects = 5;
-        for (let i = 0; i < maxRedirects; i++) {
-          resp = await fetch(currentUrl, {
-            redirect: "manual",
-            headers: {
-              "User-Agent": "Mozilla/5.0 (compatible; GeoVincoliProxy/1.0)",
-              Accept: "image/png,image/*,application/json,text/xml",
-            },
-          });
+        let finalResp: Response | null = null;
+        for (let i = 0; i < 5; i++) {
+          let resp: Response;
+          try {
+            resp = await fetch(currentUrl, {
+              redirect: "manual",
+              headers: {
+                "User-Agent": "Mozilla/5.0 (compatible; GeoVincoliProxy/1.0)",
+                Accept: "image/png,image/*,application/json,text/xml",
+              },
+            });
+          } catch (fetchErr) {
+            return new Response(JSON.stringify({ error: "WMS fetch failed", detail: String(fetchErr) }), {
+              status: 502,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
           if (resp.status >= 300 && resp.status < 400) {
             const loc = resp.headers.get("location");
-            if (!loc) break;
+            // consume redirect body
+            try { await resp.arrayBuffer(); } catch { /* ignore */ }
+            if (!loc) {
+              return new Response(JSON.stringify({ error: "Redirect without location" }), {
+                status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
             const nextUrl = new URL(loc, currentUrl);
             if (!allowedDomains.some((d) => nextUrl.hostname === d || nextUrl.hostname.endsWith("." + d))) {
-              await resp.text(); // consume
               return new Response(JSON.stringify({ error: "Redirect to disallowed domain" }), {
-                status: 403,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
               });
             }
             currentUrl = nextUrl.toString();
-            // consume body to prevent resource leak
-            await resp.text();
-            redirectCount++;
             continue;
           }
+          // Non-redirect response — use it
+          finalResp = resp;
           break;
         }
-        if (!resp) throw new Error("No response received");
-        // If we exhausted redirects, resp body was already consumed
-        if (redirectCount >= maxRedirects) {
+        if (!finalResp) {
           return new Response(JSON.stringify({ error: "Too many redirects" }), {
-            status: 502,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-        const imageData = await resp.arrayBuffer();
+        const imageData = await finalResp.arrayBuffer();
         return new Response(imageData, {
           headers: {
             ...corsHeaders,
-            "Content-Type": resp.headers.get("Content-Type") ?? "image/png",
+            "Content-Type": finalResp.headers.get("Content-Type") ?? "image/png",
             "Cache-Control": "public, max-age=3600",
           },
         });
