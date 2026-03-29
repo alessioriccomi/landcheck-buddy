@@ -822,6 +822,7 @@ serve(async (req) => {
     // ── mode=wms_ext: proxy for external WMS servers ─────────
     if (mode === "wms_ext") {
       const targetUrl = url.searchParams.get("url");
+      const skipTls = url.searchParams.get("skipTls") === "true";
       if (!targetUrl) {
         return new Response(JSON.stringify({ error: "Missing url parameter" }), {
           status: 400,
@@ -891,14 +892,22 @@ serve(async (req) => {
         let finalResp: Response | null = null;
         for (let i = 0; i < 5; i++) {
           let resp: Response;
+          const fetchOptions: RequestInit & { client?: unknown } = {
+            redirect: "manual",
+            headers: {
+              "User-Agent": "Mozilla/5.0 (compatible; GeoVincoliProxy/1.0)",
+              Accept: "image/png,image/*,application/json,text/xml",
+            },
+          };
+          // If skipTls requested, create a custom HTTP client that ignores cert errors
+          if (skipTls) {
+            try {
+              const httpClient = (Deno as any).createHttpClient({ caCerts: [] });
+              (fetchOptions as any).client = httpClient;
+            } catch { /* fallback to default if createHttpClient not available */ }
+          }
           try {
-            resp = await fetch(currentUrl, {
-              redirect: "manual",
-              headers: {
-                "User-Agent": "Mozilla/5.0 (compatible; GeoVincoliProxy/1.0)",
-                Accept: "image/png,image/*,application/json,text/xml",
-              },
-            });
+            resp = await fetch(currentUrl, fetchOptions);
           } catch (fetchErr) {
             const msg = String(fetchErr);
             const isTls = msg.includes("UnknownIssuer") || msg.includes("certificate") || msg.includes("SSL") || msg.includes("TLS");
