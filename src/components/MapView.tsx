@@ -462,6 +462,68 @@ export function MapView({
     };
   }, []);
 
+  // ── Fallback URL resolution when server statuses arrive ──────
+  // Re-creates layer tiles for offline servers that have fallback URLs
+  const resolvedFallbacksRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || Object.keys(serverStatuses).length === 0) return;
+
+    for (const layerDef of ALL_LAYERS) {
+      if (resolvedFallbacksRef.current.has(layerDef.id)) continue;
+      if (!layerDef.fallbackUrls?.length) continue;
+
+      const primaryUrl = layerDef.arcgisUrl || layerDef.wmsUrl;
+      if (!primaryUrl) continue;
+
+      const status = getServerStatusForUrl(primaryUrl, serverStatuses);
+      if (status !== "offline") continue;
+
+      // Try fallback URLs
+      for (const fbUrl of layerDef.fallbackUrls) {
+        const fbStatus = getServerStatusForUrl(fbUrl, serverStatuses);
+        if (fbStatus === "offline") continue;
+
+        // Found a viable fallback — recreate the layer
+        console.log(`[Fallback] ${layerDef.id}: switching from ${primaryUrl} to ${fbUrl}`);
+        const proxyBase = `${SUPABASE_URL}/functions/v1/wfs-proxy`;
+        const oldLayer = wmsLayersRef.current[layerDef.id];
+        const wasOnMap = oldLayer && map.hasLayer(oldLayer);
+
+        // Create replacement layer with fallback URL
+        const TileLayerClass = L.TileLayer.extend({
+          getTileUrl(coords: L.Coords): string {
+            const m = (this as unknown as { _map: L.Map })._map;
+            if (!m) return "";
+            const sz = 256;
+            const nw = m.unproject([coords.x * sz, coords.y * sz], coords.z);
+            const se = m.unproject([(coords.x + 1) * sz, (coords.y + 1) * sz], coords.z);
+            const south = Math.min(nw.lat, se.lat), north = Math.max(nw.lat, se.lat);
+            const west = Math.min(nw.lng, se.lng), east = Math.max(nw.lng, se.lng);
+            let targetUrl = `${fbUrl}/export?bbox=${west},${south},${east},${north}&bboxSR=4326&imageSR=4326&size=${sz},${sz}&format=png32&transparent=true&f=image`;
+            if (layerDef.arcgisLayers) targetUrl += `&layers=${encodeURIComponent(layerDef.arcgisLayers)}`;
+            return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}`;
+          },
+        });
+        const newLayer = new TileLayerClass("", {
+          opacity: layerDef.opacity ?? 0.5,
+          pane: "wmsPane",
+          tileSize: 256,
+          maxZoom: 19,
+          attribution: "ISPRA (fallback)",
+        } as L.TileLayerOptions & { pane: string });
+
+        if (wasOnMap) {
+          map.removeLayer(oldLayer);
+          newLayer.addTo(map);
+        }
+        wmsLayersRef.current[layerDef.id] = newLayer;
+        resolvedFallbacksRef.current.add(layerDef.id);
+        break;
+      }
+    }
+  }, [serverStatuses]);
+
   // ── Map click handler (for adding parcels by clicking) ──────
   useEffect(() => {
     const map = mapRef.current;
