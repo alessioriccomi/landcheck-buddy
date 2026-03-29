@@ -134,17 +134,17 @@ export function AnalysisPanel({
       {/* Main content with tabs */}
       {step !== "analyzing" && (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="flex-shrink-0 mx-2 mt-2 h-8 flex-wrap">
-            <TabsTrigger value="particelle" className="text-[10px] flex-1">Particelle</TabsTrigger>
+          <TabsList className="flex-shrink-0 mx-2 mt-2 h-8">
+            <TabsTrigger value="particelle" className="text-[10px] flex-1 px-1.5">Particelle</TabsTrigger>
             {step === "results" && (
               <>
-                <TabsTrigger value="risultati" className="text-[10px] flex-1">Risultati</TabsTrigger>
-                <TabsTrigger value="cdu" className="text-[10px] flex-1">CDU</TabsTrigger>
+                <TabsTrigger value="risultati" className="text-[10px] flex-1 px-1.5">Risultati</TabsTrigger>
+                <TabsTrigger value="cdu" className="text-[10px] flex-1 px-1.5">CDU</TabsTrigger>
               </>
             )}
-            <TabsTrigger value="vincoli" className="text-[10px] flex-1">Custom</TabsTrigger>
-            <TabsTrigger value="salvate" className="text-[10px] flex-1">Salvate</TabsTrigger>
-            <TabsTrigger value="profilo" className="text-[10px] flex-1">Profilo</TabsTrigger>
+            <TabsTrigger value="vincoli" className="text-[10px] flex-1 px-1.5">Custom</TabsTrigger>
+            <TabsTrigger value="salvate" className="text-[10px] flex-1 px-1.5">Salvate</TabsTrigger>
+            <TabsTrigger value="profilo" className="text-[10px] flex-1 px-1.5">Profilo</TabsTrigger>
           </TabsList>
 
           {/* Tab: Particelle */}
