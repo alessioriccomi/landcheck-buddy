@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Save, RotateCcw, Search, Plus, Trash2, ChevronDown, ChevronRight, X } from "lucide-react";
+import { ArrowLeft, Save, RotateCcw, Search, Plus, Trash2, ChevronDown, ChevronRight, X, Download, Upload, Wifi, WifiOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
@@ -43,6 +43,9 @@ function generateId() {
   return "custom_" + Math.random().toString(36).slice(2, 10);
 }
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
 export default function Settings() {
   const navigate = useNavigate();
   const [overrides, setOverrides] = useState<Overrides>(loadOverrides);
@@ -52,8 +55,57 @@ export default function Settings() {
   const [expandedFallbacks, setExpandedFallbacks] = useState<Set<string>>(new Set());
   const [addingToGroup, setAddingToGroup] = useState<string | null>(null);
   const [newLayer, setNewLayer] = useState<Partial<CustomLayer>>({});
+  const [testingUrls, setTestingUrls] = useState<Record<string, "checking" | "online" | "offline">>({});
 
   const markDirty = () => setDirty(true);
+
+  // ── Test connection ──
+  const testUrl = async (url: string) => {
+    if (!url) return;
+    setTestingUrls(prev => ({ ...prev, [url]: "checking" }));
+    try {
+      const isArcgis = url.includes("/rest/services/") || url.includes("/MapServer");
+      const probeUrl = isArcgis ? `${url}${url.includes("?") ? "&" : "?"}f=json` : `${url}${url.includes("?") ? "&" : "?"}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities`;
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/wfs-proxy?mode=wms_ext&url=${encodeURIComponent(probeUrl)}`, {
+        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+        signal: AbortSignal.timeout(15000),
+      });
+      const text = await resp.text();
+      const ok = resp.ok && !text.includes("503 Service") && !text.includes("Pagina non trovata") && !text.includes("<title>40");
+      setTestingUrls(prev => ({ ...prev, [url]: ok ? "online" : "offline" }));
+    } catch {
+      setTestingUrls(prev => ({ ...prev, [url]: "offline" }));
+    }
+  };
+
+  // ── Export/Import ──
+  const exportConfig = () => {
+    const config = { overrides, customLayers, exportedAt: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `geovincoli-config-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    toast.success("Configurazione esportata");
+  };
+
+  const importConfig = () => {
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = ".json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const config = JSON.parse(text);
+        if (config.overrides) setOverrides(config.overrides);
+        if (config.customLayers) setCustomLayers(config.customLayers);
+        markDirty();
+        toast.success("Configurazione importata. Premi Salva per applicare.");
+      } catch { toast.error("File non valido"); }
+    };
+    input.click();
+  };
 
   const updateField = (layerId: string, field: string, value: string) => {
     setOverrides(prev => ({ ...prev, [layerId]: { ...prev[layerId], [field]: value } }));
