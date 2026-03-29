@@ -97,9 +97,14 @@ export function AnalysisPanel({
             </button>
           </div>
         ) : (
-          <Button variant="ghost" size="sm" onClick={onAuthOpen} className="h-6 text-[10px] gap-1">
-            <LogIn size={10} /> Accedi
-          </Button>
+          <div className="flex items-center gap-1">
+            <button onClick={() => navigate("/settings")} className="p-1 text-muted-foreground hover:text-foreground" title="Impostazioni">
+              <Settings size={11} />
+            </button>
+            <Button variant="ghost" size="sm" onClick={onAuthOpen} className="h-6 text-[10px] gap-1">
+              <LogIn size={10} /> Accedi
+            </Button>
+          </div>
         )}
       </div>
 
