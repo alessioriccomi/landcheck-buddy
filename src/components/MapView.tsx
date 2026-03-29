@@ -441,15 +441,25 @@ export function MapView({
       );
     };
 
+    // Load user URL overrides from localStorage
+    let urlOverrides: Record<string, { wmsUrl?: string; arcgisUrl?: string; wmsLayer?: string; arcgisLayers?: string }> = {};
+    try { urlOverrides = JSON.parse(localStorage.getItem("lc_layer_url_overrides") || "{}"); } catch {}
+
     // Create all WMS layers and populate the ref
     for (const layerDef of ALL_LAYERS) {
       try {
-        if (layerDef.arcgisUrl) {
-          wmsLayersRef.current[layerDef.id] = makeArcGISLayer(layerDef.arcgisUrl, layerDef.arcgisLayers, layerDef.opacity ?? 0.5);
-        } else if (layerDef.wmsUrl && layerDef.wmsLayer) {
-          wmsLayersRef.current[layerDef.id] = makeProxiedWmsLayer(layerDef.wmsUrl, layerDef.wmsLayer, layerDef.opacity ?? 0.5);
+        const ov = urlOverrides[layerDef.id];
+        const arcUrl = ov?.arcgisUrl || layerDef.arcgisUrl;
+        const arcLayers = ov?.arcgisLayers || layerDef.arcgisLayers;
+        const wUrl = ov?.wmsUrl || layerDef.wmsUrl;
+        const wLayer = ov?.wmsLayer || layerDef.wmsLayer;
+
+        if (arcUrl) {
+          wmsLayersRef.current[layerDef.id] = makeArcGISLayer(arcUrl, arcLayers, layerDef.opacity ?? 0.5);
+        } else if (wUrl && wLayer) {
+          wmsLayersRef.current[layerDef.id] = makeProxiedWmsLayer(wUrl, wLayer, layerDef.opacity ?? 0.5);
         }
-        console.log(`[LayerInit] Created layer: ${layerDef.id}`);
+        console.log(`[LayerInit] Created layer: ${layerDef.id}${ov ? ' (override)' : ''}`);
       } catch (err) {
         console.warn(`Failed to create layer ${layerDef.id}:`, err);
       }
