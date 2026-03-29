@@ -2,7 +2,11 @@ import jsPDF from "jspdf";
 import { Particella, AnalisiVincolistica, CRITICITA_CONFIG } from "@/types/vincoli";
 import { getVincoliPresenti } from "@/lib/vincoliUtils";
 
-export function exportCDUPDF(particella: Particella, analisi: AnalisiVincolistica | null) {
+export function exportCDUPDF(
+  particella: Particella,
+  analisi: AnalisiVincolistica | null,
+  zonaInfo?: { zona: string; sottozona: string; descrizione: string; fonte: string },
+) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const w = doc.internal.pageSize.getWidth();
   let y = 20;
@@ -27,9 +31,11 @@ export function exportCDUPDF(particella: Particella, analisi: AnalisiVincolistic
   doc.setFont("helvetica", "normal");
   const rows: [string, string][] = [
     ["Comune", particella.comune],
+    ["Provincia", particella.provincia || "—"],
     ["Foglio", particella.foglio],
     ["Particella", particella.particella],
     ["Sezione", particella.sezione || "—"],
+    ["Subalterno", particella.subalterno || "—"],
     ["Superficie", particella.superficieMq ? `${particella.superficieMq.toLocaleString("it-IT")} m²` : "N/D"],
     ["Ettari", particella.superficieMq ? `${(particella.superficieMq / 10000).toFixed(4)} ha` : "N/D"],
   ];
@@ -45,12 +51,19 @@ export function exportCDUPDF(particella: Particella, analisi: AnalisiVincolistic
 
   doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
-  doc.text("ZONA URBANISTICA", 15, y);
+  doc.text("ZONA URBANISTICA (PRG/PUC)", 15, y);
   y += 6;
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.text("Zona E (agricola) — da verificare con PRG/PUC comunale", 15, y);
-  y += 10;
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  const zDesc = zonaInfo ? `Zona ${zonaInfo.sottozona} — ${zonaInfo.descrizione}` : "Zona E (agricola) — da verificare";
+  doc.text(zDesc, 15, y);
+  y += 5;
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "italic");
+  doc.setTextColor(120, 120, 120);
+  doc.text(zonaInfo?.fonte || "Verificare con PRG/PUC comunale", 15, y);
+  doc.setTextColor(0, 0, 0);
+  y += 8;
 
   const vincoli = analisi ? getVincoliPresenti(analisi) : [];
   doc.setFontSize(11);
@@ -66,7 +79,7 @@ export function exportCDUPDF(particella: Particella, analisi: AnalisiVincolistic
   } else {
     doc.setFontSize(8);
     for (const v of vincoli) {
-      if (y > 260) { doc.addPage(); y = 20; }
+      if (y > 250) { doc.addPage(); y = 20; }
       const cfg = v.criticita ? CRITICITA_CONFIG[v.criticita] : null;
       const prefix = cfg?.label ?? "—";
       doc.setFont("helvetica", "bold");
@@ -75,12 +88,27 @@ export function exportCDUPDF(particella: Particella, analisi: AnalisiVincolistic
       const nameLines = doc.splitTextToSize(v.descrizione, 140);
       doc.text(nameLines, 40, y);
       y += nameLines.length * 4 + 2;
-      if (v.fonte) {
-        doc.setTextColor(120, 120, 120);
-        doc.text(v.fonte, 40, y);
+      // Normativa reference
+      if (v.normativa) {
+        doc.setTextColor(60, 60, 180);
+        doc.text(`Rif. ${v.normativa}`, 40, y);
         doc.setTextColor(0, 0, 0);
         y += 4;
       }
+      if (v.fonte) {
+        doc.setTextColor(120, 120, 120);
+        doc.text(`Fonte: ${v.fonte}`, 40, y);
+        doc.setTextColor(0, 0, 0);
+        y += 4;
+      }
+      if (v.azioneRichiesta) {
+        doc.setTextColor(180, 100, 0);
+        const actionLines = doc.splitTextToSize(`Azione: ${v.azioneRichiesta}`, 140);
+        doc.text(actionLines, 40, y);
+        doc.setTextColor(0, 0, 0);
+        y += actionLines.length * 4 + 1;
+      }
+      y += 1;
     }
   }
   y += 5;
@@ -99,12 +127,30 @@ export function exportCDUPDF(particella: Particella, analisi: AnalisiVincolistic
   else doc.setTextColor(22, 163, 74);
   doc.text(classLabel, 15, y);
   doc.setTextColor(0, 0, 0);
-  y += 12;
+  y += 4;
+
+  // AUL / AUN
+  if (analisi && analisi.areaUtileLordaHa > 0) {
+    if (y > 260) { doc.addPage(); y = 20; }
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("RIEPILOGO AREE", 15, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Area Utile Lorda (AUL): ${analisi.areaUtileLordaHa.toFixed(4)} ha`, 15, y);
+    y += 5;
+    doc.text(`Area Utile Netta (AUN): ${analisi.areaUtileNettaHa.toFixed(4)} ha`, 15, y);
+    y += 5;
+    const pct = ((analisi.areaUtileNettaHa / analisi.areaUtileLordaHa) * 100).toFixed(1);
+    doc.text(`Percentuale utilizzabile: ${pct}%`, 15, y);
+    y += 10;
+  }
 
   doc.setFontSize(7);
   doc.setFont("helvetica", "italic");
   doc.setTextColor(120, 120, 120);
-  const disclaimer = "Il presente CDU sintetico è generato automaticamente da WMS pubblici e NON sostituisce il CDU rilasciato dal Comune ai sensi dell'art. 30 DPR 380/2001.";
+  const disclaimer = "Il presente CDU sintetico è generato automaticamente da WMS pubblici e NON sostituisce il CDU rilasciato dal Comune ai sensi dell'art. 30 DPR 380/2001. Verificare sempre con l'Ufficio Tecnico Comunale.";
   doc.text(doc.splitTextToSize(disclaimer, w - 30), 15, y);
   doc.setTextColor(0, 0, 0);
 
