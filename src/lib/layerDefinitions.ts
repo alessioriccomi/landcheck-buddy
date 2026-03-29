@@ -44,16 +44,28 @@ export const LAYER_GROUPS: LayerGroup[] = [
   },
 
   // ══════════════════════════════════════════════════════════════
-  // BENI CULTURALI — D.Lgs. 42/2004 (Codice dei Beni Culturali)
+  // A. VINCOLI D.LGS. 42/2004 (CODICE DEI BENI CULTURALI E DEL PAESAGGIO)
   // ══════════════════════════════════════════════════════════════
+
+  // ── A1. Beni paesaggistici Art. 136 (bellezze individue e di insieme) ──
   {
-    id: "beni_culturali",
-    label: "Beni Culturali (D.Lgs. 42/2004)",
+    id: "beni_paesaggistici_136",
+    label: "A1. Beni Paesaggistici Art. 136",
     icon: "🏛️",
     layers: [
       {
+        id: "sitap_vincoli_136",
+        label: "Vincoli Art. 136/157 (decretati) — SITAP",
+        color: "#7c3aed",
+        defaultOn: false,
+        wmsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_public/wms",
+        wmsLayer: "sitap_public:sitap_v1497_public",
+        opacity: 0.55,
+        description: "Vincoli paesaggistici 'decretati' Art. 136/157 D.Lgs. 42/2004 — SITAP MiC",
+      },
+      {
         id: "vincoli_art136_142",
-        label: "Vincoli Art. 136/142 (Beni paesaggistici)",
+        label: "Vincoli Art. 136/142 — ISPRA PITESAI",
         color: "#9333ea",
         defaultOn: false,
         arcgisUrl: "https://sinacloud.isprambiente.it/arcgisina/rest/services/PITESAI/PITESAI_Strati_II_livello/MapServer",
@@ -63,25 +75,13 @@ export const LAYER_GROUPS: LayerGroup[] = [
       },
       {
         id: "rischio_beni_esposti",
-        label: "Rischio beni esposti",
+        label: "Rischio beni culturali esposti",
         color: "#c084fc",
         defaultOn: false,
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Rischio_beni_esposti/MapServer",
         opacity: 0.55,
         description: "Beni culturali e ambientali esposti a rischio — PCN",
       },
-      // ── SITAP — Vincoli paesaggistici "decretati" (Art. 136/157) ──
-      {
-        id: "sitap_vincoli_136",
-        label: "SITAP - Vincoli Art. 136/157 (decretati)",
-        color: "#7c3aed",
-        defaultOn: false,
-        wmsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_public/wms",
-        wmsLayer: "sitap_public:sitap_v1497_public",
-        opacity: 0.55,
-        description: "Vincoli paesaggistici 'decretati' Art. 136/157 D.Lgs. 42/2004 — SITAP MiC",
-      },
-      // ── Vincoli in Rete — Aree archeologiche vincolate ──
       {
         id: "vir_aree_archeologiche",
         label: "Aree archeologiche vincolate (VIR)",
@@ -92,18 +92,6 @@ export const LAYER_GROUPS: LayerGroup[] = [
         opacity: 0.55,
         description: "Aree archeologiche vincolate — Vincoli in Rete / Carta del Rischio (MiC)",
       },
-      // ── Zone di interesse archeologico Art. 142 lett. m ──
-      {
-        id: "sitap_art142m_archeo",
-        label: "Zone interesse archeologico Art. 142 lett. m",
-        color: "#92400e",
-        defaultOn: false,
-        wmsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_ws_clone/wms",
-        wmsLayer: "sitap_ws_clone:geo_aree_archeol_vincolate",
-        opacity: 0.55,
-        description: "Aree di interesse archeologico vincolate ai sensi dell'Art. 142 c.1 lett. m — SITAP MiC",
-      },
-      // ── Alberi monumentali (MiC / SITAP) ──
       {
         id: "sitap_alberi_monumentali",
         label: "Alberi monumentali d'Italia",
@@ -117,12 +105,10 @@ export const LAYER_GROUPS: LayerGroup[] = [
     ],
   },
 
-  // ══════════════════════════════════════════════════════════════
-  // VINCOLI PAESAGGISTICI Art. 142 — Suddivisi per lettera
-  // ══════════════════════════════════════════════════════════════
+  // ── A2. Beni paesaggistici Art. 142 (vincoli ope legis) ──
   {
     id: "paesaggistici_142",
-    label: "Vincoli Paesaggistici Art. 142",
+    label: "A2. Vincoli Paesaggistici Art. 142",
     icon: "🏞️",
     layers: [
       {
@@ -216,24 +202,53 @@ export const LAYER_GROUPS: LayerGroup[] = [
         description: "Art. 142 c.1 lett. i — Zone umide incluse nell'elenco Ramsar",
       },
       {
-        id: "art142_l_vulcani",
-        label: "l) Vulcani",
-        color: "#dc2626",
+        id: "art142_l_archeologia",
+        label: "l) Zone di interesse archeologico",
+        color: "#92400e",
         defaultOn: false,
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Vincoli_Paesaggistici_Art142/MapServer",
         arcgisLayers: "show:9",
         opacity: 0.5,
-        description: "Art. 142 c.1 lett. l — Vulcani",
+        description: "Art. 142 c.1 lett. l — Zone di interesse archeologico",
       },
       {
-        id: "art142_m_archeologia",
-        label: "m) Zone di interesse archeologico",
-        color: "#92400e",
+        id: "art142_m_vulcani",
+        label: "m) Vulcani e fasce di rispetto",
+        color: "#dc2626",
         defaultOn: false,
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Vincoli_Paesaggistici_Art142/MapServer",
         arcgisLayers: "show:10",
         opacity: 0.5,
-        description: "Art. 142 c.1 lett. m — Zone di interesse archeologico",
+        description: "Art. 142 c.1 lett. m — Vulcani e fasce di rispetto vulcaniche",
+      },
+    ],
+  },
+
+  // ── A3. Dichiarazioni di notevole interesse pubblico ──
+  {
+    id: "notevole_interesse",
+    label: "A3. Dichiarazioni Notevole Interesse Pubblico",
+    icon: "📜",
+    layers: [
+      {
+        id: "dip_geoportale",
+        label: "Dichiarazioni notevole interesse (PCN)",
+        color: "#a855f7",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Vincoli_Paesaggistici_Art142/MapServer",
+        arcgisLayers: "show:11",
+        opacity: 0.55,
+        description: "Dichiarazioni di notevole interesse pubblico — Geoportale Nazionale",
+      },
+      {
+        id: "dip_sitap_bellezze_individue",
+        label: "Bellezze individue (SITAP)",
+        color: "#8b5cf6",
+        defaultOn: false,
+        wmsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_public/wms",
+        wmsLayer: "sitap_public:sitap_v1497_public",
+        opacity: 0.55,
+        description: "Bellezze individue — Dichiarazioni di notevole interesse pubblico (D.M.) — SITAP MiC",
       },
     ],
   },
