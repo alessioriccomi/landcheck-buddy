@@ -1,4 +1,5 @@
 import { ALL_LAYERS, LAYER_GROUPS, type LayerDef } from "@/lib/layerDefinitions";
+import { getMergedGroups } from "@/lib/settingsLayers";
 
 interface WmsLegendProps {
   activeLayers: Record<string, boolean>;
@@ -7,7 +8,7 @@ interface WmsLegendProps {
 export function WmsLegend({ activeLayers }: WmsLegendProps) {
   // Collect active non-catasto layers with their group info
   const activeDefs: { layer: LayerDef; groupLabel: string; groupIcon: string }[] = [];
-  for (const group of LAYER_GROUPS) {
+  for (const group of getMergedGroups()) {
     for (const layer of group.layers) {
       if (layer.id === "catasto") continue;
       if (activeLayers[layer.id]) {
