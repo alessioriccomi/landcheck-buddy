@@ -31,13 +31,31 @@ export function SavedAnalysesPanel({
   const handleSave = async () => {
     if (!saveName.trim() || !canSave) return;
     setSaving(true);
-    const results = currentAnalisi ?? {
-      vincoli: [],
-      classificazione: "da_verificare" as const,
-      punteggio: 0,
-      dataAnalisi: new Date().toISOString(),
+    const emptyVincoli: any[] = [];
+    const results = currentAnalisi ?? ({
       particelle: currentParticelle,
-    } as AnalisiVincolistica;
+      dataAnalisi: new Date().toISOString(),
+      vincoliCulturali: emptyVincoli,
+      vincoliPaesaggistici: emptyVincoli,
+      vincoliIdrogeologici: emptyVincoli,
+      vincoliAmbientali: emptyVincoli,
+      rischioIdrico: emptyVincoli,
+      serviziReti: emptyVincoli,
+      altriVincoli: emptyVincoli,
+      vincoliAgricoli: emptyVincoli,
+      vincoliMilitariRadar: emptyVincoli,
+      vincoliForestali: emptyVincoli,
+      vincoliSismici: emptyVincoli,
+      vincoliCatastali: emptyVincoli,
+      compatibilitaConnessione: emptyVincoli,
+      areeIdonee: emptyVincoli,
+      normativaAgrivoltaico: emptyVincoli,
+      rischioComplessivo: "nessuno",
+      areaUtileLordaHa: 0,
+      areaUtileNettaHa: 0,
+      classificazioneIdoneita: "potenzialmente_idoneo",
+      stepAutorizzativi: emptyVincoli,
+    } as AnalisiVincolistica);
     await onSave(saveName.trim(), currentParticelle, results, saveDesc.trim() || undefined);
     setSaveName("");
     setSaveDesc("");
@@ -100,7 +118,7 @@ export function SavedAnalysesPanel({
         ) : (
           <div className="space-y-1.5">
             {analyses.map(a => {
-              const hasResults = a.results?.vincoli?.length > 0;
+              const hasResults = a.results?.vincoliCulturali?.length > 0 || a.results?.vincoliPaesaggistici?.length > 0;
               return (
                 <div key={a.id} className="flex items-center gap-2 bg-card border border-border rounded-md px-2 py-1.5 group">
                   <div className="flex-shrink-0">
