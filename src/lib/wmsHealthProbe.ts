@@ -97,12 +97,13 @@ export async function checkServerHealth(baseUrl: string): Promise<ServerHealth> 
   }
 
   const start = Date.now();
-  const ok = await probeEndpoint(baseUrl);
+  const result = await probeEndpoint(baseUrl);
   const health: ServerHealth = {
     host,
-    status: ok ? "online" : "offline",
+    status: result.ok ? "online" : result.tlsError ? "tls_error" : "offline",
     checkedAt: Date.now(),
     latencyMs: Date.now() - start,
+    errorDetail: result.detail,
   };
   healthCache.set(host, health);
   return health;
@@ -162,13 +163,13 @@ export async function resolveWithFallback(
   fallbacks: string[] = []
 ): Promise<{ url: string; isOriginal: boolean }> {
   // Check primary first
-  const primaryOk = await probeEndpoint(primaryUrl, 6000);
-  if (primaryOk) return { url: primaryUrl, isOriginal: true };
+  const primaryResult = await probeEndpoint(primaryUrl, 6000);
+  if (primaryResult.ok) return { url: primaryUrl, isOriginal: true };
 
   // Try fallbacks
   for (const fb of fallbacks) {
-    const ok = await probeEndpoint(fb, 6000);
-    if (ok) return { url: fb, isOriginal: false };
+    const fbResult = await probeEndpoint(fb, 6000);
+    if (fbResult.ok) return { url: fb, isOriginal: false };
   }
 
   // Return primary anyway (let it fail silently)
