@@ -32,7 +32,7 @@ function extractHost(url: string): string {
  * Probe a single endpoint via proxy to avoid CORS.
  * Uses a lightweight HEAD-like request through the wfs-proxy.
  */
-async function probeEndpoint(url: string, timeoutMs = 8000): Promise<{ ok: boolean; tlsError?: boolean; detail?: string }> {
+async function probeEndpoint(url: string, timeoutMs = 8000, skipTls = false): Promise<{ ok: boolean; tlsError?: boolean; detail?: string }> {
   const proxyBase = `${SUPABASE_URL}/functions/v1/wfs-proxy`;
   let testUrl: string;
   if (url.includes("/MapServer")) {
@@ -41,13 +41,14 @@ async function probeEndpoint(url: string, timeoutMs = 8000): Promise<{ ok: boole
     const sep = url.includes("?") ? "&" : "?";
     testUrl = `${url}${sep}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities`;
   }
+  const skipParam = skipTls ? "&skipTls=true" : "";
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const resp = await fetch(
-      `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(testUrl)}`,
+      `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(testUrl)}${skipParam}`,
       {
         headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
         signal: controller.signal,
