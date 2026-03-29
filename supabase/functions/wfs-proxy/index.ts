@@ -859,6 +859,8 @@ serve(async (req) => {
         "siat.regione.marche.it",
         "webgis.regione.taa.it",
         "mappe.regione.vda.it",
+        "siat.provincia.tn.it",
+        "siat.provincia.bz.it",
         // MiC / Vincoli in Rete / SITAP
         "wms.minicultura.it",
         "culturaitalia.it",
