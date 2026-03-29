@@ -506,6 +506,141 @@ export const LAYER_GROUPS: LayerGroup[] = [
     ],
   },
 
+  // ── SITI UNESCO ─────────────────────────────────────────────
+  {
+    id: "unesco",
+    label: "Siti UNESCO",
+    icon: "🏰",
+    layers: [
+      {
+        id: "unesco_sites",
+        label: "Siti Patrimonio Mondiale UNESCO",
+        color: "#8B008B",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/UNESCO/MapServer",
+        opacity: 0.4,
+        description: "Siti del Patrimonio Mondiale UNESCO in Italia",
+      },
+    ],
+  },
+
+  // ── RETE ECOLOGICA & BIODIVERSITÀ ──────────────────────────
+  {
+    id: "rete_ecologica",
+    label: "Rete Ecologica & Biodiversità",
+    icon: "🦋",
+    layers: [
+      {
+        id: "ren",
+        label: "Rete Ecologica Nazionale (REN)",
+        color: "#059669",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Rete_Ecologica_Nazionale/MapServer",
+        opacity: 0.45,
+        description: "Rete Ecologica Nazionale — corridoi e aree nucleo",
+      },
+      {
+        id: "inventario_forestale",
+        label: "Inventario Forestale Nazionale (INFC)",
+        color: "#166534",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Inventario_Forestale_Nazionale_2015/MapServer",
+        opacity: 0.45,
+        description: "Inventario Nazionale delle Foreste e dei serbatoi forestali di Carbonio",
+      },
+      {
+        id: "zone_umide",
+        label: "Zone umide e paludi",
+        color: "#0891b2",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Zone_umide/MapServer",
+        opacity: 0.5,
+        description: "Aree umide e paludi d'Italia",
+      },
+    ],
+  },
+
+  // ── FASCE DI RISPETTO & BUFFER INFRASTRUTTURE ──────────────
+  {
+    id: "fasce_rispetto",
+    label: "Fasce di Rispetto",
+    icon: "⚡",
+    layers: [
+      {
+        id: "elettrodotti",
+        label: "Elettrodotti AT/AAT (Terna)",
+        color: "#FFFF00",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/elettrodotti/MapServer",
+        opacity: 0.5,
+        description: "Linee elettriche Alta/Altissima Tensione — buffer DPA 150m",
+      },
+      {
+        id: "gasdotti",
+        label: "Gasdotti principali (Snam)",
+        color: "#f59e0b",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/gasdotti/MapServer",
+        opacity: 0.5,
+        description: "Rete gasdotti principali — buffer 200m",
+      },
+      {
+        id: "strade_principali",
+        label: "Strade statali e autostrade",
+        color: "#9ca3af",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/strade/MapServer",
+        opacity: 0.45,
+        description: "Rete stradale — fasce rispetto DPR 495/1992",
+      },
+      {
+        id: "aeroporti",
+        label: "Aeroporti e zone di rispetto",
+        color: "#6366f1",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/aeroporti/MapServer",
+        opacity: 0.5,
+        description: "Aeroporti e zone di rischio aeronautico (ENAC)",
+      },
+    ],
+  },
+
+  // ── VINCOLI AGRICOLI ────────────────────────────────────────
+  {
+    id: "agricoltura",
+    label: "Vincoli Agricoli & DOC",
+    icon: "🍇",
+    layers: [
+      {
+        id: "doc_docg",
+        label: "Zone DOC/DOCG vitivinicole",
+        color: "#7f1d1d",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/DOC_DOCG/MapServer",
+        opacity: 0.4,
+        description: "Delimitazioni zone DOC/DOCG — aree a denominazione di origine",
+      },
+      {
+        id: "dop_igp",
+        label: "Zone DOP/IGP agricole",
+        color: "#92400e",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/DOP_IGP/MapServer",
+        opacity: 0.4,
+        description: "Aree a Denominazione di Origine Protetta e Indicazione Geografica Protetta",
+      },
+      {
+        id: "capacita_uso_suoli",
+        label: "Capacità d'uso dei suoli (LCC)",
+        color: "#a16207",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/capacita_uso_suoli/MapServer",
+        opacity: 0.45,
+        description: "Classi di capacità d'uso dei suoli (Land Capability Classification)",
+      },
+    ],
+  },
+
   // ── AMBIENTE & TERRITORIO ───────────────────────────────────
   {
     id: "territorio",
