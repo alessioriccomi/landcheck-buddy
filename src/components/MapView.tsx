@@ -505,13 +505,10 @@ export function MapView({
             return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}`;
           },
         });
-        const newLayer = new TileLayerClass("", {
-          opacity: layerDef.opacity ?? 0.5,
-          pane: "wmsPane",
-          tileSize: 256,
-          maxZoom: 19,
-          attribution: "ISPRA (fallback)",
-        } as L.TileLayerOptions & { pane: string });
+        const newLayer = new (TileLayerClass as any)(
+          "",
+          { opacity: layerDef.opacity ?? 0.5, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: "ISPRA (fallback)" }
+        ) as L.TileLayer;
 
         if (wasOnMap) {
           map.removeLayer(oldLayer);
