@@ -3,6 +3,7 @@ import { Eye, EyeOff, ChevronDown, ChevronRight, Power, PowerOff, RefreshCw, Wif
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { LAYER_GROUPS, ALL_LAYERS, type LayerGroup } from "@/lib/layerDefinitions";
+import { getMergedGroups } from "@/lib/settingsLayers";
 import { getServerStatusForUrl, type ServerHealth, type ServerStatus, clearHealthCache, probeAllServers } from "@/lib/wmsHealthProbe";
 
 interface LegendPanelProps {
@@ -24,8 +25,9 @@ export function LegendPanel({
   serverStatuses = {},
   onRefreshStatuses,
 }: LegendPanelProps) {
+  const mergedGroups = getMergedGroups();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
-    Object.fromEntries(LAYER_GROUPS.map(g => [g.id, g.id === "catasto"]))
+    Object.fromEntries(mergedGroups.map(g => [g.id, g.id === "catasto"]))
   );
   const [refreshing, setRefreshing] = useState(false);
 
@@ -87,7 +89,7 @@ export function LegendPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-        {LAYER_GROUPS.map(group => {
+        {mergedGroups.map(group => {
           const groupActive = group.layers.filter(l => layerState[l.id]).length;
           const isExpanded = expandedGroups[group.id];
           const allOn = groupActive === group.layers.length;

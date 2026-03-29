@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import area from "@turf/area";
 import turfUnion from "@turf/union";
 import { ALL_LAYERS } from "@/lib/layerDefinitions";
+import { getMergedLayers } from "@/lib/settingsLayers";
 import { toast } from "@/hooks/use-toast";
 import { getServerStatusForUrl, type ServerHealth } from "@/lib/wmsHealthProbe";
 
@@ -445,8 +446,9 @@ export function MapView({
     let urlOverrides: Record<string, { wmsUrl?: string; arcgisUrl?: string; wmsLayer?: string; arcgisLayers?: string }> = {};
     try { urlOverrides = JSON.parse(localStorage.getItem("lc_layer_url_overrides") || "{}"); } catch {}
 
-    // Create all WMS layers and populate the ref
-    for (const layerDef of ALL_LAYERS) {
+    // Create all WMS layers (merged: built-in + custom from settings)
+    const mergedLayers = getMergedLayers();
+    for (const layerDef of mergedLayers) {
       try {
         const ov = urlOverrides[layerDef.id];
         const arcUrl = ov?.arcgisUrl || layerDef.arcgisUrl;
@@ -479,7 +481,7 @@ export function MapView({
     const map = mapRef.current;
     if (!map || Object.keys(serverStatuses).length === 0) return;
 
-    for (const layerDef of ALL_LAYERS) {
+    for (const layerDef of getMergedLayers()) {
       if (resolvedFallbacksRef.current.has(layerDef.id)) continue;
       if (!layerDef.fallbackUrls?.length) continue;
 
@@ -777,7 +779,7 @@ export function MapView({
 
     // Build a lookup of layer bounds from definitions
     const boundsLookup: Record<string, [number, number, number, number] | undefined> = {};
-    for (const l of ALL_LAYERS) {
+    for (const l of getMergedLayers()) {
       boundsLookup[l.id] = l.bounds;
     }
 

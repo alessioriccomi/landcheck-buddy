@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, Save, RotateCcw, Search, Plus, Trash2, ChevronDown, ChevronRight, X } from "lucide-react";
+import { ArrowLeft, Save, RotateCcw, Search, Plus, Trash2, ChevronDown, ChevronRight, X, Download, Upload, Wifi, WifiOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
@@ -43,6 +43,9 @@ function generateId() {
   return "custom_" + Math.random().toString(36).slice(2, 10);
 }
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
 export default function Settings() {
   const navigate = useNavigate();
   const [overrides, setOverrides] = useState<Overrides>(loadOverrides);
@@ -52,8 +55,57 @@ export default function Settings() {
   const [expandedFallbacks, setExpandedFallbacks] = useState<Set<string>>(new Set());
   const [addingToGroup, setAddingToGroup] = useState<string | null>(null);
   const [newLayer, setNewLayer] = useState<Partial<CustomLayer>>({});
+  const [testingUrls, setTestingUrls] = useState<Record<string, "checking" | "online" | "offline">>({});
 
   const markDirty = () => setDirty(true);
+
+  // ── Test connection ──
+  const testUrl = async (url: string) => {
+    if (!url) return;
+    setTestingUrls(prev => ({ ...prev, [url]: "checking" }));
+    try {
+      const isArcgis = url.includes("/rest/services/") || url.includes("/MapServer");
+      const probeUrl = isArcgis ? `${url}${url.includes("?") ? "&" : "?"}f=json` : `${url}${url.includes("?") ? "&" : "?"}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities`;
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/wfs-proxy?mode=wms_ext&url=${encodeURIComponent(probeUrl)}`, {
+        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+        signal: AbortSignal.timeout(15000),
+      });
+      const text = await resp.text();
+      const ok = resp.ok && !text.includes("503 Service") && !text.includes("Pagina non trovata") && !text.includes("<title>40");
+      setTestingUrls(prev => ({ ...prev, [url]: ok ? "online" : "offline" }));
+    } catch {
+      setTestingUrls(prev => ({ ...prev, [url]: "offline" }));
+    }
+  };
+
+  // ── Export/Import ──
+  const exportConfig = () => {
+    const config = { overrides, customLayers, exportedAt: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `geovincoli-config-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+    toast.success("Configurazione esportata");
+  };
+
+  const importConfig = () => {
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = ".json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const config = JSON.parse(text);
+        if (config.overrides) setOverrides(config.overrides);
+        if (config.customLayers) setCustomLayers(config.customLayers);
+        markDirty();
+        toast.success("Configurazione importata. Premi Salva per applicare.");
+      } catch { toast.error("File non valido"); }
+    };
+    input.click();
+  };
 
   const updateField = (layerId: string, field: string, value: string) => {
     setOverrides(prev => ({ ...prev, [layerId]: { ...prev[layerId], [field]: value } }));
@@ -212,6 +264,16 @@ export default function Settings() {
   // "Vincoli personalizzati" group for custom layers without a matching group
   const orphanCustom = customLayers.filter(cl => !LAYER_GROUPS.some(g => g.id === cl.groupId));
 
+  const TestBtn = ({ url }: { url: string }) => {
+    const st = testingUrls[url];
+    return (
+      <button onClick={() => testUrl(url)} className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border border-border hover:bg-muted" title="Test connessione">
+        {st === "checking" ? <Loader2 size={8} className="animate-spin" /> : st === "online" ? <Wifi size={8} className="text-green-500" /> : st === "offline" ? <WifiOff size={8} className="text-destructive" /> : <Wifi size={8} />}
+        <span>{st === "checking" ? "..." : st === "online" ? "OK" : st === "offline" ? "KO" : "Test"}</span>
+      </button>
+    );
+  };
+
   const renderLayerRow = (layer: LayerDef | CustomLayer, isCustom: boolean) => {
     const ov = overrides[layer.id] || {};
     const hasOverride = !!overrides[layer.id];
@@ -221,8 +283,11 @@ export default function Settings() {
     const noUrl = !isWms && !isArcgis;
     const effectiveFallbacks = ov.fallbackUrls || (layer as LayerDef).fallbackUrls || [];
     const fbExpanded = expandedFallbacks.has(layer.id);
+    const primaryUrl = isCustom
+      ? ((layer as CustomLayer).wmsUrl || (layer as CustomLayer).arcgisUrl || "")
+      : (ov.wmsUrl || ov.arcgisUrl || layer.wmsUrl || layer.arcgisUrl || "");
 
-    if (isDeleted && search) return null; // hide deleted when searching
+    if (isDeleted && search) return null;
 
     return (
       <div key={layer.id} className={`px-3 py-2.5 space-y-1.5 ${isDeleted ? "opacity-40" : ""}`}>
@@ -233,6 +298,7 @@ export default function Settings() {
             {isCustom && <span className="ml-1 text-[9px] bg-primary/10 text-primary px-1 rounded">custom</span>}
           </span>
           <div className="flex items-center gap-1">
+            {!isDeleted && primaryUrl && <TestBtn url={primaryUrl} />}
             {isDeleted ? (
               <button onClick={() => restoreLayer(layer.id)} className="text-[9px] text-primary hover:underline">Ripristina</button>
             ) : (
@@ -323,6 +389,7 @@ export default function Settings() {
                         ) : (
                           <Input value={fb} onChange={e => updateFallback(layer.id, i, e.target.value)} className="h-5 text-[9px] font-mono flex-1" />
                         )}
+                        {fb && <TestBtn url={fb} />}
                         <button onClick={() => isCustom ? removeCustomFallback(layer.id, i) : removeFallback(layer.id, i)} className="text-muted-foreground hover:text-destructive">
                           <X size={9} />
                         </button>
@@ -385,8 +452,14 @@ export default function Settings() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={importConfig} className="h-7 text-[10px] gap-1">
+            <Upload size={10} /> Importa
+          </Button>
+          <Button variant="ghost" size="sm" onClick={exportConfig} className="h-7 text-[10px] gap-1">
+            <Download size={10} /> Esporta
+          </Button>
           <Button variant="outline" size="sm" onClick={resetAll} className="h-7 text-[10px] gap-1">
-            <RotateCcw size={10} /> Reset tutto
+            <RotateCcw size={10} /> Reset
           </Button>
           <Button size="sm" onClick={saveAll} disabled={!dirty} className="h-7 text-[10px] gap-1">
             <Save size={10} /> Salva
