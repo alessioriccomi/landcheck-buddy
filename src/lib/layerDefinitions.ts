@@ -1115,6 +1115,227 @@ export const LAYER_GROUPS: LayerGroup[] = [
       },
     ],
   },
+
+  // ── BASILICATA ──────────────────────────────────────────────
+  {
+    id: "reg_basilicata",
+    label: "🇮🇹 Basilicata",
+    icon: "📍",
+    layers: [
+      {
+        id: "basilicata_pai",
+        label: "PAI Basilicata",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://rsdi.regione.basilicata.it/arcgis/rest/services/PAI/PAI_Pericolosita/MapServer",
+        opacity: 0.5,
+        bounds: [39.89, 15.33, 41.14, 16.87],
+        description: "PAI pericolosità — Regione Basilicata",
+      },
+      {
+        id: "basilicata_vincolo_idro",
+        label: "Vincolo idrogeologico Basilicata",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://rsdi.regione.basilicata.it/arcgis/rest/services/Difesa_Suolo/Vincolo_Idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [39.89, 15.33, 41.14, 16.87],
+        description: "Vincolo idrogeologico — RSDI Basilicata",
+      },
+    ],
+  },
+
+  // ── ABRUZZO ─────────────────────────────────────────────────
+  {
+    id: "reg_abruzzo",
+    label: "🇮🇹 Abruzzo",
+    icon: "📍",
+    layers: [
+      {
+        id: "abruzzo_pai",
+        label: "PAI Abruzzo",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://geoportale.regione.abruzzo.it/arcgis/rest/services/PAI/PAI_Pericolosita/MapServer",
+        opacity: 0.5,
+        bounds: [41.68, 13.02, 42.89, 14.79],
+        description: "PAI pericolosità — Regione Abruzzo",
+      },
+      {
+        id: "abruzzo_vincolo_paesaggistico",
+        label: "Vincolo paesaggistico Abruzzo",
+        color: "#a855f7",
+        defaultOn: false,
+        arcgisUrl: "https://geoportale.regione.abruzzo.it/arcgis/rest/services/Paesaggio/Vincoli_Paesaggistici/MapServer",
+        opacity: 0.5,
+        bounds: [41.68, 13.02, 42.89, 14.79],
+        description: "Vincoli paesaggistici — Regione Abruzzo",
+      },
+    ],
+  },
+
+  // ── MOLISE ──────────────────────────────────────────────────
+  {
+    id: "reg_molise",
+    label: "🇮🇹 Molise",
+    icon: "📍",
+    layers: [
+      {
+        id: "molise_pai",
+        label: "PAI Molise",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://sit.regione.molise.it/arcgis/rest/services/PAI/PAI_Pericolosita/MapServer",
+        opacity: 0.5,
+        bounds: [41.36, 13.94, 41.91, 15.17],
+        description: "PAI pericolosità — Regione Molise",
+      },
+    ],
+  },
+
+  // ── LIGURIA ─────────────────────────────────────────────────
+  {
+    id: "reg_liguria",
+    label: "🇮🇹 Liguria",
+    icon: "📍",
+    layers: [
+      {
+        id: "liguria_ptcp",
+        label: "PTCP Liguria",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://srvcarto.regione.liguria.it/arcgis/rest/services/Paesaggio/PTCP/MapServer",
+        opacity: 0.5,
+        bounds: [43.78, 7.49, 44.68, 10.07],
+        description: "Piano Territoriale di Coordinamento Provinciale — Liguria",
+      },
+      {
+        id: "liguria_vincolo_idro",
+        label: "Vincolo idrogeologico Liguria",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://srvcarto.regione.liguria.it/arcgis/rest/services/Difesa_Suolo/Vincolo_Idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [43.78, 7.49, 44.68, 10.07],
+        description: "Vincolo idrogeologico — Regione Liguria",
+      },
+    ],
+  },
+
+  // ── MARCHE ──────────────────────────────────────────────────
+  {
+    id: "reg_marche",
+    label: "🇮🇹 Marche",
+    icon: "📍",
+    layers: [
+      {
+        id: "marche_ppar",
+        label: "PPAR Marche",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://sitr.regione.marche.it/arcgis/rest/services/Paesaggio/PPAR/MapServer",
+        opacity: 0.5,
+        bounds: [42.69, 12.08, 43.97, 13.92],
+        description: "Piano Paesistico Ambientale Regionale — Marche",
+      },
+      {
+        id: "marche_vincolo_idro",
+        label: "Vincolo idrogeologico Marche",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://sitr.regione.marche.it/arcgis/rest/services/Difesa_Suolo/Vincolo_Idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [42.69, 12.08, 43.97, 13.92],
+        description: "Vincolo idrogeologico — Regione Marche",
+      },
+    ],
+  },
+
+  // ── UMBRIA ──────────────────────────────────────────────────
+  {
+    id: "reg_umbria",
+    label: "🇮🇹 Umbria",
+    icon: "📍",
+    layers: [
+      {
+        id: "umbria_ppr",
+        label: "PPR Umbria",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://www.umbriageo.regione.umbria.it/arcgis/rest/services/Paesaggio/PPR/MapServer",
+        opacity: 0.5,
+        bounds: [42.37, 12.07, 43.61, 13.26],
+        description: "Piano Paesaggistico Regionale — Umbria",
+      },
+    ],
+  },
+
+  // ── FRIULI VENEZIA GIULIA ──────────────────────────────────
+  {
+    id: "reg_fvg",
+    label: "🇮🇹 Friuli Venezia Giulia",
+    icon: "📍",
+    layers: [
+      {
+        id: "fvg_ppr",
+        label: "PPR Friuli Venezia Giulia",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://irdat.regione.fvg.it/arcgis/rest/services/Paesaggio/PPR/MapServer",
+        opacity: 0.5,
+        bounds: [45.58, 12.31, 46.65, 13.92],
+        description: "Piano Paesaggistico Regionale — FVG",
+      },
+      {
+        id: "fvg_vincolo_idro",
+        label: "Vincolo idrogeologico FVG",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://irdat.regione.fvg.it/arcgis/rest/services/Difesa_Suolo/Vincolo_Idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [45.58, 12.31, 46.65, 13.92],
+        description: "Vincolo idrogeologico — Regione FVG",
+      },
+    ],
+  },
+
+  // ── TRENTINO-ALTO ADIGE ────────────────────────────────────
+  {
+    id: "reg_trentino",
+    label: "🇮🇹 Trentino-Alto Adige",
+    icon: "📍",
+    layers: [
+      {
+        id: "trentino_pup",
+        label: "PUP Trentino",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://siat.provincia.tn.it/arcgis/rest/services/PUP/PUP_Urbanistica/MapServer",
+        opacity: 0.5,
+        bounds: [45.67, 10.38, 47.09, 12.48],
+        description: "Piano Urbanistico Provinciale — Provincia Autonoma di Trento",
+      },
+    ],
+  },
+
+  // ── VALLE D'AOSTA ──────────────────────────────────────────
+  {
+    id: "reg_vda",
+    label: "🇮🇹 Valle d'Aosta",
+    icon: "📍",
+    layers: [
+      {
+        id: "vda_ptp",
+        label: "PTP Valle d'Aosta",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://mappe.regione.vda.it/arcgis/rest/services/PTP/PTP_Componenti/MapServer",
+        opacity: 0.5,
+        bounds: [45.47, 6.80, 45.99, 7.94],
+        description: "Piano Territoriale Paesistico — Valle d'Aosta",
+      },
+    ],
+  },
 ];
 
 // Flat map for easy lookup
