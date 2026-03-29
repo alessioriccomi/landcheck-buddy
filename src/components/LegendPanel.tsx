@@ -21,6 +21,8 @@ export function LegendPanel({
   onToggleLayer,
   onSetOpacity,
   onToggleAllInGroup,
+  serverStatuses = {},
+  onRefreshStatuses,
 }: LegendPanelProps) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
     Object.fromEntries(LAYER_GROUPS.map(g => [g.id, g.id === "catasto"]))
