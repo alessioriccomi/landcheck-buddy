@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import area from "@turf/area";
 import turfUnion from "@turf/union";
 import { ALL_LAYERS } from "@/lib/layerDefinitions";
+import { getMergedLayers } from "@/lib/settingsLayers";
 import { toast } from "@/hooks/use-toast";
 import { getServerStatusForUrl, type ServerHealth } from "@/lib/wmsHealthProbe";
 

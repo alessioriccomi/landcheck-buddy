@@ -3,6 +3,7 @@ import { Eye, EyeOff, ChevronDown, ChevronRight, Power, PowerOff, RefreshCw, Wif
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { LAYER_GROUPS, ALL_LAYERS, type LayerGroup } from "@/lib/layerDefinitions";
+import { getMergedGroups } from "@/lib/settingsLayers";
 import { getServerStatusForUrl, type ServerHealth, type ServerStatus, clearHealthCache, probeAllServers } from "@/lib/wmsHealthProbe";
 
 interface LegendPanelProps {

@@ -197,7 +197,7 @@ export default function Index() {
               serverStatuses={serverStatuses}
               onRefreshStatuses={() => {
                 const urls: string[] = [];
-                for (const l of ALL_LAYERS) {
+                for (const l of mergedLayers) {
                   if (l.arcgisUrl) urls.push(l.arcgisUrl);
                   if (l.wmsUrl) urls.push(l.wmsUrl);
                 }
