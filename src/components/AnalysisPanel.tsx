@@ -1,13 +1,15 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import {
   FileSearch, AlertCircle, Download, RotateCcw, Loader2,
-  Search, LogIn, Plus, Trash2, Eye, EyeOff, LogOut, User,
+  Search, LogIn, Plus, Trash2, Eye, EyeOff, LogOut, User, FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ParcelInput } from "@/components/ParcelInput";
 import { ConstraintPanel } from "@/components/ConstraintPanel";
 import { CustomConstraintDialog } from "@/components/CustomConstraintDialog";
+import { CDUPanel } from "@/components/CDUPanel";
+import { exportAnalisiExcel } from "@/lib/exportExcel";
 import { Particella, AnalisiVincolistica } from "@/types/vincoli";
 
 interface AnalysisPanelProps {
@@ -139,12 +141,17 @@ export function AnalysisPanel({
               Particelle
             </TabsTrigger>
             {step === "results" && (
-              <TabsTrigger value="risultati" className="text-[10px] flex-1">
-                Risultati
-              </TabsTrigger>
+              <>
+                <TabsTrigger value="risultati" className="text-[10px] flex-1">
+                  Risultati
+                </TabsTrigger>
+                <TabsTrigger value="cdu" className="text-[10px] flex-1">
+                  CDU
+                </TabsTrigger>
+              </>
             )}
             <TabsTrigger value="vincoli" className="text-[10px] flex-1">
-              Vincoli custom
+              Custom
             </TabsTrigger>
           </TabsList>
 
@@ -203,14 +210,29 @@ export function AnalysisPanel({
           {step === "results" && analisi && (
             <TabsContent value="risultati" className="flex-1 overflow-y-auto p-3 space-y-3 mt-0">
               <ConstraintPanel analisi={analisi} />
-              <div className="pt-2 border-t border-border">
-                <div className="flex items-start gap-2 p-2 bg-amber-light border border-amber/30 rounded-lg">
-                  <AlertCircle size={12} className="text-amber mt-0.5 flex-shrink-0" />
-                  <p className="text-[10px] text-amber-foreground leading-relaxed">
-                    I risultati hanno carattere <strong>indicativo</strong>. Verificare presso gli enti competenti.
-                  </p>
-                </div>
+              <div className="flex gap-2 pt-2 border-t border-border">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exportAnalisiExcel(analisi)}
+                  className="flex-1 h-7 text-[10px] gap-1"
+                >
+                  <FileSpreadsheet size={11} /> Excel
+                </Button>
               </div>
+              <div className="flex items-start gap-2 p-2 bg-amber-light border border-amber/30 rounded-lg">
+                <AlertCircle size={12} className="text-amber mt-0.5 flex-shrink-0" />
+                <p className="text-[10px] text-amber-foreground leading-relaxed">
+                  I risultati hanno carattere <strong>indicativo</strong>. Verificare presso gli enti competenti.
+                </p>
+              </div>
+            </TabsContent>
+          )}
+
+          {/* Tab: CDU */}
+          {step === "results" && analisi && particelle.length > 0 && (
+            <TabsContent value="cdu" className="flex-1 overflow-y-auto p-3 mt-0">
+              <CDUPanel particella={particelle[0]} analisi={analisi} />
             </TabsContent>
           )}
 

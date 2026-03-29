@@ -506,6 +506,141 @@ export const LAYER_GROUPS: LayerGroup[] = [
     ],
   },
 
+  // ── SITI UNESCO ─────────────────────────────────────────────
+  {
+    id: "unesco",
+    label: "Siti UNESCO",
+    icon: "🏰",
+    layers: [
+      {
+        id: "unesco_sites",
+        label: "Siti Patrimonio Mondiale UNESCO",
+        color: "#8B008B",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/UNESCO/MapServer",
+        opacity: 0.4,
+        description: "Siti del Patrimonio Mondiale UNESCO in Italia",
+      },
+    ],
+  },
+
+  // ── RETE ECOLOGICA & BIODIVERSITÀ ──────────────────────────
+  {
+    id: "rete_ecologica",
+    label: "Rete Ecologica & Biodiversità",
+    icon: "🦋",
+    layers: [
+      {
+        id: "ren",
+        label: "Rete Ecologica Nazionale (REN)",
+        color: "#059669",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Rete_Ecologica_Nazionale/MapServer",
+        opacity: 0.45,
+        description: "Rete Ecologica Nazionale — corridoi e aree nucleo",
+      },
+      {
+        id: "inventario_forestale",
+        label: "Inventario Forestale Nazionale (INFC)",
+        color: "#166534",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Inventario_Forestale_Nazionale_2015/MapServer",
+        opacity: 0.45,
+        description: "Inventario Nazionale delle Foreste e dei serbatoi forestali di Carbonio",
+      },
+      {
+        id: "zone_umide",
+        label: "Zone umide e paludi",
+        color: "#0891b2",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Zone_umide/MapServer",
+        opacity: 0.5,
+        description: "Aree umide e paludi d'Italia",
+      },
+    ],
+  },
+
+  // ── FASCE DI RISPETTO & BUFFER INFRASTRUTTURE ──────────────
+  {
+    id: "fasce_rispetto",
+    label: "Fasce di Rispetto",
+    icon: "⚡",
+    layers: [
+      {
+        id: "elettrodotti",
+        label: "Elettrodotti AT/AAT (Terna)",
+        color: "#FFFF00",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/elettrodotti/MapServer",
+        opacity: 0.5,
+        description: "Linee elettriche Alta/Altissima Tensione — buffer DPA 150m",
+      },
+      {
+        id: "gasdotti",
+        label: "Gasdotti principali (Snam)",
+        color: "#f59e0b",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/gasdotti/MapServer",
+        opacity: 0.5,
+        description: "Rete gasdotti principali — buffer 200m",
+      },
+      {
+        id: "strade_principali",
+        label: "Strade statali e autostrade",
+        color: "#9ca3af",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/strade/MapServer",
+        opacity: 0.45,
+        description: "Rete stradale — fasce rispetto DPR 495/1992",
+      },
+      {
+        id: "aeroporti",
+        label: "Aeroporti e zone di rispetto",
+        color: "#6366f1",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/aeroporti/MapServer",
+        opacity: 0.5,
+        description: "Aeroporti e zone di rischio aeronautico (ENAC)",
+      },
+    ],
+  },
+
+  // ── VINCOLI AGRICOLI ────────────────────────────────────────
+  {
+    id: "agricoltura",
+    label: "Vincoli Agricoli & DOC",
+    icon: "🍇",
+    layers: [
+      {
+        id: "doc_docg",
+        label: "Zone DOC/DOCG vitivinicole",
+        color: "#7f1d1d",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/DOC_DOCG/MapServer",
+        opacity: 0.4,
+        description: "Delimitazioni zone DOC/DOCG — aree a denominazione di origine",
+      },
+      {
+        id: "dop_igp",
+        label: "Zone DOP/IGP agricole",
+        color: "#92400e",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/DOP_IGP/MapServer",
+        opacity: 0.4,
+        description: "Aree a Denominazione di Origine Protetta e Indicazione Geografica Protetta",
+      },
+      {
+        id: "capacita_uso_suoli",
+        label: "Capacità d'uso dei suoli (LCC)",
+        color: "#a16207",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/capacita_uso_suoli/MapServer",
+        opacity: 0.45,
+        description: "Classi di capacità d'uso dei suoli (Land Capability Classification)",
+      },
+    ],
+  },
+
   // ── AMBIENTE & TERRITORIO ───────────────────────────────────
   {
     id: "territorio",
@@ -531,32 +666,30 @@ export const LAYER_GROUPS: LayerGroup[] = [
         description: "Classificazione fitoclimatica del territorio italiano",
       },
       {
-        id: "erosione",
-        label: "Rischio erosione",
-        color: "#a16207",
+        id: "siti_contaminati",
+        label: "Siti contaminati (SIN/SIR)",
+        color: "#991b1b",
         defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/rischio_erosione/MapServer",
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/siti_contaminati/MapServer",
         opacity: 0.45,
-        description: "Rischio di erosione del suolo",
+        description: "Siti di Interesse Nazionale per le bonifiche — potenziali aree idonee FER",
       },
       {
-        id: "desertificazione",
-        label: "Regioni pedologiche (desertificazione)",
-        color: "#854d0e",
+        id: "cave_miniere",
+        label: "Cave e miniere",
+        color: "#78716c",
         defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/regioni_pedologiche_desertificazione/MapServer",
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/cave_miniere/MapServer",
         opacity: 0.45,
-        description: "Regioni pedologiche a rischio desertificazione",
+        description: "Cave e miniere dismesse — potenziali aree idonee FER",
       },
     ],
   },
 
-  // ══════════════════════════════════════════════════════════════
-  // IRRADIANZA SOLARE & AREE IDONEE FOTOVOLTAICO
-  // ══════════════════════════════════════════════════════════════
+  // ── FOTOVOLTAICO & AREE IDONEE ─────────────────────────────
   {
     id: "fotovoltaico",
-    label: "Fotovoltaico & Irradianza",
+    label: "Fotovoltaico & Aree Idonee",
     icon: "☀️",
     layers: [
       {
@@ -566,7 +699,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         defaultOn: false,
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/irradianza_solare/MapServer",
         opacity: 0.5,
-        description: "Irradianza solare globale media annuale su piano orizzontale (kWh/m²/anno) — ENEA/RSE",
+        description: "Irradianza solare globale media annuale (kWh/m²/anno) — ENEA/RSE",
       },
       {
         id: "irradianza_diretta",
@@ -575,7 +708,34 @@ export const LAYER_GROUPS: LayerGroup[] = [
         defaultOn: false,
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/irradianza_solare_diretta/MapServer",
         opacity: 0.5,
-        description: "Irradianza diretta normale media annuale — rilevante per CSP e tracker",
+        description: "Irradianza diretta normale media annuale",
+      },
+      {
+        id: "aree_idonee_fer",
+        label: "Aree idonee FER (D.Lgs. 199/2021)",
+        color: "#00FF7F",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Aree_idonee_FER/MapServer",
+        opacity: 0.35,
+        description: "Aree idonee ex lege — D.Lgs. 199/2021 art. 20",
+      },
+      {
+        id: "aree_non_idonee_fer",
+        label: "Aree non idonee FER",
+        color: "#808080",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Aree_non_idonee_FER/MapServer",
+        opacity: 0.4,
+        description: "Aree non idonee — DM 10/09/2010",
+      },
+      {
+        id: "impianti_fer",
+        label: "Impianti FER esistenti (GSE)",
+        color: "#22c55e",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Impianti_FER/MapServer",
+        opacity: 0.45,
+        description: "Impianti a fonti rinnovabili censiti dal GSE",
       },
     ],
   },
@@ -952,6 +1112,227 @@ export const LAYER_GROUPS: LayerGroup[] = [
         opacity: 0.5,
         bounds: [37.91, 15.63, 39.95, 17.13],
         description: "PAI pericolosità — Regione Calabria",
+      },
+    ],
+  },
+
+  // ── BASILICATA ──────────────────────────────────────────────
+  {
+    id: "reg_basilicata",
+    label: "🇮🇹 Basilicata",
+    icon: "📍",
+    layers: [
+      {
+        id: "basilicata_pai",
+        label: "PAI Basilicata",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://rsdi.regione.basilicata.it/arcgis/rest/services/PAI/PAI_Pericolosita/MapServer",
+        opacity: 0.5,
+        bounds: [39.89, 15.33, 41.14, 16.87],
+        description: "PAI pericolosità — Regione Basilicata",
+      },
+      {
+        id: "basilicata_vincolo_idro",
+        label: "Vincolo idrogeologico Basilicata",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://rsdi.regione.basilicata.it/arcgis/rest/services/Difesa_Suolo/Vincolo_Idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [39.89, 15.33, 41.14, 16.87],
+        description: "Vincolo idrogeologico — RSDI Basilicata",
+      },
+    ],
+  },
+
+  // ── ABRUZZO ─────────────────────────────────────────────────
+  {
+    id: "reg_abruzzo",
+    label: "🇮🇹 Abruzzo",
+    icon: "📍",
+    layers: [
+      {
+        id: "abruzzo_pai",
+        label: "PAI Abruzzo",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://geoportale.regione.abruzzo.it/arcgis/rest/services/PAI/PAI_Pericolosita/MapServer",
+        opacity: 0.5,
+        bounds: [41.68, 13.02, 42.89, 14.79],
+        description: "PAI pericolosità — Regione Abruzzo",
+      },
+      {
+        id: "abruzzo_vincolo_paesaggistico",
+        label: "Vincolo paesaggistico Abruzzo",
+        color: "#a855f7",
+        defaultOn: false,
+        arcgisUrl: "https://geoportale.regione.abruzzo.it/arcgis/rest/services/Paesaggio/Vincoli_Paesaggistici/MapServer",
+        opacity: 0.5,
+        bounds: [41.68, 13.02, 42.89, 14.79],
+        description: "Vincoli paesaggistici — Regione Abruzzo",
+      },
+    ],
+  },
+
+  // ── MOLISE ──────────────────────────────────────────────────
+  {
+    id: "reg_molise",
+    label: "🇮🇹 Molise",
+    icon: "📍",
+    layers: [
+      {
+        id: "molise_pai",
+        label: "PAI Molise",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://sit.regione.molise.it/arcgis/rest/services/PAI/PAI_Pericolosita/MapServer",
+        opacity: 0.5,
+        bounds: [41.36, 13.94, 41.91, 15.17],
+        description: "PAI pericolosità — Regione Molise",
+      },
+    ],
+  },
+
+  // ── LIGURIA ─────────────────────────────────────────────────
+  {
+    id: "reg_liguria",
+    label: "🇮🇹 Liguria",
+    icon: "📍",
+    layers: [
+      {
+        id: "liguria_ptcp",
+        label: "PTCP Liguria",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://srvcarto.regione.liguria.it/arcgis/rest/services/Paesaggio/PTCP/MapServer",
+        opacity: 0.5,
+        bounds: [43.78, 7.49, 44.68, 10.07],
+        description: "Piano Territoriale di Coordinamento Provinciale — Liguria",
+      },
+      {
+        id: "liguria_vincolo_idro",
+        label: "Vincolo idrogeologico Liguria",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://srvcarto.regione.liguria.it/arcgis/rest/services/Difesa_Suolo/Vincolo_Idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [43.78, 7.49, 44.68, 10.07],
+        description: "Vincolo idrogeologico — Regione Liguria",
+      },
+    ],
+  },
+
+  // ── MARCHE ──────────────────────────────────────────────────
+  {
+    id: "reg_marche",
+    label: "🇮🇹 Marche",
+    icon: "📍",
+    layers: [
+      {
+        id: "marche_ppar",
+        label: "PPAR Marche",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://sitr.regione.marche.it/arcgis/rest/services/Paesaggio/PPAR/MapServer",
+        opacity: 0.5,
+        bounds: [42.69, 12.08, 43.97, 13.92],
+        description: "Piano Paesistico Ambientale Regionale — Marche",
+      },
+      {
+        id: "marche_vincolo_idro",
+        label: "Vincolo idrogeologico Marche",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://sitr.regione.marche.it/arcgis/rest/services/Difesa_Suolo/Vincolo_Idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [42.69, 12.08, 43.97, 13.92],
+        description: "Vincolo idrogeologico — Regione Marche",
+      },
+    ],
+  },
+
+  // ── UMBRIA ──────────────────────────────────────────────────
+  {
+    id: "reg_umbria",
+    label: "🇮🇹 Umbria",
+    icon: "📍",
+    layers: [
+      {
+        id: "umbria_ppr",
+        label: "PPR Umbria",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://www.umbriageo.regione.umbria.it/arcgis/rest/services/Paesaggio/PPR/MapServer",
+        opacity: 0.5,
+        bounds: [42.37, 12.07, 43.61, 13.26],
+        description: "Piano Paesaggistico Regionale — Umbria",
+      },
+    ],
+  },
+
+  // ── FRIULI VENEZIA GIULIA ──────────────────────────────────
+  {
+    id: "reg_fvg",
+    label: "🇮🇹 Friuli Venezia Giulia",
+    icon: "📍",
+    layers: [
+      {
+        id: "fvg_ppr",
+        label: "PPR Friuli Venezia Giulia",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://irdat.regione.fvg.it/arcgis/rest/services/Paesaggio/PPR/MapServer",
+        opacity: 0.5,
+        bounds: [45.58, 12.31, 46.65, 13.92],
+        description: "Piano Paesaggistico Regionale — FVG",
+      },
+      {
+        id: "fvg_vincolo_idro",
+        label: "Vincolo idrogeologico FVG",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://irdat.regione.fvg.it/arcgis/rest/services/Difesa_Suolo/Vincolo_Idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [45.58, 12.31, 46.65, 13.92],
+        description: "Vincolo idrogeologico — Regione FVG",
+      },
+    ],
+  },
+
+  // ── TRENTINO-ALTO ADIGE ────────────────────────────────────
+  {
+    id: "reg_trentino",
+    label: "🇮🇹 Trentino-Alto Adige",
+    icon: "📍",
+    layers: [
+      {
+        id: "trentino_pup",
+        label: "PUP Trentino",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://siat.provincia.tn.it/arcgis/rest/services/PUP/PUP_Urbanistica/MapServer",
+        opacity: 0.5,
+        bounds: [45.67, 10.38, 47.09, 12.48],
+        description: "Piano Urbanistico Provinciale — Provincia Autonoma di Trento",
+      },
+    ],
+  },
+
+  // ── VALLE D'AOSTA ──────────────────────────────────────────
+  {
+    id: "reg_vda",
+    label: "🇮🇹 Valle d'Aosta",
+    icon: "📍",
+    layers: [
+      {
+        id: "vda_ptp",
+        label: "PTP Valle d'Aosta",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://mappe.regione.vda.it/arcgis/rest/services/PTP/PTP_Componenti/MapServer",
+        opacity: 0.5,
+        bounds: [45.47, 6.80, 45.99, 7.94],
+        description: "Piano Territoriale Paesistico — Valle d'Aosta",
       },
     ],
   },
