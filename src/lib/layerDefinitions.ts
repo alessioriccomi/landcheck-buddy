@@ -19,6 +19,8 @@ export interface LayerDef {
   bounds?: [number, number, number, number];
   /** Alternative ArcGIS/WMS URLs to try if the primary is offline */
   fallbackUrls?: string[];
+  /** Skip TLS certificate verification for this layer */
+  tlsBypass?: boolean;
 }
 
 export interface LayerGroup {
