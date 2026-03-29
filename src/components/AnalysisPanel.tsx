@@ -27,7 +27,7 @@ interface AnalysisPanelProps {
   onExportPDF: () => void;
   onAuthOpen: () => void;
   onSignOut: () => void;
-  onAddConstraint: (data: { name: string; url: string; description?: string; color: string }) => void;
+  onAddConstraint: (data: { name: string; url: string; color: string; description?: string }) => Promise<{ error: any }>;
   onToggleConstraint: (id: string, active: boolean) => void;
   onDeleteConstraint: (id: string) => void;
 }
