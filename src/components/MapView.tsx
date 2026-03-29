@@ -745,6 +745,16 @@ export function MapView({
     return () => { map.off("moveend", updateLayers); };
   }, [activeLayers]);
 
+  // ── Apply dynamic opacity changes ──────────────────────────
+  useEffect(() => {
+    for (const [id, layer] of Object.entries(wmsLayersRef.current)) {
+      const op = layerOpacity[id];
+      if (op !== undefined && 'setOpacity' in layer) {
+        (layer as L.TileLayer).setOpacity(op);
+      }
+    }
+  }, [layerOpacity]);
+
   // ── Custom constraint layers (user-defined WMS/ArcGIS) ───────
   useEffect(() => {
     const map = mapRef.current;
