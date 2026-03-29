@@ -25,8 +25,9 @@ export function LegendPanel({
   serverStatuses = {},
   onRefreshStatuses,
 }: LegendPanelProps) {
+  const mergedGroups = getMergedGroups();
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
-    Object.fromEntries(LAYER_GROUPS.map(g => [g.id, g.id === "catasto"]))
+    Object.fromEntries(mergedGroups.map(g => [g.id, g.id === "catasto"]))
   );
   const [refreshing, setRefreshing] = useState(false);
 
