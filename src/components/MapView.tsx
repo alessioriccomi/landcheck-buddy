@@ -829,6 +829,14 @@ export function MapView({
         (layer as L.TileLayer).setOpacity(op);
       }
     }
+    // Catasto layers use separate refs — apply opacity to all of them
+    const catastoOp = layerOpacity["catasto"];
+    if (catastoOp !== undefined) {
+      const catastoRefs = [catastoFoglioRef, catastoOverlayRef, catastoFabbricatiRef, catastoLabelsRef, catastoGraffeRef];
+      for (const ref of catastoRefs) {
+        if (ref.current) ref.current.setOpacity(catastoOp);
+      }
+    }
   }, [layerOpacity]);
 
   // ── Custom constraint layers (user-defined WMS/ArcGIS) ───────
