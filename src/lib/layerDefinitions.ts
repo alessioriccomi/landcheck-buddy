@@ -253,51 +253,23 @@ export const LAYER_GROUPS: LayerGroup[] = [
     ],
   },
 
-  // ── RETE NATURA 2000 & AREE PROTETTE ────────────────────────
+  // ══════════════════════════════════════════════════════════════
+  // B. AREE PROTETTE
+  // ══════════════════════════════════════════════════════════════
   {
-    id: "ambiente",
-    label: "Rete Natura 2000 & Aree Protette",
+    id: "aree_protette",
+    label: "B. Aree Protette",
     icon: "🌿",
     layers: [
       {
-        id: "natura2000",
-        label: "Rete Natura 2000 (SIC/ZSC/ZPS)",
-        color: "#10b981",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/SIC_ZSC_ZPS/MapServer",
-        arcgisLayers: "show:0",
-        opacity: 0.55,
-        description: "SIC, ZSC e ZPS — Dir. 92/43/CEE Habitat e Dir. 79/409/CEE Uccelli",
-      },
-      {
-        id: "aree_protette",
-        label: "Aree protette (EUAP)",
+        id: "aree_protette_euap",
+        label: "B1-B6. Aree protette (EUAP)",
         color: "#16a34a",
         defaultOn: false,
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/EUAP/MapServer",
         arcgisLayers: "show:0",
         opacity: 0.5,
-        description: "VI Elenco Ufficiale delle Aree Protette (L. 394/1991)",
-      },
-      {
-        id: "iba",
-        label: "IBA - Important Bird Areas",
-        color: "#22d3ee",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/iba/MapServer",
-        arcgisLayers: "show:0",
-        opacity: 0.5,
-        description: "Important Bird and Biodiversity Areas (BirdLife International)",
-      },
-      {
-        id: "ramsar",
-        label: "Zone umide RAMSAR",
-        color: "#0891b2",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/aree_ramsar/MapServer",
-        arcgisLayers: "show:0",
-        opacity: 0.55,
-        description: "Zone umide di importanza internazionale (Convenzione Ramsar 1971)",
+        description: "Elenco Ufficiale Aree Protette: parchi nazionali, regionali, riserve statali/regionali, AMP (L. 394/1991)",
       },
       {
         id: "pelagos",
@@ -311,80 +283,68 @@ export const LAYER_GROUPS: LayerGroup[] = [
     ],
   },
 
-  // ── IDROGEOLOGIA & PAI ──────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════
+  // C. RETE NATURA 2000
+  // ══════════════════════════════════════════════════════════════
   {
-    id: "idrogeologico",
-    label: "Idrogeologia & PAI",
+    id: "natura2000",
+    label: "C. Rete Natura 2000",
+    icon: "🦎",
+    layers: [
+      {
+        id: "natura2000_sic_zsc",
+        label: "C1. ZSC / ex SIC (Dir. Habitat)",
+        color: "#10b981",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/SIC_ZSC_ZPS/MapServer",
+        arcgisLayers: "show:0",
+        opacity: 0.55,
+        description: "Zone Speciali di Conservazione (ZSC / ex SIC) — Dir. 92/43/CEE Habitat",
+      },
+      {
+        id: "natura2000_zps",
+        label: "C2. ZPS (Dir. Uccelli)",
+        color: "#059669",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/SIC_ZSC_ZPS/MapServer",
+        arcgisLayers: "show:1",
+        opacity: 0.55,
+        description: "Zone di Protezione Speciale (ZPS) — Dir. 79/409/CEE Uccelli",
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // D. SITI UNESCO
+  // ══════════════════════════════════════════════════════════════
+  {
+    id: "unesco",
+    label: "D. Siti UNESCO",
+    icon: "🏰",
+    layers: [
+      {
+        id: "unesco_sites",
+        label: "D1. Patrimonio Mondiale UNESCO",
+        color: "#8B008B",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/UNESCO/MapServer",
+        opacity: 0.4,
+        description: "Siti del Patrimonio Mondiale UNESCO in Italia — buffer 5 km",
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // E. VINCOLI IDROGEOLOGICI
+  // ══════════════════════════════════════════════════════════════
+  {
+    id: "vincoli_idrogeologici",
+    label: "E. Vincoli Idrogeologici",
     icon: "🌊",
     layers: [
       {
-        id: "pai_alluvioni",
-        label: "PAI - Pericolosità alluvionale",
-        color: "#2563eb",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/PAI_pericolosita_idrogeologica/MapServer",
-        arcgisLayers: "show:0",
-        opacity: 0.55,
-        description: "Mosaicatura PAI — Pericolosità da alluvione",
-      },
-      {
-        id: "pai_frane",
-        label: "PAI - Pericolosità frana",
-        color: "#dc2626",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/PAI_pericolosita_idrogeologica/MapServer",
-        arcgisLayers: "show:1",
-        opacity: 0.55,
-        description: "Mosaicatura PAI — Pericolosità da frana (P1→P4)",
-      },
-      {
-        id: "pai_rischio",
-        label: "PAI - Rischio idrogeologico",
-        color: "#7c3aed",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/PAI_rischio_idrogeologico/MapServer",
-        opacity: 0.5,
-        description: "Mosaicatura PAI — Classi di rischio (R1→R4)",
-      },
-      {
-        id: "alluvioni_estensione",
-        label: "PGRA - Aree allagabili",
-        color: "#0ea5e9",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_Estensione/MapServer",
-        opacity: 0.5,
-        description: "Estensione aree allagabili (Dir. 2007/60/CE — D.Lgs. 49/2010)",
-      },
-      {
-        id: "alluvioni_rischio",
-        label: "PGRA - Classi di rischio alluvionale",
-        color: "#1e40af",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_Classi_di_Rischio/MapServer",
-        opacity: 0.5,
-        description: "Classi di rischio alluvionale (Dir. 2007/60/CE)",
-      },
-      {
-        id: "alluvioni_idrauliche",
-        label: "PGRA - Caratteristiche idrauliche",
-        color: "#3b82f6",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_Caratteristiche_Idrauliche/MapServer",
-        opacity: 0.5,
-        description: "Caratteristiche idrauliche delle aree allagabili",
-      },
-      {
-        id: "alluvioni_elementi",
-        label: "PGRA - Elementi a rischio",
-        color: "#6366f1",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_ElementiRischio/MapServer",
-        opacity: 0.5,
-        description: "Elementi esposti al rischio di alluvione",
-      },
-      {
         id: "vincolo_idrogeologico",
-        label: "Vincolo idrogeologico (R.D. 3267/1923)",
+        label: "E1. Vincolo idrogeologico (R.D. 3267/1923)",
         color: "#1d4ed8",
         defaultOn: false,
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/PAI_pericolosita_idrogeologica/MapServer",
@@ -392,28 +352,19 @@ export const LAYER_GROUPS: LayerGroup[] = [
         opacity: 0.5,
         description: "Aree sottoposte a vincolo idrogeologico — R.D. 3267/1923",
       },
-    ],
-  },
-
-  // ── GEOLOGIA & FRANE ────────────────────────────────────────
-  {
-    id: "geologia",
-    label: "Geologia & Frane",
-    icon: "⛰️",
-    layers: [
       {
         id: "frane_iffi",
-        label: "Frane IFFI (poligonali)",
+        label: "E2. Frane IFFI (poligonali)",
         color: "#ef4444",
         defaultOn: false,
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Catalogo_Frane_Frane_poligonali/MapServer",
         arcgisLayers: "show:0",
         opacity: 0.55,
-        description: "Inventario dei Fenomeni Franosi in Italia (ISPRA IFFI) — frane poligonali",
+        description: "Inventario Fenomeni Franosi in Italia (ISPRA IFFI) — frane poligonali",
       },
       {
         id: "frane_lineari",
-        label: "Frane IFFI (lineari)",
+        label: "E2. Frane IFFI (lineari)",
         color: "#f87171",
         defaultOn: false,
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Catalogo_Frane_Frane_lineari/MapServer",
@@ -423,7 +374,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
       },
       {
         id: "frane_dgpv",
-        label: "Frane IFFI (DGPV)",
+        label: "E2. Frane IFFI (DGPV)",
         color: "#b91c1c",
         defaultOn: false,
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Catalogo_Frane_DGPV/MapServer",
@@ -433,13 +384,43 @@ export const LAYER_GROUPS: LayerGroup[] = [
       },
       {
         id: "frane_aree",
-        label: "Frane IFFI (aree)",
+        label: "E2. Frane IFFI (aree)",
         color: "#fca5a5",
         defaultOn: false,
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Catalogo_Frane_Aree/MapServer",
         arcgisLayers: "show:0",
         opacity: 0.55,
         description: "IFFI — aree soggette a frana",
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // F. RISCHIO FRANA (PAI)
+  // ══════════════════════════════════════════════════════════════
+  {
+    id: "rischio_frana",
+    label: "F. Rischio Frana (PAI)",
+    icon: "⛰️",
+    layers: [
+      {
+        id: "pai_frane",
+        label: "F1-F4. PAI — Pericolosità frana (P1→P4)",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/PAI_pericolosita_idrogeologica/MapServer",
+        arcgisLayers: "show:1",
+        opacity: 0.55,
+        description: "Mosaicatura PAI — Pericolosità da frana P1→P4",
+      },
+      {
+        id: "pai_rischio",
+        label: "PAI — Rischio idrogeologico (R1→R4)",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/PAI_rischio_idrogeologico/MapServer",
+        opacity: 0.5,
+        description: "Mosaicatura PAI — Classi di rischio (R1→R4)",
       },
       {
         id: "geologia",
@@ -462,7 +443,332 @@ export const LAYER_GROUPS: LayerGroup[] = [
     ],
   },
 
-  // ── SISMICA ─────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════
+  // G. RISCHIO ALLUVIONE (PGRA)
+  // ══════════════════════════════════════════════════════════════
+  {
+    id: "rischio_alluvione",
+    label: "G. Rischio Alluvione (PGRA)",
+    icon: "🌊",
+    layers: [
+      {
+        id: "pai_alluvioni",
+        label: "G1-G3. PAI — Pericolosità alluvionale",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/PAI_pericolosita_idrogeologica/MapServer",
+        arcgisLayers: "show:0",
+        opacity: 0.55,
+        description: "Mosaicatura PAI — Pericolosità da alluvione (P1→P3)",
+      },
+      {
+        id: "alluvioni_estensione",
+        label: "PGRA — Aree allagabili",
+        color: "#0ea5e9",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_Estensione/MapServer",
+        opacity: 0.5,
+        description: "Estensione aree allagabili (Dir. 2007/60/CE — D.Lgs. 49/2010)",
+      },
+      {
+        id: "alluvioni_rischio",
+        label: "PGRA — Classi di rischio alluvionale",
+        color: "#1e40af",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_Classi_di_Rischio/MapServer",
+        opacity: 0.5,
+        description: "Classi di rischio alluvionale (Dir. 2007/60/CE)",
+      },
+      {
+        id: "alluvioni_idrauliche",
+        label: "PGRA — Caratteristiche idrauliche",
+        color: "#3b82f6",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_Caratteristiche_Idrauliche/MapServer",
+        opacity: 0.5,
+        description: "Caratteristiche idrauliche delle aree allagabili",
+      },
+      {
+        id: "alluvioni_elementi",
+        label: "PGRA — Elementi a rischio",
+        color: "#6366f1",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Alluvioni_ElementiRischio/MapServer",
+        opacity: 0.5,
+        description: "Elementi esposti al rischio di alluvione",
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // H. AUTORITÀ DI BACINO DISTRETTUALI
+  // ══════════════════════════════════════════════════════════════
+  {
+    id: "autorita_bacino",
+    label: "H. Autorità di Bacino Distrettuali",
+    icon: "🏞️",
+    layers: [
+      {
+        id: "adb",
+        label: "Perimetri Autorità di Bacino",
+        color: "#4b5563",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/ADB/MapServer",
+        opacity: 0.45,
+        description: "Perimetri delle Autorità di Bacino Distrettuale (7 distretti idrografici)",
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // I. VINCOLI URBANISTICI
+  // ══════════════════════════════════════════════════════════════
+  {
+    id: "vincoli_urbanistici",
+    label: "I. Vincoli Urbanistici",
+    icon: "🏘️",
+    layers: [
+      {
+        id: "limiti_admin",
+        label: "Limiti amministrativi 2020",
+        color: "#6b7280",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Limiti_amministrativi_2020/MapServer",
+        opacity: 0.5,
+        description: "Limiti comunali, provinciali e regionali (ISTAT 2020)",
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // L. RETE ECOLOGICA E ALTRI VINCOLI AMBIENTALI
+  // ══════════════════════════════════════════════════════════════
+  {
+    id: "rete_ecologica",
+    label: "L. Rete Ecologica & Biodiversità",
+    icon: "🦋",
+    layers: [
+      {
+        id: "ren",
+        label: "L1. Rete Ecologica Nazionale (REN)",
+        color: "#059669",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Rete_Ecologica_Nazionale/MapServer",
+        opacity: 0.45,
+        description: "Rete Ecologica Nazionale — corridoi e aree nucleo",
+      },
+      {
+        id: "iba",
+        label: "L2. IBA — Important Bird Areas",
+        color: "#22d3ee",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/iba/MapServer",
+        arcgisLayers: "show:0",
+        opacity: 0.5,
+        description: "Important Bird and Biodiversity Areas (BirdLife International / LIPU)",
+      },
+      {
+        id: "ramsar",
+        label: "L3. Zone umide RAMSAR",
+        color: "#0891b2",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/aree_ramsar/MapServer",
+        arcgisLayers: "show:0",
+        opacity: 0.55,
+        description: "Zone umide di importanza internazionale (Convenzione Ramsar 1971)",
+      },
+      {
+        id: "zone_umide",
+        label: "L3. Zone umide e paludi",
+        color: "#0e7490",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Zone_umide/MapServer",
+        opacity: 0.5,
+        description: "Aree umide e paludi d'Italia",
+      },
+      {
+        id: "inventario_forestale",
+        label: "Inventario Forestale Nazionale (INFC)",
+        color: "#166534",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Inventario_Forestale_Nazionale_2015/MapServer",
+        opacity: 0.45,
+        description: "Inventario Nazionale delle Foreste e dei serbatoi forestali di Carbonio",
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // M. INFRASTRUTTURE — BUFFER DI RISPETTO
+  // ══════════════════════════════════════════════════════════════
+  {
+    id: "infrastrutture",
+    label: "M. Infrastrutture & Buffer",
+    icon: "⚡",
+    layers: [
+      {
+        id: "elettrodotti",
+        label: "M1. Elettrodotti AT/AAT (buffer 150m)",
+        color: "#FFFF00",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/elettrodotti/MapServer",
+        opacity: 0.5,
+        description: "Linee elettriche Alta/Altissima Tensione — buffer DPA 150m (DM 29/05/2008)",
+      },
+      {
+        id: "gasdotti",
+        label: "M2. Gasdotti principali (buffer 200m)",
+        color: "#f59e0b",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/gasdotti/MapServer",
+        opacity: 0.5,
+        description: "Rete gasdotti principali (Snam) — buffer 200m",
+      },
+      {
+        id: "strade_principali",
+        label: "M4. Strade statali e autostrade",
+        color: "#9ca3af",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/strade/MapServer",
+        opacity: 0.45,
+        description: "Rete stradale — fasce rispetto DPR 495/1992 (60m autostrade, 40m statali, 30m provinciali)",
+      },
+      {
+        id: "ferrovie",
+        label: "Ferrovie (fascia 50m DPR 753/1980)",
+        color: "#374151",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/ferrovie/MapServer",
+        opacity: 0.55,
+        description: "Rete ferroviaria italiana — fascia rispetto 50m (DPR 753/1980)",
+      },
+      {
+        id: "porti",
+        label: "Porti",
+        color: "#1f2937",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Porti_2012/MapServer",
+        opacity: 0.55,
+        description: "Porti marittimi italiani",
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // N. AREE IDONEE E NON IDONEE — FOTOVOLTAICO / AGRIVOLTAICO
+  // ══════════════════════════════════════════════════════════════
+  {
+    id: "fotovoltaico",
+    label: "N. Fotovoltaico & Aree Idonee/Non Idonee",
+    icon: "☀️",
+    layers: [
+      {
+        id: "aree_idonee_fer",
+        label: "N1. Aree idonee FER (D.Lgs. 199/2021)",
+        color: "#00FF7F",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Aree_idonee_FER/MapServer",
+        opacity: 0.35,
+        description: "Aree idonee ex lege — D.Lgs. 199/2021 art. 20 (cave, discariche, siti contaminati, zone industriali)",
+      },
+      {
+        id: "aree_non_idonee_fer",
+        label: "N2. Aree non idonee FER (DM 10/09/2010)",
+        color: "#808080",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Aree_non_idonee_FER/MapServer",
+        opacity: 0.4,
+        description: "Aree non idonee — DM 10/09/2010 (Linee Guida nazionali FER)",
+      },
+      {
+        id: "doc_docg",
+        label: "N3. Zone DOC/DOCG vitivinicole",
+        color: "#7f1d1d",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/DOC_DOCG/MapServer",
+        opacity: 0.4,
+        description: "Delimitazioni zone DOC/DOCG — aree agricole di pregio",
+      },
+      {
+        id: "dop_igp",
+        label: "N3. Zone DOP/IGP agricole",
+        color: "#92400e",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/DOP_IGP/MapServer",
+        opacity: 0.4,
+        description: "Aree DOP/IGP — zone di pregio per agrivoltaico",
+      },
+      {
+        id: "impianti_fer",
+        label: "Impianti FER esistenti (GSE)",
+        color: "#22c55e",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Impianti_FER/MapServer",
+        opacity: 0.45,
+        description: "Impianti a fonti rinnovabili censiti dal GSE",
+      },
+      {
+        id: "irradianza_globale",
+        label: "Irradianza solare globale (media annua)",
+        color: "#f59e0b",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/irradianza_solare/MapServer",
+        opacity: 0.5,
+        description: "Irradianza solare globale media annuale (kWh/m²/anno) — ENEA/RSE",
+      },
+      {
+        id: "irradianza_diretta",
+        label: "Irradianza diretta normale (DNI)",
+        color: "#d97706",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/irradianza_solare_diretta/MapServer",
+        opacity: 0.5,
+        description: "Irradianza diretta normale media annuale",
+      },
+      {
+        id: "siti_contaminati",
+        label: "N1. Siti contaminati (SIN/SIR) — aree idonee",
+        color: "#991b1b",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/siti_contaminati/MapServer",
+        opacity: 0.45,
+        description: "Siti di Interesse Nazionale per le bonifiche — potenziali aree idonee FER",
+      },
+      {
+        id: "cave_miniere",
+        label: "N1. Cave e miniere dismesse — aree idonee",
+        color: "#78716c",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/cave_miniere/MapServer",
+        opacity: 0.45,
+        description: "Cave e miniere dismesse — potenziali aree idonee FER (D.Lgs. 199/2021)",
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // O. FASCE DI RISPETTO SPECIFICHE
+  // ══════════════════════════════════════════════════════════════
+  {
+    id: "fasce_rispetto",
+    label: "O. Fasce di Rispetto Specifiche",
+    icon: "🚧",
+    layers: [
+      {
+        id: "aeroporti",
+        label: "O1. Aeroporti e zone di rispetto (ENAC)",
+        color: "#6366f1",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/aeroporti/MapServer",
+        opacity: 0.5,
+        description: "Aeroporti e zone di rischio aeronautico (ENAC) — Zone A, B, C, D",
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // ALTRI LAYER — Sismica, Uso del suolo, Idrografia, Territorio
+  // ══════════════════════════════════════════════════════════════
   {
     id: "sismica",
     label: "Sismica",
@@ -507,10 +813,9 @@ export const LAYER_GROUPS: LayerGroup[] = [
     ],
   },
 
-  // ── USO DEL SUOLO ───────────────────────────────────────────
   {
     id: "uso_suolo",
-    label: "Uso del suolo",
+    label: "Uso del Suolo",
     icon: "🌾",
     layers: [
       {
@@ -533,17 +838,25 @@ export const LAYER_GROUPS: LayerGroup[] = [
       },
       {
         id: "iuti",
-        label: "IUTI - Inventario Uso Terre",
+        label: "IUTI — Inventario Uso Terre",
         color: "#84cc16",
         defaultOn: false,
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/IUTI/MapServer",
         opacity: 0.5,
         description: "Inventario dell'Uso delle Terre d'Italia",
       },
+      {
+        id: "capacita_uso_suoli",
+        label: "Capacità d'uso dei suoli (LCC)",
+        color: "#a16207",
+        defaultOn: false,
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/capacita_uso_suoli/MapServer",
+        opacity: 0.45,
+        description: "Classi di capacità d'uso dei suoli (Land Capability Classification)",
+      },
     ],
   },
 
-  // ── IDROGRAFIA & COSTA ──────────────────────────────────────
   {
     id: "idrografia",
     label: "Idrografia & Costa",
@@ -597,187 +910,6 @@ export const LAYER_GROUPS: LayerGroup[] = [
     ],
   },
 
-  // ── LIMITI & INFRASTRUTTURE ─────────────────────────────────
-  {
-    id: "infrastrutture",
-    label: "Limiti & Infrastrutture",
-    icon: "🏗️",
-    layers: [
-      {
-        id: "limiti_admin",
-        label: "Limiti amministrativi 2020",
-        color: "#6b7280",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Limiti_amministrativi_2020/MapServer",
-        opacity: 0.5,
-        description: "Limiti comunali, provinciali e regionali (ISTAT 2020)",
-      },
-      {
-        id: "ferrovie",
-        label: "Ferrovie",
-        color: "#374151",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/ferrovie/MapServer",
-        opacity: 0.55,
-        description: "Rete ferroviaria italiana",
-      },
-      {
-        id: "porti",
-        label: "Porti 2012",
-        color: "#1f2937",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Porti_2012/MapServer",
-        opacity: 0.55,
-        description: "Porti marittimi italiani (censimento 2012)",
-      },
-      {
-        id: "adb",
-        label: "Autorità di Bacino Distrettuale",
-        color: "#4b5563",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/ADB/MapServer",
-        opacity: 0.45,
-        description: "Perimetri delle Autorità di Bacino Distrettuale",
-      },
-    ],
-  },
-
-  // ── SITI UNESCO ─────────────────────────────────────────────
-  {
-    id: "unesco",
-    label: "Siti UNESCO",
-    icon: "🏰",
-    layers: [
-      {
-        id: "unesco_sites",
-        label: "Siti Patrimonio Mondiale UNESCO",
-        color: "#8B008B",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/UNESCO/MapServer",
-        opacity: 0.4,
-        description: "Siti del Patrimonio Mondiale UNESCO in Italia",
-      },
-    ],
-  },
-
-  // ── RETE ECOLOGICA & BIODIVERSITÀ ──────────────────────────
-  {
-    id: "rete_ecologica",
-    label: "Rete Ecologica & Biodiversità",
-    icon: "🦋",
-    layers: [
-      {
-        id: "ren",
-        label: "Rete Ecologica Nazionale (REN)",
-        color: "#059669",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Rete_Ecologica_Nazionale/MapServer",
-        opacity: 0.45,
-        description: "Rete Ecologica Nazionale — corridoi e aree nucleo",
-      },
-      {
-        id: "inventario_forestale",
-        label: "Inventario Forestale Nazionale (INFC)",
-        color: "#166534",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Inventario_Forestale_Nazionale_2015/MapServer",
-        opacity: 0.45,
-        description: "Inventario Nazionale delle Foreste e dei serbatoi forestali di Carbonio",
-      },
-      {
-        id: "zone_umide",
-        label: "Zone umide e paludi",
-        color: "#0891b2",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Zone_umide/MapServer",
-        opacity: 0.5,
-        description: "Aree umide e paludi d'Italia",
-      },
-    ],
-  },
-
-  // ── FASCE DI RISPETTO & BUFFER INFRASTRUTTURE ──────────────
-  {
-    id: "fasce_rispetto",
-    label: "Fasce di Rispetto",
-    icon: "⚡",
-    layers: [
-      {
-        id: "elettrodotti",
-        label: "Elettrodotti AT/AAT (Terna)",
-        color: "#FFFF00",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/elettrodotti/MapServer",
-        opacity: 0.5,
-        description: "Linee elettriche Alta/Altissima Tensione — buffer DPA 150m",
-      },
-      {
-        id: "gasdotti",
-        label: "Gasdotti principali (Snam)",
-        color: "#f59e0b",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/gasdotti/MapServer",
-        opacity: 0.5,
-        description: "Rete gasdotti principali — buffer 200m",
-      },
-      {
-        id: "strade_principali",
-        label: "Strade statali e autostrade",
-        color: "#9ca3af",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/strade/MapServer",
-        opacity: 0.45,
-        description: "Rete stradale — fasce rispetto DPR 495/1992",
-      },
-      {
-        id: "aeroporti",
-        label: "Aeroporti e zone di rispetto",
-        color: "#6366f1",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/aeroporti/MapServer",
-        opacity: 0.5,
-        description: "Aeroporti e zone di rischio aeronautico (ENAC)",
-      },
-    ],
-  },
-
-  // ── VINCOLI AGRICOLI ────────────────────────────────────────
-  {
-    id: "agricoltura",
-    label: "Vincoli Agricoli & DOC",
-    icon: "🍇",
-    layers: [
-      {
-        id: "doc_docg",
-        label: "Zone DOC/DOCG vitivinicole",
-        color: "#7f1d1d",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/DOC_DOCG/MapServer",
-        opacity: 0.4,
-        description: "Delimitazioni zone DOC/DOCG — aree a denominazione di origine",
-      },
-      {
-        id: "dop_igp",
-        label: "Zone DOP/IGP agricole",
-        color: "#92400e",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/DOP_IGP/MapServer",
-        opacity: 0.4,
-        description: "Aree a Denominazione di Origine Protetta e Indicazione Geografica Protetta",
-      },
-      {
-        id: "capacita_uso_suoli",
-        label: "Capacità d'uso dei suoli (LCC)",
-        color: "#a16207",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/capacita_uso_suoli/MapServer",
-        opacity: 0.45,
-        description: "Classi di capacità d'uso dei suoli (Land Capability Classification)",
-      },
-    ],
-  },
-
-  // ── AMBIENTE & TERRITORIO ───────────────────────────────────
   {
     id: "territorio",
     label: "Ambiente & Territorio",
@@ -802,83 +934,19 @@ export const LAYER_GROUPS: LayerGroup[] = [
         description: "Classificazione fitoclimatica del territorio italiano",
       },
       {
-        id: "siti_contaminati",
-        label: "Siti contaminati (SIN/SIR)",
-        color: "#991b1b",
+        id: "rischio_beni_esposti",
+        label: "Rischio beni culturali esposti",
+        color: "#c084fc",
         defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/siti_contaminati/MapServer",
-        opacity: 0.45,
-        description: "Siti di Interesse Nazionale per le bonifiche — potenziali aree idonee FER",
-      },
-      {
-        id: "cave_miniere",
-        label: "Cave e miniere",
-        color: "#78716c",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/cave_miniere/MapServer",
-        opacity: 0.45,
-        description: "Cave e miniere dismesse — potenziali aree idonee FER",
-      },
-    ],
-  },
-
-  // ── FOTOVOLTAICO & AREE IDONEE ─────────────────────────────
-  {
-    id: "fotovoltaico",
-    label: "Fotovoltaico & Aree Idonee",
-    icon: "☀️",
-    layers: [
-      {
-        id: "irradianza_globale",
-        label: "Irradianza solare globale (media annua)",
-        color: "#f59e0b",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/irradianza_solare/MapServer",
-        opacity: 0.5,
-        description: "Irradianza solare globale media annuale (kWh/m²/anno) — ENEA/RSE",
-      },
-      {
-        id: "irradianza_diretta",
-        label: "Irradianza diretta normale (DNI)",
-        color: "#d97706",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/irradianza_solare_diretta/MapServer",
-        opacity: 0.5,
-        description: "Irradianza diretta normale media annuale",
-      },
-      {
-        id: "aree_idonee_fer",
-        label: "Aree idonee FER (D.Lgs. 199/2021)",
-        color: "#00FF7F",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Aree_idonee_FER/MapServer",
-        opacity: 0.35,
-        description: "Aree idonee ex lege — D.Lgs. 199/2021 art. 20",
-      },
-      {
-        id: "aree_non_idonee_fer",
-        label: "Aree non idonee FER",
-        color: "#808080",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Aree_non_idonee_FER/MapServer",
-        opacity: 0.4,
-        description: "Aree non idonee — DM 10/09/2010",
-      },
-      {
-        id: "impianti_fer",
-        label: "Impianti FER esistenti (GSE)",
-        color: "#22c55e",
-        defaultOn: false,
-        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Impianti_FER/MapServer",
-        opacity: 0.45,
-        description: "Impianti a fonti rinnovabili censiti dal GSE",
+        arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Rischio_beni_esposti/MapServer",
+        opacity: 0.55,
+        description: "Beni culturali e ambientali esposti a rischio — PCN",
       },
     ],
   },
 
   // ══════════════════════════════════════════════════════════════
   // VINCOLI REGIONALI — Geoportali ufficiali
-  // Ogni layer ha bounds per caricarsi solo nella regione corretta
   // ══════════════════════════════════════════════════════════════
 
   // ── PUGLIA ──────────────────────────────────────────────────
@@ -889,7 +957,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
     layers: [
       {
         id: "puglia_pptr",
-        label: "PPTR - Piano Paesaggistico",
+        label: "PPTR — Piano Paesaggistico",
         color: "#7c3aed",
         defaultOn: false,
         arcgisUrl: "https://webapps.sit.puglia.it/arcgis/rest/services/PPTR/PPTR_ambiti_paesaggistici/MapServer",
@@ -905,7 +973,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisUrl: "https://webapps.sit.puglia.it/arcgis/rest/services/Idrogeomorfologia/Vincolo_Idrogeologico/MapServer",
         opacity: 0.5,
         bounds: [39.78, 15.33, 42.23, 18.52],
-        description: "Aree soggette a vincolo idrogeologico — Regione Puglia",
+        description: "Aree sottoposte a vincolo idrogeologico — Regione Puglia",
       },
       {
         id: "puglia_olivi",
@@ -925,7 +993,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisUrl: "https://webapps.sit.puglia.it/arcgis/rest/services/Energia/Aree_non_idonee_FER/MapServer",
         opacity: 0.5,
         bounds: [39.78, 15.33, 42.23, 18.52],
-        description: "Aree non idonee all'installazione di impianti FER — R.R. Puglia 24/2010",
+        description: "Aree non idonee FER — R.R. Puglia 24/2010",
       },
       {
         id: "puglia_usi_civici",
@@ -936,6 +1004,54 @@ export const LAYER_GROUPS: LayerGroup[] = [
         opacity: 0.5,
         bounds: [39.78, 15.33, 42.23, 18.52],
         description: "Terreni gravati da usi civici — Regione Puglia",
+      },
+    ],
+  },
+
+  // ── BASILICATA ──────────────────────────────────────────────
+  {
+    id: "reg_basilicata",
+    label: "🇮🇹 Basilicata",
+    icon: "📍",
+    layers: [
+      {
+        id: "basilicata_pai",
+        label: "PAI Basilicata",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://rsdi.regione.basilicata.it/arcgis/rest/services/PAI/PAI_Pericolosita/MapServer",
+        opacity: 0.5,
+        bounds: [39.89, 15.33, 41.14, 16.87],
+        description: "PAI pericolosità — Regione Basilicata",
+      },
+      {
+        id: "basilicata_vincolo_idro",
+        label: "Vincolo idrogeologico Basilicata",
+        color: "#2563eb",
+        defaultOn: false,
+        arcgisUrl: "https://rsdi.regione.basilicata.it/arcgis/rest/services/Difesa_Suolo/Vincolo_Idrogeologico/MapServer",
+        opacity: 0.5,
+        bounds: [39.89, 15.33, 41.14, 16.87],
+        description: "Vincolo idrogeologico — RSDI Basilicata",
+      },
+    ],
+  },
+
+  // ── CALABRIA ────────────────────────────────────────────────
+  {
+    id: "reg_calabria",
+    label: "🇮🇹 Calabria",
+    icon: "📍",
+    layers: [
+      {
+        id: "calabria_pai",
+        label: "PAI Calabria",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://geoportale.regione.calabria.it/arcgis/rest/services/PAI/PAI_pericolosita/MapServer",
+        opacity: 0.5,
+        bounds: [37.91, 15.63, 39.95, 17.13],
+        description: "PAI pericolosità — Regione Calabria",
       },
     ],
   },
@@ -951,8 +1067,6 @@ export const LAYER_GROUPS: LayerGroup[] = [
         label: "Vincolo paesaggistico Toscana",
         color: "#a855f7",
         defaultOn: false,
-        wmsUrl: "https://www502.regione.toscana.it/geoscopio/paesaggio.html",
-        wmsLayer: "rt_vincpae.idvinpae_rt",
         arcgisUrl: "https://www502.regione.toscana.it/arcgis/rest/services/paesaggio/vincoli_paesaggistici/MapServer",
         opacity: 0.5,
         bounds: [42.24, 9.69, 44.47, 12.37],
@@ -999,7 +1113,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
       },
       {
         id: "lombardia_pgt",
-        label: "PGT - Piani di Governo del Territorio",
+        label: "PGT — Piani di Governo del Territorio",
         color: "#7c3aed",
         defaultOn: false,
         arcgisUrl: "https://www.cartografia.servizirl.it/arcgis2/rest/services/Urbanistica/PGT_mosaico/MapServer",
@@ -1009,7 +1123,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
       },
       {
         id: "lombardia_boschi",
-        label: "Boschi e foreste Lombardia",
+        label: "DUSAF — Boschi e foreste Lombardia",
         color: "#166534",
         defaultOn: false,
         arcgisUrl: "https://www.cartografia.servizirl.it/arcgis2/rest/services/Ambiente/Uso_suolo_DUSAF/MapServer",
@@ -1083,7 +1197,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisUrl: "https://www.sitr.regione.sicilia.it/arcgis/rest/services/Energia/Aree_non_idonee_FER/MapServer",
         opacity: 0.5,
         bounds: [36.64, 12.43, 38.82, 15.65],
-        description: "Aree non idonee all'installazione FER — Regione Sicilia",
+        description: "Aree non idonee FER — Regione Sicilia",
       },
     ],
   },
@@ -1096,13 +1210,13 @@ export const LAYER_GROUPS: LayerGroup[] = [
     layers: [
       {
         id: "lazio_ptpr",
-        label: "PTPR - Piano Paesistico Lazio",
+        label: "PTPR — Piano Paesistico Lazio",
         color: "#7c3aed",
         defaultOn: false,
         arcgisUrl: "https://geoportale.regione.lazio.it/arcgis/rest/services/Paesaggio/PTPR_Tavole_A/MapServer",
         opacity: 0.5,
         bounds: [41.18, 11.45, 42.84, 14.03],
-        description: "Piano Territoriale Paesistico Regionale — Tavole A (beni paesaggistici)",
+        description: "PTPR — Tavole A (beni paesaggistici) — Regione Lazio",
       },
       {
         id: "lazio_vincolo_idro",
@@ -1154,7 +1268,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
     layers: [
       {
         id: "piemonte_ppr",
-        label: "PPR - Piano Paesaggistico Piemonte",
+        label: "PPR — Piano Paesaggistico Piemonte",
         color: "#7c3aed",
         defaultOn: false,
         arcgisUrl: "https://geomap.reteunitaria.piemonte.it/arcgis/rest/services/Paesaggio/PPR_componenti/MapServer",
@@ -1212,7 +1326,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
     layers: [
       {
         id: "sardegna_ppr",
-        label: "PPR - Piano Paesaggistico Sardegna",
+        label: "PPR — Piano Paesaggistico Sardegna",
         color: "#7c3aed",
         defaultOn: false,
         arcgisUrl: "https://webgis2.regione.sardegna.it/arcgis/rest/services/PPR/PPR_ambiti/MapServer",
@@ -1229,54 +1343,6 @@ export const LAYER_GROUPS: LayerGroup[] = [
         opacity: 0.5,
         bounds: [38.86, 8.13, 41.26, 9.83],
         description: "Vincolo idrogeologico — Regione Sardegna",
-      },
-    ],
-  },
-
-  // ── CALABRIA ────────────────────────────────────────────────
-  {
-    id: "reg_calabria",
-    label: "🇮🇹 Calabria",
-    icon: "📍",
-    layers: [
-      {
-        id: "calabria_pai",
-        label: "PAI Calabria",
-        color: "#dc2626",
-        defaultOn: false,
-        arcgisUrl: "https://geoportale.regione.calabria.it/arcgis/rest/services/PAI/PAI_pericolosita/MapServer",
-        opacity: 0.5,
-        bounds: [37.91, 15.63, 39.95, 17.13],
-        description: "PAI pericolosità — Regione Calabria",
-      },
-    ],
-  },
-
-  // ── BASILICATA ──────────────────────────────────────────────
-  {
-    id: "reg_basilicata",
-    label: "🇮🇹 Basilicata",
-    icon: "📍",
-    layers: [
-      {
-        id: "basilicata_pai",
-        label: "PAI Basilicata",
-        color: "#dc2626",
-        defaultOn: false,
-        arcgisUrl: "https://rsdi.regione.basilicata.it/arcgis/rest/services/PAI/PAI_Pericolosita/MapServer",
-        opacity: 0.5,
-        bounds: [39.89, 15.33, 41.14, 16.87],
-        description: "PAI pericolosità — Regione Basilicata",
-      },
-      {
-        id: "basilicata_vincolo_idro",
-        label: "Vincolo idrogeologico Basilicata",
-        color: "#2563eb",
-        defaultOn: false,
-        arcgisUrl: "https://rsdi.regione.basilicata.it/arcgis/rest/services/Difesa_Suolo/Vincolo_Idrogeologico/MapServer",
-        opacity: 0.5,
-        bounds: [39.89, 15.33, 41.14, 16.87],
-        description: "Vincolo idrogeologico — RSDI Basilicata",
       },
     ],
   },
