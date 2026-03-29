@@ -283,7 +283,7 @@ export function MapView({
   const parcelFeaturesRef = useRef<Record<string, GeoJSON.Feature[]>>({});
   const [selectionArea, setSelectionArea] = useState<{ mq: number; count: number } | null>(null);
   const [clickLoading, setClickLoading] = useState(false);
-  const [clickMode, setClickMode] = useState(false);
+  const [clickMode] = useState(false); // kept for compatibility, always false
   // Track parcel IDs already drawn/fetched to prevent redundant re-runs
   const drawnParcelIdsRef = useRef<string>("");
 
