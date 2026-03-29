@@ -481,7 +481,7 @@ export function MapView({
     const map = mapRef.current;
     if (!map || Object.keys(serverStatuses).length === 0) return;
 
-    for (const layerDef of ALL_LAYERS) {
+    for (const layerDef of getMergedLayers()) {
       if (resolvedFallbacksRef.current.has(layerDef.id)) continue;
       if (!layerDef.fallbackUrls?.length) continue;
 
@@ -779,7 +779,7 @@ export function MapView({
 
     // Build a lookup of layer bounds from definitions
     const boundsLookup: Record<string, [number, number, number, number] | undefined> = {};
-    for (const l of ALL_LAYERS) {
+    for (const l of getMergedLayers()) {
       boundsLookup[l.id] = l.bounds;
     }
 
