@@ -353,6 +353,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:2",
         opacity: 0.5,
         description: "Aree sottoposte a vincolo idrogeologico — R.D. 3267/1923",
+        fallbackUrls: ["https://sinacloud.isprambiente.it/arcgisina/rest/services/PAI_Frane/Aree_pericolosita_frana_PAI/MapServer"],
       },
       {
         id: "frane_iffi",
@@ -363,6 +364,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:0",
         opacity: 0.55,
         description: "Inventario Fenomeni Franosi in Italia (ISPRA IFFI) — frane poligonali",
+        fallbackUrls: ["https://sinacloud.isprambiente.it/arcgisina/rest/services/iffi/Progetto_IFFI_WMS_public/MapServer"],
       },
       {
         id: "frane_lineari",
@@ -373,6 +375,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:0",
         opacity: 0.55,
         description: "IFFI — frane lineari",
+        fallbackUrls: ["https://sinacloud.isprambiente.it/arcgisina/rest/services/iffi/Progetto_IFFI_WMS_public/MapServer"],
       },
       {
         id: "frane_dgpv",
@@ -383,6 +386,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:0",
         opacity: 0.55,
         description: "IFFI — Deformazioni Gravititative Profonde di Versante",
+        fallbackUrls: ["https://sinacloud.isprambiente.it/arcgisina/rest/services/iffi/Progetto_IFFI_WMS_public/MapServer"],
       },
       {
         id: "frane_aree",
@@ -393,6 +397,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:0",
         opacity: 0.55,
         description: "IFFI — aree soggette a frana",
+        fallbackUrls: ["https://sinacloud.isprambiente.it/arcgisina/rest/services/iffi/Progetto_IFFI_WMS_public/MapServer"],
       },
     ],
   },
@@ -414,6 +419,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:1",
         opacity: 0.55,
         description: "Mosaicatura PAI — Pericolosità da frana P1→P4",
+        fallbackUrls: ["https://sinacloud.isprambiente.it/arcgisina/rest/services/PAI_Frane/Aree_pericolosita_frana_PAI/MapServer"],
       },
       {
         id: "pai_rischio",
@@ -462,6 +468,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:0",
         opacity: 0.55,
         description: "Mosaicatura PAI — Pericolosità da alluvione (P1→P3)",
+        fallbackUrls: ["https://sinacloud.isprambiente.it/arcgisina/rest/services/Alluvioni/Aree_pericolosita_idraulica_/MapServer"],
       },
       {
         id: "alluvioni_estensione",
