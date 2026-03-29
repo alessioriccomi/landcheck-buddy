@@ -27,6 +27,7 @@ export function LegendPanel({
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
     Object.fromEntries(LAYER_GROUPS.map(g => [g.id, g.id === "catasto"]))
   );
+  const [refreshing, setRefreshing] = useState(false);
 
   const toggleGroup = (gid: string) => {
     setExpandedGroups(prev => ({ ...prev, [gid]: !prev[gid] }));
@@ -52,7 +53,6 @@ export function LegendPanel({
   const offlineCount = allStatuses.filter(s => s.status === "offline").length;
   const checkingCount = allStatuses.filter(s => s.status === "checking").length;
   const totalHosts = allStatuses.length;
-  const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = async () => {
     if (refreshing) return;
