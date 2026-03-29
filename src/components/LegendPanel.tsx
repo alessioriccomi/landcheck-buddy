@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Eye, EyeOff, ChevronDown, ChevronRight, Power, PowerOff } from "lucide-react";
+import { Eye, EyeOff, ChevronDown, ChevronRight, Power, PowerOff, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { LAYER_GROUPS, ALL_LAYERS, type LayerGroup } from "@/lib/layerDefinitions";
+import { getServerStatusForUrl, type ServerHealth, type ServerStatus, clearHealthCache, probeAllServers } from "@/lib/wmsHealthProbe";
 
 interface LegendPanelProps {
   layerState: Record<string, boolean>;
@@ -10,6 +11,8 @@ interface LegendPanelProps {
   onToggleLayer: (id: string) => void;
   onSetOpacity: (id: string, opacity: number) => void;
   onToggleAllInGroup: (groupId: string, on: boolean) => void;
+  serverStatuses?: Record<string, ServerHealth>;
+  onRefreshStatuses?: () => void;
 }
 
 export function LegendPanel({
