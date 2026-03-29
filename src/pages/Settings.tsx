@@ -437,8 +437,14 @@ export default function Settings() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={importConfig} className="h-7 text-[10px] gap-1">
+            <Upload size={10} /> Importa
+          </Button>
+          <Button variant="ghost" size="sm" onClick={exportConfig} className="h-7 text-[10px] gap-1">
+            <Download size={10} /> Esporta
+          </Button>
           <Button variant="outline" size="sm" onClick={resetAll} className="h-7 text-[10px] gap-1">
-            <RotateCcw size={10} /> Reset tutto
+            <RotateCcw size={10} /> Reset
           </Button>
           <Button size="sm" onClick={saveAll} disabled={!dirty} className="h-7 text-[10px] gap-1">
             <Save size={10} /> Salva
