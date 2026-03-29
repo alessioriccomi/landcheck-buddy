@@ -5,6 +5,7 @@ export interface Particella {
   foglio: string;
   particella: string;
   subalterno?: string;
+  sezione?: string;
   color?: string;
   superficieMq?: number;
 }
