@@ -40,6 +40,19 @@ export default function Index() {
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
 
+  // WMS server health statuses
+  const [serverStatuses, setServerStatuses] = useState<Record<string, ServerHealth>>({});
+
+  // Probe WMS servers on mount
+  useEffect(() => {
+    const urls: string[] = [];
+    for (const l of ALL_LAYERS) {
+      if (l.arcgisUrl) urls.push(l.arcgisUrl);
+      if (l.wmsUrl) urls.push(l.wmsUrl);
+    }
+    probeAllServers(urls, setServerStatuses);
+  }, []);
+
   const { user, isAuthenticated, signOut } = useAuth();
   const { constraints, addConstraint, toggleConstraint, deleteConstraint } = useCustomConstraints(user?.id);
   const { analyses: savedAnalyses, loading: savedAnalysesLoading, saveAnalysis, deleteAnalysis } = useSavedAnalyses(user?.id);
