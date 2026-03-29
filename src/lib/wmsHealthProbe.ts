@@ -6,13 +6,14 @@
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
-export type ServerStatus = "unknown" | "checking" | "online" | "offline";
+export type ServerStatus = "unknown" | "checking" | "online" | "offline" | "tls_error";
 
 export interface ServerHealth {
   host: string;
   status: ServerStatus;
   checkedAt: number;
   latencyMs?: number;
+  errorDetail?: string;
 }
 
 // Cache: host → health (avoids repeated probes within 5 min)
@@ -31,9 +32,8 @@ function extractHost(url: string): string {
  * Probe a single endpoint via proxy to avoid CORS.
  * Uses a lightweight HEAD-like request through the wfs-proxy.
  */
-async function probeEndpoint(url: string, timeoutMs = 8000): Promise<boolean> {
+async function probeEndpoint(url: string, timeoutMs = 8000): Promise<{ ok: boolean; tlsError?: boolean; detail?: string }> {
   const proxyBase = `${SUPABASE_URL}/functions/v1/wfs-proxy`;
-  // For ArcGIS: ?f=json returns metadata; for WMS: GetCapabilities
   let testUrl: string;
   if (url.includes("/MapServer")) {
     testUrl = `${url}?f=json`;
@@ -54,31 +54,35 @@ async function probeEndpoint(url: string, timeoutMs = 8000): Promise<boolean> {
       }
     );
     clearTimeout(timer);
-    // Check if response is valid (not 503, not HTML error page)
-    if (!resp.ok) return false;
+    if (!resp.ok) {
+      // Check for TLS error in response
+      try {
+        const json = await resp.json();
+        if (json.error === "TLS_INVALID_CERT") {
+          return { ok: false, tlsError: true, detail: json.userMessage || json.detail };
+        }
+      } catch { /* not json */ }
+      return { ok: false };
+    }
     const text = await resp.text();
-    if (text.length < 50) return false;
-    // Detect HTML error pages (503, 404, Drupal pages, generic redirects)
+    if (text.length < 50) return { ok: false };
     const lower = text.substring(0, 2000).toLowerCase();
-    if (lower.includes("503 service") || lower.includes("service temporarily unavailable")) return false;
+    if (lower.includes("503 service") || lower.includes("service temporarily unavailable")) return { ok: false };
     if (lower.includes("<!doctype html") || lower.includes("<html")) {
-      // HTML response — only valid if it's a WMS GetCapabilities wrapped in XML
-      // Real WMS/ArcGIS responses are JSON or XML, never full HTML pages
       if (!lower.includes("<wms_capabilities") && !lower.includes("<wmt_ms_capabilities") && !lower.includes('"mapname"')) {
-        return false;
+        return { ok: false };
       }
     }
-    // Check for proxy-level errors
     if (text.startsWith("{")) {
       try {
         const json = JSON.parse(text);
-        if (json.error) return false;
-      } catch { /* not JSON, that's fine */ }
+        if (json.error) return { ok: false };
+      } catch { /* not JSON */ }
     }
-    return true;
+    return { ok: true };
   } catch {
     clearTimeout(timer);
-    return false;
+    return { ok: false };
   }
 }
 
@@ -93,12 +97,13 @@ export async function checkServerHealth(baseUrl: string): Promise<ServerHealth> 
   }
 
   const start = Date.now();
-  const ok = await probeEndpoint(baseUrl);
+  const result = await probeEndpoint(baseUrl);
   const health: ServerHealth = {
     host,
-    status: ok ? "online" : "offline",
+    status: result.ok ? "online" : result.tlsError ? "tls_error" : "offline",
     checkedAt: Date.now(),
     latencyMs: Date.now() - start,
+    errorDetail: result.detail,
   };
   healthCache.set(host, health);
   return health;
@@ -158,13 +163,13 @@ export async function resolveWithFallback(
   fallbacks: string[] = []
 ): Promise<{ url: string; isOriginal: boolean }> {
   // Check primary first
-  const primaryOk = await probeEndpoint(primaryUrl, 6000);
-  if (primaryOk) return { url: primaryUrl, isOriginal: true };
+  const primaryResult = await probeEndpoint(primaryUrl, 6000);
+  if (primaryResult.ok) return { url: primaryUrl, isOriginal: true };
 
   // Try fallbacks
   for (const fb of fallbacks) {
-    const ok = await probeEndpoint(fb, 6000);
-    if (ok) return { url: fb, isOriginal: false };
+    const fbResult = await probeEndpoint(fb, 6000);
+    if (fbResult.ok) return { url: fb, isOriginal: false };
   }
 
   // Return primary anyway (let it fail silently)

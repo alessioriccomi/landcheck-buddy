@@ -900,7 +900,13 @@ serve(async (req) => {
               },
             });
           } catch (fetchErr) {
-            return new Response(JSON.stringify({ error: "WMS fetch failed", detail: String(fetchErr) }), {
+            const msg = String(fetchErr);
+            const isTls = msg.includes("UnknownIssuer") || msg.includes("certificate") || msg.includes("SSL") || msg.includes("TLS");
+            return new Response(JSON.stringify(
+              isTls
+                ? { error: "TLS_INVALID_CERT", detail: msg, userMessage: "Il server ha un certificato TLS non valido. Il layer non può essere caricato in modo sicuro." }
+                : { error: "WMS fetch failed", detail: msg }
+            ), {
               status: 502,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });

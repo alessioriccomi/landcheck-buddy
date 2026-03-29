@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Eye, EyeOff, ChevronDown, ChevronRight, Power, PowerOff, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { Eye, EyeOff, ChevronDown, ChevronRight, Power, PowerOff, RefreshCw, Wifi, WifiOff, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { LAYER_GROUPS, ALL_LAYERS, type LayerGroup } from "@/lib/layerDefinitions";
@@ -59,6 +59,7 @@ export function LegendPanel({
     switch (status) {
       case "online": return <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" title="Server online" />;
       case "offline": return <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0 animate-pulse" title="Server offline" />;
+      case "tls_error": return <span className="flex-shrink-0" title="Certificato TLS non valido"><ShieldAlert size={10} className="text-amber-500" /></span>;
       case "checking": return <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0 animate-pulse" title="Verifica in corso..." />;
       default: return <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 flex-shrink-0" title="Stato sconosciuto" />;
     }
@@ -68,6 +69,7 @@ export function LegendPanel({
   const allStatuses = Object.values(serverStatuses);
   const onlineCount = allStatuses.filter(s => s.status === "online").length;
   const offlineCount = allStatuses.filter(s => s.status === "offline").length;
+  const tlsErrorCount = allStatuses.filter(s => s.status === "tls_error").length;
   const checkingCount = allStatuses.filter(s => s.status === "checking").length;
   const totalHosts = allStatuses.length;
 
@@ -136,7 +138,7 @@ export function LegendPanel({
                         <button
                           onClick={() => onToggleLayer(l.id)}
                           className="w-full flex items-center gap-2 py-1 px-1.5 rounded hover:bg-muted/40 transition-colors text-left"
-                          title={`${l.description}${layerStatus === "offline" ? " ⚠️ Server offline" : ""}`}
+                          title={`${l.description}${layerStatus === "offline" ? " ⚠️ Server offline" : layerStatus === "tls_error" ? " 🔒 Certificato TLS non valido" : ""}`}
                         >
                           <div
                             className="w-3 h-3 rounded-sm border flex-shrink-0 transition-colors"
@@ -148,7 +150,7 @@ export function LegendPanel({
                           <span className={cn(
                             "text-[11px] flex-1 leading-tight",
                             isActive ? "text-foreground" : "text-muted-foreground",
-                            layerStatus === "offline" && "line-through opacity-60"
+                            (layerStatus === "offline" || layerStatus === "tls_error") && "line-through opacity-60"
                           )}>
                             {l.label}
                           </span>
@@ -202,8 +204,8 @@ export function LegendPanel({
               <span className="text-[9px] text-muted-foreground">
                 {checkingCount > 0
                   ? `Verifica ${checkingCount} server...`
-                  : offlineCount > 0
-                    ? `${offlineCount}/${totalHosts} server offline`
+                  : offlineCount > 0 || tlsErrorCount > 0
+                    ? `${offlineCount + tlsErrorCount}/${totalHosts} non disponibili${tlsErrorCount > 0 ? ` (${tlsErrorCount} TLS)` : ""}`
                     : `${onlineCount} server online`}
               </span>
             </div>
