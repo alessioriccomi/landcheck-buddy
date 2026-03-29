@@ -840,6 +840,7 @@ serve(async (req) => {
         "www502.regione.toscana.it",
         "www.cartografia.servizirl.it",
         "sit2.regione.campania.it",
+        "sit.regione.campania.it",
         "www.sitr.regione.sicilia.it",
         "geoportale.regione.lazio.it",
         "idt2.regione.veneto.it",
@@ -853,6 +854,8 @@ serve(async (req) => {
         "geoportale.regione.liguria.it",
         "irdat.regione.fvg.it",
         "geoportale.regione.umbria.it",
+        "www.umbriageo.regione.umbria.it",
+        "umbriageo.regione.umbria.it",
         "siat.regione.marche.it",
         "webgis.regione.taa.it",
         "mappe.regione.vda.it",
@@ -880,12 +883,35 @@ serve(async (req) => {
       }
 
       try {
-        const resp = await fetch(targetUrl, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (compatible; GeoVincoliProxy/1.0)",
-            Accept: "image/png,image/*",
-          },
-        });
+        // Follow redirects manually to avoid infinite redirect loops (e.g. sit2.regione.campania.it)
+        let currentUrl = targetUrl;
+        let resp: Response | null = null;
+        for (let i = 0; i < 5; i++) {
+          resp = await fetch(currentUrl, {
+            redirect: "manual",
+            headers: {
+              "User-Agent": "Mozilla/5.0 (compatible; GeoVincoliProxy/1.0)",
+              Accept: "image/png,image/*,application/json,text/xml",
+            },
+          });
+          if (resp.status >= 300 && resp.status < 400) {
+            const loc = resp.headers.get("location");
+            if (!loc) break;
+            const nextUrl = new URL(loc, currentUrl);
+            if (!allowedDomains.some((d) => nextUrl.hostname === d || nextUrl.hostname.endsWith("." + d))) {
+              return new Response(JSON.stringify({ error: "Redirect to disallowed domain" }), {
+                status: 403,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+            currentUrl = nextUrl.toString();
+            // consume body to prevent resource leak
+            await resp.text();
+            continue;
+          }
+          break;
+        }
+        if (!resp) throw new Error("No response received");
         const imageData = await resp.arrayBuffer();
         return new Response(imageData, {
           headers: {
