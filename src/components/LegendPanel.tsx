@@ -89,7 +89,7 @@ export function LegendPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-        {LAYER_GROUPS.map(group => {
+        {mergedGroups.map(group => {
           const groupActive = group.layers.filter(l => layerState[l.id]).length;
           const isExpanded = expandedGroups[group.id];
           const allOn = groupActive === group.layers.length;
