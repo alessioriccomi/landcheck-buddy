@@ -249,6 +249,7 @@ type ParcelStatus = "idle" | "loading" | "real" | "placeholder";
 export function MapView({
   particelle,
   activeLayers,
+  layerOpacity = {},
   customConstraints = [],
   onParcelGeometries,
   onParcelAreaUpdate,
