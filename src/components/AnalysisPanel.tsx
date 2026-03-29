@@ -63,6 +63,7 @@ export function AnalysisPanel({
 }: AnalysisPanelProps) {
   const [constraintDialogOpen, setConstraintDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("particelle");
+  const navigate = useNavigate();
 
   return (
     <div className="flex flex-col h-full">
@@ -88,6 +89,9 @@ export function AnalysisPanel({
               <User size={11} />
               <span className="max-w-[80px] truncate hidden xl:block">{profile?.display_name || user?.email}</span>
             </div>
+            <button onClick={() => navigate("/settings")} className="p-1 text-muted-foreground hover:text-foreground" title="Impostazioni">
+              <Settings size={11} />
+            </button>
             <button onClick={onSignOut} className="p-1 text-muted-foreground hover:text-foreground" title="Esci">
               <LogOut size={11} />
             </button>
