@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { AnalisiVincolistica, VincoloPresenza } from "@/types/vincoli";
+import { AnalisiVincolistica, VincoloPresenza, CriticitaLevel, CLASSIFICAZIONE_CONFIG } from "@/types/vincoli";
 
 const PRESENZA_LABEL: Record<VincoloPresenza, string> = {
   presente: "PRESENTE",
@@ -257,6 +257,52 @@ export function exportReportPDF(analisi: AnalisiVincolistica) {
 
   y += 20;
 
+  // ── Classificazione Idoneità ──────────────────────────────
+  if (y > pageH - 30) { doc.addPage(); y = margin; }
+  const cc = CLASSIFICAZIONE_CONFIG[analisi.classificazioneIdoneita];
+  const classColor: [number, number, number] = analisi.classificazioneIdoneita === "non_idoneo" ? [185, 28, 28] : analisi.classificazioneIdoneita === "condizionato" ? [217, 119, 6] : [22, 163, 74];
+  doc.setFillColor(...classColor);
+  doc.roundedRect(margin, y, pageW - margin * 2, 12, 2, 2, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  doc.text(`Classificazione Idoneità: ${cc.label}`, margin + 5, y + 8);
+  y += 16;
+
+  // ── Step Autorizzativi ─────────────────────────────────────
+  if (analisi.stepAutorizzativi && analisi.stepAutorizzativi.length > 0) {
+    if (y > pageH - 50) { doc.addPage(); y = margin; }
+    doc.setTextColor(22, 47, 99);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("🛡  Step Autorizzativi Consigliati", margin, y);
+    y += 4;
+    const stepRows = analisi.stepAutorizzativi.map((s, i) => [
+      String(i + 1),
+      s.titolo,
+      s.ente,
+      s.normativa,
+      s.obbligatorio ? "OBB." : "Cons.",
+    ]);
+    autoTable(doc, {
+      startY: y,
+      head: [["#", "Step", "Ente competente", "Normativa", "Tipo"]],
+      body: stepRows,
+      theme: "striped",
+      headStyles: { fillColor: [22, 100, 50], textColor: 255, fontSize: 7, fontStyle: "bold" },
+      bodyStyles: { fontSize: 6.5, cellPadding: 2 },
+      columnStyles: { 0: { cellWidth: 8 }, 1: { cellWidth: 55 }, 2: { cellWidth: 40 }, 3: { cellWidth: 50 }, 4: { cellWidth: 15 } },
+      didParseCell(data) {
+        if (data.column.index === 4 && data.section === "body") {
+          data.cell.styles.fontStyle = "bold";
+          data.cell.styles.textColor = data.cell.raw === "OBB." ? [185, 28, 28] : [100, 100, 100];
+        }
+      },
+      margin: { left: margin, right: margin },
+    });
+    y = (doc as any).lastAutoTable.finalY + 8;
+  }
+
   // ── Section helper ────────────────────────────────────────
   const addSection = (title: string, emoji: string, items: typeof analisi.vincoliCulturali) => {
     if (items.length === 0) return;
@@ -271,25 +317,28 @@ export function exportReportPDF(analisi: AnalisiVincolistica) {
     doc.text(`${emoji}  ${title}`, margin, y);
     y += 4;
 
+    const CRITICITA_LABEL: Record<string, string> = { escludente: "🔴 ESCL.", condizionante: "🟠 COND.", da_verificare: "🟡 VERIF.", neutro: "🟢" };
     const rows = items.map(v => [
       v.sottocategoria,
       PRESENZA_LABEL[v.presenza],
+      v.criticita ? CRITICITA_LABEL[v.criticita] || "" : "",
       v.normativa,
-      v.note || v.descrizione.substring(0, 80) + (v.descrizione.length > 80 ? "…" : ""),
+      v.azioneRichiesta || v.note || v.descrizione.substring(0, 60) + (v.descrizione.length > 60 ? "…" : ""),
     ]);
 
     autoTable(doc, {
       startY: y,
-      head: [["Vincolo / Requisito", "Presenza", "Normativa", "Note"]],
+      head: [["Vincolo / Requisito", "Presenza", "Criticità", "Normativa", "Azione / Note"]],
       body: rows,
       theme: "striped",
       headStyles: { fillColor: [40, 70, 130], textColor: 255, fontSize: 7, fontStyle: "bold" },
       bodyStyles: { fontSize: 6.5, cellPadding: 2 },
       columnStyles: {
-        0: { cellWidth: 55 },
-        1: { cellWidth: 25 },
-        2: { cellWidth: 45 },
-        3: { cellWidth: 50 },
+        0: { cellWidth: 45 },
+        1: { cellWidth: 22 },
+        2: { cellWidth: 16 },
+        3: { cellWidth: 40 },
+        4: { cellWidth: 45 },
       },
       didParseCell(data) {
         if (data.column.index === 1 && data.section === "body") {
