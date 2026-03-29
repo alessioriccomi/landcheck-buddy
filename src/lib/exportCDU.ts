@@ -2,7 +2,11 @@ import jsPDF from "jspdf";
 import { Particella, AnalisiVincolistica, CRITICITA_CONFIG } from "@/types/vincoli";
 import { getVincoliPresenti } from "@/lib/vincoliUtils";
 
-export function exportCDUPDF(particella: Particella, analisi: AnalisiVincolistica | null) {
+export function exportCDUPDF(
+  particella: Particella,
+  analisi: AnalisiVincolistica | null,
+  zonaInfo?: { zona: string; sottozona: string; descrizione: string; fonte: string },
+) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const w = doc.internal.pageSize.getWidth();
   let y = 20;
@@ -27,9 +31,11 @@ export function exportCDUPDF(particella: Particella, analisi: AnalisiVincolistic
   doc.setFont("helvetica", "normal");
   const rows: [string, string][] = [
     ["Comune", particella.comune],
+    ["Provincia", particella.provincia || "—"],
     ["Foglio", particella.foglio],
     ["Particella", particella.particella],
     ["Sezione", particella.sezione || "—"],
+    ["Subalterno", particella.subalterno || "—"],
     ["Superficie", particella.superficieMq ? `${particella.superficieMq.toLocaleString("it-IT")} m²` : "N/D"],
     ["Ettari", particella.superficieMq ? `${(particella.superficieMq / 10000).toFixed(4)} ha` : "N/D"],
   ];
@@ -45,12 +51,19 @@ export function exportCDUPDF(particella: Particella, analisi: AnalisiVincolistic
 
   doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
-  doc.text("ZONA URBANISTICA", 15, y);
+  doc.text("ZONA URBANISTICA (PRG/PUC)", 15, y);
   y += 6;
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.text("Zona E (agricola) — da verificare con PRG/PUC comunale", 15, y);
-  y += 10;
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "bold");
+  const zDesc = zonaInfo ? `Zona ${zonaInfo.sottozona} — ${zonaInfo.descrizione}` : "Zona E (agricola) — da verificare";
+  doc.text(zDesc, 15, y);
+  y += 5;
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "italic");
+  doc.setTextColor(120, 120, 120);
+  doc.text(zonaInfo?.fonte || "Verificare con PRG/PUC comunale", 15, y);
+  doc.setTextColor(0, 0, 0);
+  y += 8;
 
   const vincoli = analisi ? getVincoliPresenti(analisi) : [];
   doc.setFontSize(11);
