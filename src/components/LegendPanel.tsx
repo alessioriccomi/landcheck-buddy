@@ -59,7 +59,7 @@ export function LegendPanel({
     switch (status) {
       case "online": return <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" title="Server online" />;
       case "offline": return <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0 animate-pulse" title="Server offline" />;
-      case "tls_error": return <ShieldAlert size={10} className="text-amber-500 flex-shrink-0" title="Certificato TLS non valido" />;
+      case "tls_error": return <span className="flex-shrink-0" title="Certificato TLS non valido"><ShieldAlert size={10} className="text-amber-500" /></span>;
       case "checking": return <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0 animate-pulse" title="Verifica in corso..." />;
       default: return <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 flex-shrink-0" title="Stato sconosciuto" />;
     }
