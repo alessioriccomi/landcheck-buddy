@@ -33,9 +33,24 @@ export function LegendPanel({
     setExpandedGroups(prev => ({ ...prev, [gid]: !prev[gid] }));
   };
 
-  const getLayerStatus = (l: { arcgisUrl?: string; wmsUrl?: string }): ServerStatus => {
+  const getLayerStatus = (l: { arcgisUrl?: string; wmsUrl?: string; fallbackUrls?: string[] }): ServerStatus => {
     const url = l.arcgisUrl || l.wmsUrl;
-    return getServerStatusForUrl(url, serverStatuses);
+    const primaryStatus = getServerStatusForUrl(url, serverStatuses);
+    // If primary is offline but a fallback is online, show as online
+    if (primaryStatus === "offline" && l.fallbackUrls?.length) {
+      for (const fb of l.fallbackUrls) {
+        const fbStatus = getServerStatusForUrl(fb, serverStatuses);
+        if (fbStatus === "online") return "online";
+      }
+    }
+    return primaryStatus;
+  };
+
+  const isUsingFallback = (l: { arcgisUrl?: string; wmsUrl?: string; fallbackUrls?: string[] }): boolean => {
+    const url = l.arcgisUrl || l.wmsUrl;
+    const primaryStatus = getServerStatusForUrl(url, serverStatuses);
+    if (primaryStatus !== "offline" || !l.fallbackUrls?.length) return false;
+    return l.fallbackUrls.some(fb => getServerStatusForUrl(fb, serverStatuses) === "online");
   };
 
   const statusDot = (status: ServerStatus) => {
@@ -112,6 +127,7 @@ export function LegendPanel({
                     const isActive = layerState[l.id] ?? false;
                     const opacity = layerOpacity[l.id] ?? (l.opacity ?? 0.5);
                     const layerStatus = getLayerStatus(l);
+                    const usingFallback = isUsingFallback(l);
 
                     return (
                       <div key={l.id} className="group">
@@ -134,6 +150,11 @@ export function LegendPanel({
                           )}>
                             {l.label}
                           </span>
+                          {usingFallback && (
+                            <span className="text-[8px] bg-amber-500/20 text-amber-600 rounded px-1 flex-shrink-0 font-semibold" title="Usando server alternativo (ISPRA)">
+                              FB
+                            </span>
+                          )}
                           {statusDot(layerStatus)}
                           {isActive
                             ? <Eye size={10} className="text-primary flex-shrink-0" />

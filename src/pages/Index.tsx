@@ -49,6 +49,7 @@ export default function Index() {
     for (const l of ALL_LAYERS) {
       if (l.arcgisUrl) urls.push(l.arcgisUrl);
       if (l.wmsUrl) urls.push(l.wmsUrl);
+      if (l.fallbackUrls) urls.push(...l.fallbackUrls);
     }
     probeAllServers(urls, setServerStatuses);
   }, []);
@@ -225,6 +226,7 @@ export default function Index() {
             onAddParticella={(p) => {
               if (step === "input") setParticelle(prev => [...prev, p]);
             }}
+            serverStatuses={serverStatuses}
           />
           <WmsLegend activeLayers={layerState} />
         </main>
