@@ -33,9 +33,24 @@ export function LegendPanel({
     setExpandedGroups(prev => ({ ...prev, [gid]: !prev[gid] }));
   };
 
-  const getLayerStatus = (l: { arcgisUrl?: string; wmsUrl?: string }): ServerStatus => {
+  const getLayerStatus = (l: { arcgisUrl?: string; wmsUrl?: string; fallbackUrls?: string[] }): ServerStatus => {
     const url = l.arcgisUrl || l.wmsUrl;
-    return getServerStatusForUrl(url, serverStatuses);
+    const primaryStatus = getServerStatusForUrl(url, serverStatuses);
+    // If primary is offline but a fallback is online, show as online
+    if (primaryStatus === "offline" && l.fallbackUrls?.length) {
+      for (const fb of l.fallbackUrls) {
+        const fbStatus = getServerStatusForUrl(fb, serverStatuses);
+        if (fbStatus === "online") return "online";
+      }
+    }
+    return primaryStatus;
+  };
+
+  const isUsingFallback = (l: { arcgisUrl?: string; wmsUrl?: string; fallbackUrls?: string[] }): boolean => {
+    const url = l.arcgisUrl || l.wmsUrl;
+    const primaryStatus = getServerStatusForUrl(url, serverStatuses);
+    if (primaryStatus !== "offline" || !l.fallbackUrls?.length) return false;
+    return l.fallbackUrls.some(fb => getServerStatusForUrl(fb, serverStatuses) === "online");
   };
 
   const statusDot = (status: ServerStatus) => {
@@ -112,6 +127,7 @@ export function LegendPanel({
                     const isActive = layerState[l.id] ?? false;
                     const opacity = layerOpacity[l.id] ?? (l.opacity ?? 0.5);
                     const layerStatus = getLayerStatus(l);
+                    const usingFallback = isUsingFallback(l);
 
                     return (
                       <div key={l.id} className="group">
