@@ -857,6 +857,7 @@ serve(async (req) => {
         "www.umbriageo.regione.umbria.it",
         "umbriageo.regione.umbria.it",
         "siat.regione.marche.it",
+        "sitr.regione.marche.it",
         "webgis.regione.taa.it",
         "mappe.regione.vda.it",
         "siat.provincia.tn.it",
