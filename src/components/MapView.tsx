@@ -234,6 +234,7 @@ interface CustomConstraintLayer {
 interface MapViewProps {
   particelle: Particella[];
   activeLayers: Record<string, boolean>;
+  layerOpacity?: Record<string, number>;
   customConstraints?: CustomConstraintLayer[];
   onParcelGeometries?: (geoms: Record<string, L.LatLngExpression[][]>) => void;
   onParcelAreaUpdate?: (id: string, mq: number) => void;
@@ -248,6 +249,7 @@ type ParcelStatus = "idle" | "loading" | "real" | "placeholder";
 export function MapView({
   particelle,
   activeLayers,
+  layerOpacity = {},
   customConstraints = [],
   onParcelGeometries,
   onParcelAreaUpdate,
@@ -742,6 +744,16 @@ export function MapView({
     map.on("moveend", updateLayers);
     return () => { map.off("moveend", updateLayers); };
   }, [activeLayers]);
+
+  // ── Apply dynamic opacity changes ──────────────────────────
+  useEffect(() => {
+    for (const [id, layer] of Object.entries(wmsLayersRef.current)) {
+      const op = layerOpacity[id];
+      if (op !== undefined && 'setOpacity' in layer) {
+        (layer as L.TileLayer).setOpacity(op);
+      }
+    }
+  }, [layerOpacity]);
 
   // ── Custom constraint layers (user-defined WMS/ArcGIS) ───────
   useEffect(() => {
