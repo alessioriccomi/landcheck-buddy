@@ -138,7 +138,7 @@ export function LegendPanel({
                         <button
                           onClick={() => onToggleLayer(l.id)}
                           className="w-full flex items-center gap-2 py-1 px-1.5 rounded hover:bg-muted/40 transition-colors text-left"
-                          title={`${l.description}${layerStatus === "offline" ? " ⚠️ Server offline" : ""}`}
+                          title={`${l.description}${layerStatus === "offline" ? " ⚠️ Server offline" : layerStatus === "tls_error" ? " 🔒 Certificato TLS non valido" : ""}`}
                         >
                           <div
                             className="w-3 h-3 rounded-sm border flex-shrink-0 transition-colors"
@@ -150,7 +150,7 @@ export function LegendPanel({
                           <span className={cn(
                             "text-[11px] flex-1 leading-tight",
                             isActive ? "text-foreground" : "text-muted-foreground",
-                            layerStatus === "offline" && "line-through opacity-60"
+                            (layerStatus === "offline" || layerStatus === "tls_error") && "line-through opacity-60"
                           )}>
                             {l.label}
                           </span>
@@ -204,8 +204,8 @@ export function LegendPanel({
               <span className="text-[9px] text-muted-foreground">
                 {checkingCount > 0
                   ? `Verifica ${checkingCount} server...`
-                  : offlineCount > 0
-                    ? `${offlineCount}/${totalHosts} server offline`
+                  : offlineCount > 0 || tlsErrorCount > 0
+                    ? `${offlineCount + tlsErrorCount}/${totalHosts} non disponibili${tlsErrorCount > 0 ? ` (${tlsErrorCount} TLS)` : ""}`
                     : `${onlineCount} server online`}
               </span>
             </div>
