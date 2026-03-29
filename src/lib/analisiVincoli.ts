@@ -1,4 +1,4 @@
-import { AnalisiVincolistica, Particella, VincoloItem, VincoloPresenza } from "@/types/vincoli";
+import { AnalisiVincolistica, Particella, VincoloItem, VincoloPresenza, CriticitaLevel, StepAutorizzativo, ClassificazioneIdoneita } from "@/types/vincoli";
 
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -12,69 +12,72 @@ function randomPresenza(pesi: [VincoloPresenza, number][]): VincoloPresenza {
   return pesi[0][0];
 }
 
-// Determine if at least one parcel is in Puglia
 function isPuglia(particelle: Particella[]): boolean {
   return particelle.some(p =>
-    p.provincia?.toUpperCase() === "BA" ||
-    p.provincia?.toUpperCase() === "BR" ||
-    p.provincia?.toUpperCase() === "FG" ||
-    p.provincia?.toUpperCase() === "LE" ||
-    p.provincia?.toUpperCase() === "TA" ||
-    p.provincia?.toUpperCase() === "BT" ||
+    ["BA","BR","FG","LE","TA","BT"].includes(p.provincia?.toUpperCase()) ||
     p.comune?.toLowerCase().includes("puglia") ||
-    ["bari", "lecce", "taranto", "foggia", "brindisi", "barletta", "andria", "trani"].some(c =>
+    ["bari","lecce","taranto","foggia","brindisi","barletta","andria","trani"].some(c =>
       p.comune?.toLowerCase().includes(c)
     )
   );
 }
 
+// ══════════════════════════════════════════════════════════════
+// VINCOLO BUILDERS — Each vincolo now includes criticita + azioneRichiesta
+// ══════════════════════════════════════════════════════════════
+
 function buildVincoliCulturali(_particelle: Particella[]): VincoloItem[] {
   return [
     {
-      id: "bc_01",
-      categoria: "Beni Culturali",
+      id: "bc_01", categoria: "Beni Culturali",
       sottocategoria: "Vincolo diretto (art. 10 D.Lgs 42/2004)",
       normativa: "D.Lgs. 42/2004 - Codice dei Beni Culturali e del Paesaggio",
       presenza: randomPresenza([["assente", 60], ["presente", 10], ["verifica", 20], ["non_rilevabile", 10]]),
       descrizione: "Immobili e aree di interesse artistico, storico, archeologico o etnoantropologico",
       fonte: "MiC - Sistema Informativo del Patrimonio Culturale",
+      criticita: "escludente",
+      azioneRichiesta: "Autorizzazione Soprintendenza ABAP ai sensi dell'art. 21 D.Lgs. 42/2004",
     },
     {
-      id: "bc_02",
-      categoria: "Beni Culturali",
+      id: "bc_02", categoria: "Beni Culturali",
       sottocategoria: "Aree di interesse archeologico (art. 142 c.1 lett. m)",
       normativa: "D.Lgs. 42/2004",
       presenza: randomPresenza([["assente", 50], ["verifica", 35], ["presente", 15]]),
-      descrizione: "Zone di interesse paleontologico e di interesse storico dell'età antica",
+      descrizione: "Zone di interesse paleontologico e storico dell'età antica",
       fonte: "MiC - Geoportale Vincoli in Rete",
+      criticita: "condizionante",
+      azioneRichiesta: "Verifica archeologica preventiva + autorizzazione paesaggistica",
     },
     {
-      id: "bc_03",
-      categoria: "Beni Culturali",
+      id: "bc_03", categoria: "Beni Culturali",
       sottocategoria: "Vincolo indiretto (art. 45 D.Lgs 42/2004)",
       normativa: "D.Lgs. 42/2004",
       presenza: randomPresenza([["assente", 70], ["verifica", 20], ["presente", 10]]),
       descrizione: "Prescrizioni di distanza, misura, direzione per tutela indiretta di beni culturali",
       fonte: "MiC",
+      criticita: "condizionante",
+      azioneRichiesta: "Verifica prescrizioni Soprintendenza",
     },
     {
-      id: "bc_04",
-      categoria: "Beni Culturali",
+      id: "bc_04", categoria: "Beni Culturali",
       sottocategoria: "Presenza beni culturali entro 500 m",
       normativa: "D.Lgs. 42/2004 artt. 45-46",
       presenza: randomPresenza([["assente", 45], ["verifica", 40], ["presente", 15]]),
-      descrizione: "Verifica presenza di beni tutelati nel raggio di 500m dall'area. Può generare prescrizioni Soprintendenza",
+      descrizione: "Verifica presenza beni tutelati nel raggio di 500m dall'area",
       fonte: "MiC - Vincoli in Rete",
+      criticita: "da_verificare",
+      azioneRichiesta: "Richiedere parere Soprintendenza per potenziali prescrizioni",
     },
     {
-      id: "bc_05",
-      categoria: "Beni Culturali",
+      id: "bc_05", categoria: "Beni Culturali",
       sottocategoria: "Beni UNESCO",
       normativa: "Convenzione UNESCO 1972 - D.Lgs. 42/2004",
       presenza: randomPresenza([["assente", 75], ["verifica", 20], ["presente", 5]]),
-      descrizione: "Sito o buffer zone di bene iscritto alla Lista del Patrimonio Mondiale UNESCO. Vincolo di assoluta integrità del paesaggio",
+      descrizione: "Sito o buffer zone UNESCO. Vincolo di assoluta integrità del paesaggio",
       fonte: "MiC - UNESCO World Heritage",
-      note: "Impianti agrivoltaici in area UNESCO richiedono iter autorizzativo speciale e parere favorevole Soprintendenza",
+      note: "Impianti in area UNESCO richiedono iter speciale e parere Soprintendenza",
+      criticita: "escludente",
+      azioneRichiesta: "Vincolo assoluto in core zone; parere Soprintendenza in buffer zone",
     },
   ];
 }
@@ -82,78 +85,86 @@ function buildVincoliCulturali(_particelle: Particella[]): VincoloItem[] {
 function buildVincoliPaesaggistici(_particelle: Particella[]): VincoloItem[] {
   return [
     {
-      id: "pa_01",
-      categoria: "Paesaggio",
+      id: "pa_01", categoria: "Paesaggio",
       sottocategoria: "Vincolo paesaggistico ex lege (art. 142 D.Lgs 42/2004)",
       normativa: "D.Lgs. 42/2004 art. 142",
       presenza: randomPresenza([["assente", 40], ["presente", 30], ["verifica", 30]]),
-      descrizione: "Territori costieri, lacuali, fluviali, montani, foreste, zone umide, vulcani, zone di interesse archeologico",
+      descrizione: "Territori costieri, lacuali, fluviali, montani, foreste, zone umide, vulcani",
       fonte: "Geoportale Nazionale - Vincoli Paesaggistici",
+      criticita: "condizionante",
+      azioneRichiesta: "Autorizzazione paesaggistica ordinaria ex art. 146 D.Lgs. 42/2004",
     },
     {
-      id: "pa_02",
-      categoria: "Paesaggio",
+      id: "pa_02", categoria: "Paesaggio",
       sottocategoria: "Vincolo paesaggistico ex art. 136 (beni tutelati per decreto)",
       normativa: "D.Lgs. 42/2004 art. 136",
       presenza: randomPresenza([["assente", 55], ["presente", 25], ["verifica", 20]]),
-      descrizione: "Immobili e aree di notevole interesse pubblico dichiarati con decreto ministeriale o regionale",
+      descrizione: "Immobili e aree di notevole interesse pubblico dichiarati con decreto",
       fonte: "MiC - Geoportale Vincoli in Rete",
       note: "Se presente → obbligatoria autorizzazione paesaggistica ordinaria (art. 146)",
+      criticita: "escludente",
+      azioneRichiesta: "Autorizzazione paesaggistica ordinaria + parere vincolante Soprintendenza",
     },
     {
-      id: "pa_03",
-      categoria: "Paesaggio",
+      id: "pa_03", categoria: "Paesaggio",
       sottocategoria: "Piano Paesaggistico Regionale",
-      normativa: "D.Lgs. 42/2004 + Piano Paesaggistico Regionale",
+      normativa: "D.Lgs. 42/2004 + PPR vigente",
       presenza: randomPresenza([["presente", 45], ["verifica", 35], ["assente", 20]]),
-      descrizione: "Aree e beni di notevole interesse pubblico soggetti a disciplina paesaggistica regionale. Verificare NTA del PPR vigente",
+      descrizione: "Aree soggette a disciplina paesaggistica regionale. Verificare NTA del PPR",
       fonte: "Regione - Piano Paesaggistico",
+      criticita: "condizionante",
+      azioneRichiesta: "Verifica conformità NTA del PPR regionale",
     },
     {
-      id: "pa_04",
-      categoria: "Paesaggio",
-      sottocategoria: "Galasso - Fascia di rispetto corsi d'acqua (150m)",
+      id: "pa_04", categoria: "Paesaggio",
+      sottocategoria: "Galasso - Fascia rispetto corsi d'acqua (150m)",
       normativa: "L. 431/1985 - D.Lgs. 42/2004 art. 142 c.1 lett. c",
       presenza: randomPresenza([["assente", 55], ["presente", 25], ["verifica", 20]]),
-      descrizione: "Fascia di rispetto di 150m dai fiumi, torrenti, corsi d'acqua iscritti negli elenchi delle acque pubbliche",
-      fonte: "PGRA - Piano Gestione Rischio Alluvioni",
+      descrizione: "Fascia di 150m dai fiumi, torrenti, corsi d'acqua iscritti negli elenchi acque pubbliche",
+      fonte: "PGRA",
+      criticita: "condizionante",
+      azioneRichiesta: "Autorizzazione paesaggistica + verifica compatibilità idraulica",
     },
     {
-      id: "pa_05",
-      categoria: "Paesaggio",
+      id: "pa_05", categoria: "Paesaggio",
       sottocategoria: "Boschi e foreste (art. 142 c.1 lett. g)",
       normativa: "D.Lgs. 42/2004",
       presenza: randomPresenza([["assente", 60], ["presente", 20], ["verifica", 20]]),
-      descrizione: "Territori coperti da foreste e da boschi, ancorché percorsi o danneggiati dal fuoco",
-      fonte: "Inventario Nazionale delle Foreste e dei Serbatoi Forestali di Carbonio",
+      descrizione: "Territori coperti da foreste e boschi, ancorché percorsi dal fuoco",
+      fonte: "Inventario Nazionale Foreste",
+      criticita: "escludente",
+      azioneRichiesta: "Vietata trasformazione salvo deroga regionale",
     },
     {
-      id: "pa_06",
-      categoria: "Paesaggio",
+      id: "pa_06", categoria: "Paesaggio",
       sottocategoria: "Zone montane oltre 1.200 m s.l.m. (art. 142 c.1 lett. d)",
       normativa: "D.Lgs. 42/2004 art. 142",
       presenza: randomPresenza([["assente", 65], ["presente", 15], ["verifica", 20]]),
-      descrizione: "Territori al di sopra dei 1.200 metri sul livello del mare tutelati ex lege per interesse paesaggistico",
+      descrizione: "Territori al di sopra dei 1.200 m s.l.m.",
       fonte: "IGM - DTM nazionale",
+      criticita: "condizionante",
+      azioneRichiesta: "Autorizzazione paesaggistica ordinaria",
     },
     {
-      id: "pa_07",
-      categoria: "Paesaggio",
+      id: "pa_07", categoria: "Paesaggio",
       sottocategoria: "Aree panoramiche e interesse storico-rurale",
       normativa: "D.Lgs. 42/2004 art. 136 e 142",
       presenza: randomPresenza([["verifica", 50], ["assente", 35], ["presente", 15]]),
-      descrizione: "Zone di particolare interesse panoramico e aree con tutela del paesaggio storico-rurale soggette a specifiche NTA",
+      descrizione: "Zone di particolare interesse panoramico e paesaggio storico-rurale",
       fonte: "Regione/Geoportale Nazionale",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica NTA specifiche del PPR",
     },
     {
-      id: "pa_08",
-      categoria: "Paesaggio",
+      id: "pa_08", categoria: "Paesaggio",
       sottocategoria: "Aree non idonee regionali (art. 20 D.Lgs 199/2021)",
-      normativa: "D.Lgs. 199/2021 art. 20 - Delibere regionali attuative",
+      normativa: "D.Lgs. 199/2021 art. 20 - Delibere regionali",
       presenza: randomPresenza([["verifica", 55], ["assente", 30], ["presente", 15]]),
-      descrizione: "Aree individuate dalle Regioni come non idonee per l'installazione di impianti fotovoltaici e agrivoltaici. Da verificare per ogni Regione",
+      descrizione: "Aree individuate dalle Regioni come non idonee per impianti FV/agrivoltaici",
       fonte: "Regione - SIT/Geoportale",
-      note: "Obbligo di verifica preventiva rispetto alla cartografia regionale delle aree non idonee ex art. 20 D.Lgs 199/2021",
+      note: "Obbligo verifica cartografia regionale aree non idonee",
+      criticita: "escludente",
+      azioneRichiesta: "Se in area non idonea: impianto vietato salvo deroghe specifiche",
     },
   ];
 }
@@ -161,61 +172,104 @@ function buildVincoliPaesaggistici(_particelle: Particella[]): VincoloItem[] {
 function buildVincoliIdrogeologici(_particelle: Particella[]): VincoloItem[] {
   return [
     {
-      id: "id_01",
-      categoria: "Vincolo Idrogeologico",
+      id: "id_01", categoria: "Vincolo Idrogeologico",
       sottocategoria: "R.D. 3267/1923 - Vincolo idrogeologico forestale",
-      normativa: "R.D. 3267/1923 - Regio Decreto Idrogeologico",
+      normativa: "R.D. 3267/1923",
       presenza: randomPresenza([["presente", 35], ["assente", 45], ["verifica", 20]]),
-      descrizione: "Terreni soggetti a vincolo per scopi idrogeologici. Qualsiasi trasformazione richiede autorizzazione regionale",
+      descrizione: "Terreni soggetti a vincolo per scopi idrogeologici",
       fonte: "Regione - Catasto Vincolo Idrogeologico",
+      criticita: "condizionante",
+      azioneRichiesta: "Autorizzazione ente forestale (Regione/Città Metropolitana)",
     },
     {
-      id: "id_02",
-      categoria: "Vincolo Idrogeologico",
-      sottocategoria: "PAI - Pericolosità frana (P1-P4)",
-      normativa: "D.L. 180/1998 - D.Lgs. 49/2010 - PAI",
-      presenza: randomPresenza([["assente", 40], ["verifica", 30], ["presente", 30]]),
-      descrizione: "Piano Assetto Idrogeologico: aree a pericolosità da frana elevata o molto elevata",
-      fonte: "ISPRA - IfFI Inventario Fenomeni Franosi",
-      note: "Verificare la classe di pericolosità specifica nell'elaborato PAI",
+      id: "id_02", categoria: "Vincolo Idrogeologico",
+      sottocategoria: "PAI - Pericolosità frana P4 (molto elevata)",
+      normativa: "D.L. 180/1998 - PAI",
+      presenza: randomPresenza([["assente", 70], ["verifica", 15], ["presente", 15]]),
+      descrizione: "Pericolosità da frana molto elevata (P4)",
+      fonte: "ISPRA - IFFI",
+      criticita: "escludente",
+      azioneRichiesta: "Impianto non realizzabile in area P4",
     },
     {
-      id: "id_03",
-      categoria: "Vincolo Idrogeologico",
-      sottocategoria: "PAI - Pericolosità idraulica (P1-P4)",
-      normativa: "D.L. 180/1998 - Direttiva Alluvioni 2007/60/CE",
+      id: "id_02b", categoria: "Vincolo Idrogeologico",
+      sottocategoria: "PAI - Pericolosità frana P3 (elevata)",
+      normativa: "D.L. 180/1998 - PAI",
+      presenza: randomPresenza([["assente", 55], ["verifica", 25], ["presente", 20]]),
+      descrizione: "Pericolosità da frana elevata (P3)",
+      fonte: "ISPRA - IFFI",
+      criticita: "condizionante",
+      azioneRichiesta: "Studio geotecnico + parere Autorità di Bacino",
+    },
+    {
+      id: "id_02c", categoria: "Vincolo Idrogeologico",
+      sottocategoria: "PAI - Pericolosità frana P2/P1",
+      normativa: "D.L. 180/1998 - PAI",
       presenza: randomPresenza([["assente", 45], ["verifica", 35], ["presente", 20]]),
-      descrizione: "Aree a pericolosità idraulica: elevata (P3), media (P2), scarsa probabilità (P1/alluvione estrema)",
-      fonte: "PGRA - Piano di Gestione del Rischio Alluvioni",
+      descrizione: "Pericolosità da frana media (P2) o moderata (P1)",
+      fonte: "ISPRA",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica elaborati PAI e studio di compatibilità",
     },
     {
-      id: "id_04",
-      categoria: "Vincolo Idrogeologico",
-      sottocategoria: "Fascia di rispetto pozzi acquedottistici",
+      id: "id_03", categoria: "Vincolo Idrogeologico",
+      sottocategoria: "PAI - Pericolosità idraulica P3 (TR 20-50 anni)",
+      normativa: "D.L. 180/1998 - Dir. Alluvioni 2007/60/CE",
+      presenza: randomPresenza([["assente", 55], ["verifica", 25], ["presente", 20]]),
+      descrizione: "Aree inondabili con tempo di ritorno 20-50 anni",
+      fonte: "PGRA",
+      criticita: "escludente",
+      azioneRichiesta: "Impianto non realizzabile in area P3 alluvione",
+    },
+    {
+      id: "id_03b", categoria: "Vincolo Idrogeologico",
+      sottocategoria: "PAI - Pericolosità idraulica P2 (TR 100-200 anni)",
+      normativa: "Dir. Alluvioni 2007/60/CE",
+      presenza: randomPresenza([["assente", 50], ["verifica", 30], ["presente", 20]]),
+      descrizione: "Aree inondabili con tempo di ritorno 100-200 anni",
+      fonte: "PGRA",
+      criticita: "condizionante",
+      azioneRichiesta: "Studio idraulico + parere Autorità di Bacino",
+    },
+    {
+      id: "id_03c", categoria: "Vincolo Idrogeologico",
+      sottocategoria: "PAI - Pericolosità idraulica P1 (TR 500 anni)",
+      normativa: "Dir. Alluvioni 2007/60/CE",
+      presenza: randomPresenza([["assente", 45], ["verifica", 35], ["presente", 20]]),
+      descrizione: "Aree inondabili con tempo di ritorno 500 anni",
+      fonte: "PGRA",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica compatibilità idraulica",
+    },
+    {
+      id: "id_04", categoria: "Vincolo Idrogeologico",
+      sottocategoria: "Fascia rispetto pozzi acquedottistici (200m)",
       normativa: "D.Lgs. 152/2006 art. 94",
       presenza: randomPresenza([["assente", 65], ["verifica", 25], ["presente", 10]]),
-      descrizione: "Zone di rispetto assoluto (10m) e di rispetto (200m) per captazioni di acque destinate al consumo umano",
+      descrizione: "Zone di rispetto assoluto (10m) e di rispetto (200m) per captazioni acque potabili",
       fonte: "ATO/Gestori acquedotto",
+      criticita: "condizionante",
+      azioneRichiesta: "Verifica compatibilità con zona di rispetto",
     },
     {
-      id: "id_05",
-      categoria: "Vincolo Idrogeologico",
+      id: "id_05", categoria: "Vincolo Idrogeologico",
       sottocategoria: "Stabilità versanti e subsidenza",
       normativa: "PAI - D.Lgs. 152/2006",
       presenza: randomPresenza([["assente", 55], ["verifica", 30], ["presente", 15]]),
-      descrizione: "Fenomeni di instabilità di versante, erosione e subsidenza. Per agrivoltaico: attenzione alla permeabilità del suolo e al ruscellamento",
+      descrizione: "Fenomeni di instabilità di versante, erosione e subsidenza",
       fonte: "ISPRA - ReNDiS",
-      note: "L'installazione di strutture agrivoltaiche può alterare il deflusso superficiale: verificare invarianza idraulica",
+      criticita: "da_verificare",
+      azioneRichiesta: "Studio geotecnico di stabilità",
     },
     {
-      id: "id_06",
-      categoria: "Vincolo Idrogeologico",
+      id: "id_06", categoria: "Vincolo Idrogeologico",
       sottocategoria: "Consorzio di bonifica e canali irrigui",
-      normativa: "R.D. 215/1933 - Legislazione regionale bonifica",
+      normativa: "R.D. 215/1933",
       presenza: randomPresenza([["verifica", 45], ["assente", 35], ["presente", 20]]),
-      descrizione: "Presenza di comprensori di bonifica, canali irrigui e opere idrauliche con relative fasce di rispetto e servitù",
+      descrizione: "Comprensori di bonifica, canali irrigui e opere idrauliche",
       fonte: "Consorzio di Bonifica competente",
-      note: "Verifica necessaria per interferenze con reticolo idrografico minore e sistemi di drenaggio agricolo",
+      criticita: "da_verificare",
+      azioneRichiesta: "Nulla osta Consorzio di Bonifica + verifica interferenze",
     },
   ];
 }
@@ -223,40 +277,44 @@ function buildVincoliIdrogeologici(_particelle: Particella[]): VincoloItem[] {
 function buildRischioIdrico(_particelle: Particella[]): VincoloItem[] {
   return [
     {
-      id: "ri_01",
-      categoria: "Rischio Idrico",
-      sottocategoria: "Rischio alluvione (R1-R4)",
+      id: "ri_01", categoria: "Rischio Idrico",
+      sottocategoria: "Rischio alluvione R4/R3",
       normativa: "PGRA - D.Lgs. 49/2010",
-      presenza: randomPresenza([["assente", 40], ["presente", 30], ["verifica", 30]]),
-      descrizione: "Mappa del rischio da alluvione: R4 molto elevato, R3 elevato, R2 medio, R1 moderato",
-      fonte: "ISPRA - Mappe di Pericolosità e Rischio",
+      presenza: randomPresenza([["assente", 50], ["presente", 25], ["verifica", 25]]),
+      descrizione: "Rischio alluvionale R4 molto elevato / R3 elevato",
+      fonte: "ISPRA - Mappe Pericolosità e Rischio",
+      criticita: "escludente",
+      azioneRichiesta: "Impianto non realizzabile in aree R4/R3",
     },
     {
-      id: "ri_02",
-      categoria: "Rischio Idrico",
-      sottocategoria: "Rischio frana (R1-R4)",
+      id: "ri_02", categoria: "Rischio Idrico",
+      sottocategoria: "Rischio frana R4/R3",
       normativa: "PAI Regionale",
-      presenza: randomPresenza([["assente", 45], ["verifica", 35], ["presente", 20]]),
-      descrizione: "Classe di rischio da frana determinata da pericolosità e valore degli elementi esposti",
+      presenza: randomPresenza([["assente", 55], ["verifica", 25], ["presente", 20]]),
+      descrizione: "Rischio da frana R4/R3",
       fonte: "Autorità di Bacino Distrettuale",
+      criticita: "escludente",
+      azioneRichiesta: "Impianto non realizzabile in aree R4/R3",
     },
     {
-      id: "ri_03",
-      categoria: "Rischio Idrico",
-      sottocategoria: "PGRA - Piano Gestione Rischio Alluvioni",
+      id: "ri_03", categoria: "Rischio Idrico",
+      sottocategoria: "PGRA - Misure riduzione rischio alluvioni",
       normativa: "Direttiva 2007/60/CE - D.Lgs. 49/2010",
       presenza: randomPresenza([["verifica", 50], ["presente", 30], ["assente", 20]]),
-      descrizione: "Misure e azioni per ridurre le conseguenze negative delle alluvioni sulla salute, attività economiche e ambiente",
-      fonte: "Autorità di Bacino Distrettuale",
+      descrizione: "Misure del Piano di Gestione Rischio Alluvioni",
+      fonte: "Autorità di Bacino",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica conformità misure PGRA",
     },
     {
-      id: "ri_04",
-      categoria: "Rischio Idrico",
-      sottocategoria: "Fasce di rispetto corsi d'acqua e reticolo idrografico",
-      normativa: "PAI - D.Lgs. 152/2006 - Legislazione regionale",
+      id: "ri_04", categoria: "Rischio Idrico",
+      sottocategoria: "Fasce rispetto corsi d'acqua",
+      normativa: "PAI - D.Lgs. 152/2006",
       presenza: randomPresenza([["assente", 50], ["verifica", 30], ["presente", 20]]),
-      descrizione: "Fasce di rispetto del reticolo idrografico principale e minore. Limitazioni costruttive nelle fasce A e B del PAI",
+      descrizione: "Fasce di rispetto del reticolo idrografico principale e minore",
       fonte: "Autorità di Bacino / Regione",
+      criticita: "condizionante",
+      azioneRichiesta: "Studio compatibilità idraulica + nulla osta AdB",
     },
   ];
 }
@@ -264,59 +322,85 @@ function buildRischioIdrico(_particelle: Particella[]): VincoloItem[] {
 function buildVincoliAmbientali(_particelle: Particella[]): VincoloItem[] {
   return [
     {
-      id: "amb_01",
-      categoria: "Vincoli Ambientali",
-      sottocategoria: "Siti Rete Natura 2000 - ZSC/SIC",
-      normativa: "Dir. 92/43/CEE Habitat - D.P.R. 357/1997",
+      id: "amb_01", categoria: "Vincoli Ambientali",
+      sottocategoria: "Rete Natura 2000 - ZSC/SIC",
+      normativa: "Dir. 92/43/CEE Habitat - DPR 357/1997",
       presenza: randomPresenza([["assente", 50], ["presente", 25], ["verifica", 25]]),
-      descrizione: "Zone Speciali di Conservazione - Siti di Importanza Comunitaria. Se presente → obbligatorio Screening VINCA",
+      descrizione: "Zone Speciali di Conservazione. Se presente → screening VIncA obbligatorio",
       fonte: "MASE - Rete Natura 2000",
-      note: "Per impianti agrivoltaici in ZSC/SIC: Screening VINCA obbligatorio, eventuale VINCA appropriata",
+      note: "Per impianti in ZSC: Screening VIncA obbligatorio, eventuale VIncA appropriata",
+      criticita: "condizionante",
+      azioneRichiesta: "Valutazione di Incidenza (VIncA) obbligatoria ex DPR 357/1997",
     },
     {
-      id: "amb_02",
-      categoria: "Vincoli Ambientali",
+      id: "amb_02", categoria: "Vincoli Ambientali",
       sottocategoria: "Zone di Protezione Speciale (ZPS)",
-      normativa: "Dir. 79/409/CEE Uccelli - D.P.R. 357/1997",
+      normativa: "Dir. 79/409/CEE Uccelli - DPR 357/1997",
       presenza: randomPresenza([["assente", 55], ["presente", 20], ["verifica", 25]]),
-      descrizione: "Aree classificate ZPS per la protezione delle specie di uccelli selvatici. Richiede VINCA",
+      descrizione: "Aree ZPS per protezione avifauna selvatica. Richiede VIncA",
       fonte: "MASE - Rete Natura 2000",
+      criticita: "condizionante",
+      azioneRichiesta: "Valutazione di Incidenza (VIncA) obbligatoria",
     },
     {
-      id: "amb_03",
-      categoria: "Vincoli Ambientali",
-      sottocategoria: "Parco Nazionale / Parco Regionale / Riserva",
-      normativa: "L. 394/1991 - Legge Quadro Aree Protette",
+      id: "amb_02b", categoria: "Vincoli Ambientali",
+      sottocategoria: "Buffer 500 m da confini Natura 2000",
+      normativa: "DPR 357/1997 - Linee guida VIncA",
+      presenza: randomPresenza([["assente", 45], ["verifica", 40], ["presente", 15]]),
+      descrizione: "Fascia di 500m dai confini di siti Natura 2000. Può richiedere screening VIncA",
+      fonte: "MASE",
+      criticita: "condizionante",
+      azioneRichiesta: "Screening VIncA per potenziali effetti indiretti",
+    },
+    {
+      id: "amb_03", categoria: "Vincoli Ambientali",
+      sottocategoria: "Parco Nazionale (zona A: riserva integrale)",
+      normativa: "L. 394/1991",
+      presenza: randomPresenza([["assente", 70], ["presente", 15], ["verifica", 15]]),
+      descrizione: "Riserva integrale di Parco Nazionale — vietata qualsiasi alterazione",
+      fonte: "MASE - EUAP",
+      criticita: "escludente",
+      azioneRichiesta: "Vietato in zona A. In zone B/C/D: nulla osta Ente Parco",
+    },
+    {
+      id: "amb_03b", categoria: "Vincoli Ambientali",
+      sottocategoria: "Parco Regionale / Riserva Naturale",
+      normativa: "L. 394/1991 - Leggi regionali",
       presenza: randomPresenza([["assente", 60], ["presente", 20], ["verifica", 20]]),
-      descrizione: "Area ricadente all'interno di parco nazionale, regionale o riserva naturale con relativa zonizzazione",
-      fonte: "MASE - Elenco Ufficiale Aree Protette",
+      descrizione: "Area protetta regionale con zonizzazione e piano del parco",
+      fonte: "MASE - EUAP",
+      criticita: "condizionante",
+      azioneRichiesta: "Nulla osta Ente gestore area protetta",
     },
     {
-      id: "amb_04",
-      categoria: "Vincoli Ambientali",
+      id: "amb_04", categoria: "Vincoli Ambientali",
       sottocategoria: "Zone RAMSAR (zone umide internazionali)",
-      normativa: "Convenzione Ramsar 1971 - D.P.R. 448/1976",
+      normativa: "Convenzione Ramsar 1971 - DPR 448/1976",
       presenza: randomPresenza([["assente", 80], ["verifica", 15], ["presente", 5]]),
-      descrizione: "Zone umide di importanza internazionale iscritte nella lista Ramsar. Vietata qualsiasi alterazione del regime idrologico",
+      descrizione: "Zone umide di importanza internazionale. Vietata qualsiasi alterazione",
       fonte: "MASE - Siti Ramsar Italia",
+      criticita: "escludente",
+      azioneRichiesta: "Vincolo assoluto — nessuna alterazione ammessa",
     },
     {
-      id: "amb_05",
-      categoria: "Vincoli Ambientali",
+      id: "amb_05", categoria: "Vincoli Ambientali",
       sottocategoria: "VIA obbligatoria (D.Lgs. 152/2006)",
-      normativa: "D.Lgs. 152/2006 Titolo III - D.Lgs. 104/2017",
+      normativa: "D.Lgs. 152/2006 Titolo III",
       presenza: randomPresenza([["verifica", 60], ["assente", 30], ["presente", 10]]),
-      descrizione: "Obbligo di VIA per impianti FV/agrivoltaici ≥ 10 MW (All. II) o ≥ 1 MW in aree sensibili (All. III)",
+      descrizione: "Obbligo VIA per impianti ≥ 10 MW (All. II) o ≥ 1 MW in aree sensibili",
       fonte: "MASE - Registro VIA",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica assoggettabilità VIA in base a potenza e localizzazione",
     },
     {
-      id: "amb_06",
-      categoria: "Vincoli Ambientali",
-      sottocategoria: "Sito Contaminato/Bonifica",
-      normativa: "D.Lgs. 152/2006 Titolo V Parte IV",
+      id: "amb_06", categoria: "Vincoli Ambientali",
+      sottocategoria: "Sito contaminato/bonifica",
+      normativa: "D.Lgs. 152/2006 Titolo V",
       presenza: randomPresenza([["assente", 70], ["verifica", 20], ["presente", 10]]),
-      descrizione: "Sito soggetto a bonifica o messa in sicurezza per contaminazione del suolo/sottosuolo",
+      descrizione: "Sito soggetto a bonifica — nota: area idonea ex lege per FV",
       fonte: "MASE/Regione - Anagrafe Siti Contaminati",
+      criticita: "neutro",
+      azioneRichiesta: "Siti contaminati sono aree idonee per FV (D.Lgs. 199/2021)",
     },
   ];
 }
@@ -324,78 +408,84 @@ function buildVincoliAmbientali(_particelle: Particella[]): VincoloItem[] {
 function buildServiziReti(_particelle: Particella[]): VincoloItem[] {
   return [
     {
-      id: "sr_01",
-      categoria: "Servizi e Reti",
-      sottocategoria: "Elettrodotto AT/AAT con fascia di rispetto (DPA)",
-      normativa: "DPCM 8/7/2003 - L. 36/2001 Legge Quadro Elettromagnetismo",
+      id: "sr_01", categoria: "Servizi e Reti",
+      sottocategoria: "Elettrodotto AT/AAT con fascia DPA",
+      normativa: "DPCM 8/7/2003 - L. 36/2001",
       presenza: randomPresenza([["assente", 50], ["verifica", 30], ["presente", 20]]),
-      descrizione: "Linee elettriche ad alta e altissima tensione con relative fasce di rispetto da 10 a 100m. DPA da verificare",
-      fonte: "Terna SpA / Gestore Distribuzione Locale",
-      note: "Richiedere estratto cartografico al gestore per l'esatta individuazione. Distanza di prima approssimazione (DPA) calcolabile",
+      descrizione: "Linee AT/AAT con fasce di rispetto da 10 a 150m",
+      fonte: "Terna SpA / Gestore Distribuzione",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica DPA con gestore + nulla osta per costruzioni in fascia",
     },
     {
-      id: "sr_02",
-      categoria: "Servizi e Reti",
-      sottocategoria: "Metanodotto/Gasdotto (fascia di rispetto)",
-      normativa: "D.Lgs. 1/8/2003 n.93 - D.M. 17/4/2008",
+      id: "sr_02", categoria: "Servizi e Reti",
+      sottocategoria: "Metanodotto/Gasdotto (fascia 200m)",
+      normativa: "D.Lgs. 93/2003 - DM 17/4/2008",
       presenza: randomPresenza([["assente", 55], ["verifica", 30], ["presente", 15]]),
-      descrizione: "Condotte di trasporto gas con relative fasce di sicurezza e limitazioni edificatorie",
-      fonte: "Snam Rete Gas / Gestore locale",
-      note: "Verificare tipologia di gasdotto e pressione massima esercita (MOP)",
+      descrizione: "Condotte gas con fasce di sicurezza e limitazioni",
+      fonte: "Snam Rete Gas",
+      criticita: "condizionante",
+      azioneRichiesta: "Nulla osta Snam + verifica distanze di sicurezza",
     },
     {
-      id: "sr_03",
-      categoria: "Servizi e Reti",
-      sottocategoria: "Oleodotto (fascia di rispetto)",
-      normativa: "D.M. 24/11/1984",
+      id: "sr_03", categoria: "Servizi e Reti",
+      sottocategoria: "Oleodotto (fascia 200m)",
+      normativa: "DM 24/11/1984",
       presenza: randomPresenza([["assente", 75], ["verifica", 20], ["presente", 5]]),
-      descrizione: "Condotte per il trasporto di idrocarburi liquidi con relative fasce di rispetto",
+      descrizione: "Condotte idrocarburi liquidi con fasce di rispetto",
       fonte: "Gestore impianto",
+      criticita: "condizionante",
+      azioneRichiesta: "Nulla osta gestore oleodotto",
     },
     {
-      id: "sr_04",
-      categoria: "Servizi e Reti",
-      sottocategoria: "Strade statali/provinciali (fascia di rispetto)",
-      normativa: "D.Lgs. 285/1992 - D.P.R. 495/1992",
+      id: "sr_04", categoria: "Servizi e Reti",
+      sottocategoria: "Strade statali/provinciali (fascia rispetto)",
+      normativa: "D.Lgs. 285/1992 - DPR 495/1992",
       presenza: randomPresenza([["assente", 40], ["presente", 35], ["verifica", 25]]),
-      descrizione: "Fasce di rispetto stradali: 60m strade statali, 40m provinciali, 30m comunali fuori centro abitato",
-      fonte: "ANAS / Ente gestore provinciale",
+      descrizione: "Fasce: 60m autostrade, 40m statali, 30m provinciali",
+      fonte: "ANAS / Ente gestore",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica distanze + nulla osta ente gestore stradale",
     },
     {
-      id: "sr_05",
-      categoria: "Servizi e Reti",
-      sottocategoria: "Ferrovia (fascia di rispetto 30m)",
-      normativa: "D.P.R. 753/1980 - D.Lgs. 285/2005",
+      id: "sr_05", categoria: "Servizi e Reti",
+      sottocategoria: "Ferrovia (fascia 30m - DPR 753/1980)",
+      normativa: "DPR 753/1980",
       presenza: randomPresenza([["assente", 60], ["verifica", 25], ["presente", 15]]),
-      descrizione: "Fascia di rispetto ferroviaria di 30m dal binario. Richiede nulla osta RFI",
+      descrizione: "Fascia rispetto ferroviaria 30m. Richiede nulla osta RFI",
       fonte: "RFI - Rete Ferroviaria Italiana",
+      criticita: "condizionante",
+      azioneRichiesta: "Nulla osta RFI per costruzioni in fascia di rispetto",
     },
     {
-      id: "sr_06",
-      categoria: "Servizi e Reti",
-      sottocategoria: "Acquedotto e fognatura (fascia di rispetto)",
-      normativa: "D.Lgs. 152/2006 - Regolamento locale",
+      id: "sr_06", categoria: "Servizi e Reti",
+      sottocategoria: "Acquedotto/fognatura (fascia rispetto)",
+      normativa: "D.Lgs. 152/2006",
       presenza: randomPresenza([["verifica", 45], ["assente", 35], ["presente", 20]]),
-      descrizione: "Infrastrutture idriche con fasce di rispetto e servitù. Limitazioni per costruzioni e scavi",
+      descrizione: "Infrastrutture idriche con fasce di rispetto e servitù",
       fonte: "Gestore ATO / Comune",
+      criticita: "da_verificare",
+      azioneRichiesta: "Nulla osta gestore idrico",
     },
     {
-      id: "sr_07",
-      categoria: "Servizi e Reti",
+      id: "sr_07", categoria: "Servizi e Reti",
       sottocategoria: "Cavidotti telecomunicazioni / fibra ottica",
-      normativa: "D.Lgs. 259/2003 - Codice delle Comunicazioni Elettroniche",
+      normativa: "D.Lgs. 259/2003",
       presenza: randomPresenza([["verifica", 50], ["assente", 30], ["presente", 20]]),
-      descrizione: "Reti di telecomunicazione interrate o aeree. Servitù di passaggio e limitazioni scavi",
+      descrizione: "Reti TLC interrate o aeree con servitù di passaggio",
       fonte: "Operatori TLC / Infratel",
+      criticita: "neutro",
+      azioneRichiesta: "Verifica servitù e possibilità di spostamento",
     },
     {
-      id: "sr_08",
-      categoria: "Servizi e Reti",
+      id: "sr_08", categoria: "Servizi e Reti",
       sottocategoria: "Vincolo cimiteriale (fascia 200m)",
-      normativa: "T.U. Leggi Sanitarie R.D. 1265/1934 art. 338 - D.P.R. 285/1990",
+      normativa: "R.D. 1265/1934 art. 338 - DPR 285/1990",
       presenza: randomPresenza([["assente", 70], ["presente", 15], ["verifica", 15]]),
-      descrizione: "Zona di rispetto cimiteriale di 200m entro cui è vietata la costruzione",
+      descrizione: "Zona di rispetto cimiteriale 200m",
       fonte: "Comune",
+      criticita: "condizionante",
+      azioneRichiesta: "Deroga possibile solo con delibera comunale",
     },
   ];
 }
@@ -403,127 +493,134 @@ function buildServiziReti(_particelle: Particella[]): VincoloItem[] {
 function buildAltriVincoli(_particelle: Particella[]): VincoloItem[] {
   return [
     {
-      id: "av_01",
-      categoria: "Altri Vincoli",
-      sottocategoria: "PRG/POC - Destinazione urbanistica zona E agricola",
-      normativa: "L. 1150/1942 - Legislazione regionale urbanistica",
+      id: "av_01", categoria: "Altri Vincoli",
+      sottocategoria: "PRG/POC - Destinazione urbanistica zona E",
+      normativa: "L. 1150/1942 - Legislazione regionale",
       presenza: "presente",
-      descrizione: "Destinazione d'uso urbanistica vigente. Verificare NTA per eventuali divieti impianti a terra in zona E agricola",
+      descrizione: "Destinazione d'uso urbanistica vigente. Verificare NTA per divieti FV",
       fonte: "Comune - Ufficio Urbanistica",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica NTA PRG per compatibilità impianti FER",
     },
     {
-      id: "av_02",
-      categoria: "Altri Vincoli",
+      id: "av_02", categoria: "Altri Vincoli",
       sottocategoria: "PTCP / PTC - Pianificazione sovracomunale",
-      normativa: "L. 267/2000 - D.Lgs. 267/2000",
+      normativa: "D.Lgs. 267/2000",
       presenza: randomPresenza([["verifica", 55], ["presente", 25], ["assente", 20]]),
-      descrizione: "Piano Territoriale di Coordinamento Provinciale. Verificare eventuali indirizzi o norme vincolanti per FER",
+      descrizione: "Piano Territoriale di Coordinamento Provinciale",
       fonte: "Provincia / Città Metropolitana",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica indirizzi e norme vincolanti PTCP",
     },
     {
-      id: "av_03",
-      categoria: "Altri Vincoli",
+      id: "av_03", categoria: "Altri Vincoli",
       sottocategoria: "Linee guida regionali agrivoltaico",
       normativa: "D.Lgs. 199/2021 - Delibere regionali",
       presenza: randomPresenza([["verifica", 65], ["presente", 25], ["assente", 10]]),
-      descrizione: "Normativa regionale specifica per impianti agrivoltaici. Verificare requisiti tecnici, distanze e obblighi di monitoraggio",
-      fonte: "Regione - Assessorato Energia/Agricoltura",
+      descrizione: "Normativa regionale specifica per agrivoltaici",
+      fonte: "Regione",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica requisiti tecnici e obblighi regionali",
     },
     {
-      id: "av_04",
-      categoria: "Altri Vincoli",
-      sottocategoria: "Demanio e proprietà pubblica / Usi civici",
-      normativa: "Cod. Civ. art. 822-830 - L. 1766/1927 - D.Lgs. 85/2010",
+      id: "av_04", categoria: "Altri Vincoli",
+      sottocategoria: "Demanio / Usi civici",
+      normativa: "L. 1766/1927 - D.Lgs. 85/2010",
       presenza: randomPresenza([["assente", 55], ["verifica", 35], ["presente", 10]]),
-      descrizione: "Interferenza con aree demaniali, usi civici o proprietà collettiva. Gli usi civici NON possono essere liquidati per impianti FER",
-      fonte: "Agenzie Demanio / Regione / Commissariato Usi Civici",
-      note: "FONDAMENTALE: verificare presenza usi civici prima di qualsiasi impegno. Sono un blocco assoluto insormontabile",
+      descrizione: "Usi civici NON possono essere liquidati per impianti FER — blocco assoluto",
+      fonte: "Regione / Commissariato Usi Civici",
+      note: "FONDAMENTALE: verificare prima di qualsiasi impegno",
+      criticita: "escludente",
+      azioneRichiesta: "Se presenti usi civici: impianto non realizzabile",
     },
     {
-      id: "av_05",
-      categoria: "Altri Vincoli",
-      sottocategoria: "Servitù, enfiteusi, livelli e diritti di terzi",
-      normativa: "Codice Civile - Trascrizioni catastali",
+      id: "av_05", categoria: "Altri Vincoli",
+      sottocategoria: "Servitù, enfiteusi, livelli",
+      normativa: "Codice Civile",
       presenza: randomPresenza([["assente", 60], ["verifica", 30], ["presente", 10]]),
-      descrizione: "Diritti reali di godimento che possono limitare l'utilizzo del terreno (servitù di passaggio, enfiteusi, livelli)",
-      fonte: "Conservatoria dei Registri Immobiliari / Catasto",
+      descrizione: "Diritti reali che possono limitare l'utilizzo del terreno",
+      fonte: "Conservatoria Registri Immobiliari",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica visure ipotecarie e catastali",
     },
     {
-      id: "av_06",
-      categoria: "Altri Vincoli",
+      id: "av_06", categoria: "Altri Vincoli",
       sottocategoria: "Concessioni minerarie/idrocarburifere",
-      normativa: "R.D. 1443/1927 - D.Lgs. 625/1996",
+      normativa: "R.D. 1443/1927",
       presenza: randomPresenza([["assente", 80], ["verifica", 15], ["presente", 5]]),
-      descrizione: "Presenza di concessioni minerarie o idrocarburifere che possono gravare sull'area e pregiudicare l'intervento",
+      descrizione: "Concessioni che possono gravare sull'area",
       fonte: "MASE - UNMIG",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica presso UNMIG",
     },
   ];
 }
-
-// ══════════════════════════════════════════════════════════════
-// NUOVE SEZIONI AGRIVOLTAICO
-// ══════════════════════════════════════════════════════════════
 
 function buildVincoliAgricoli(particelle: Particella[]): VincoloItem[] {
   const inPuglia = isPuglia(particelle);
   const vincoli: VincoloItem[] = [
     {
-      id: "ag_01",
-      categoria: "Vincoli Agricoli",
+      id: "ag_01", categoria: "Vincoli Agricoli",
       sottocategoria: "Classe capacità d'uso suolo (LCC) - Classi I e II",
-      normativa: "D.Lgs. 199/2021 art. 20 - Linee guida regionali",
+      normativa: "D.Lgs. 199/2021 art. 20",
       presenza: randomPresenza([["verifica", 50], ["presente", 25], ["assente", 25]]),
-      descrizione: "Terreni con Land Capability Classification I e II (suoli agricoli di altissima qualità). In molte regioni vietato per FV a terra",
-      fonte: "AGEA / Regione - Carta della capacità d'uso",
-      note: "Alcune regioni vietano impianti su suoli LCC I e II. Verificare normativa regionale specifica",
+      descrizione: "Suoli LCC I e II — in molte regioni vietato per FV a terra",
+      fonte: "AGEA / Regione",
+      criticita: "condizionante",
+      azioneRichiesta: "Verifica normativa regionale per suoli LCC I-II",
     },
     {
-      id: "ag_02",
-      categoria: "Vincoli Agricoli",
+      id: "ag_02", categoria: "Vincoli Agricoli",
       sottocategoria: "SAU - Superficie Agricola Utilizzata",
-      normativa: "Reg. UE 1307/2013 - D.Lgs. 199/2021",
+      normativa: "Reg. UE 1307/2013",
       presenza: "presente",
-      descrizione: "Verifica della classificazione catastale e della destinazione produttiva. L'agrivoltaico deve garantire continuità dell'attività agricola",
-      fonte: "AGEA - BDN Fascicolo Aziendale",
+      descrizione: "Agrivoltaico deve garantire continuità dell'attività agricola",
+      fonte: "AGEA - Fascicolo Aziendale",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica classificazione catastale e piano colturale",
     },
     {
-      id: "ag_03",
-      categoria: "Vincoli Agricoli",
+      id: "ag_03", categoria: "Vincoli Agricoli",
       sottocategoria: "Vigneti DOC/DOCG",
-      normativa: "D.Lgs. 61/2010 - Reg. UE 1308/2013",
+      normativa: "D.Lgs. 61/2010",
       presenza: randomPresenza([["assente", 60], ["verifica", 25], ["presente", 15]]),
-      descrizione: "Presenza di vigneti iscritti a DOC/DOCG con vincoli disciplinari che possono vietare modifiche strutturali",
-      fonte: "MIPAAF - Albo vigneti / Camera di Commercio",
+      descrizione: "Vigneti iscritti a DOC/DOCG con vincoli disciplinari",
+      fonte: "MIPAAF - Albo vigneti",
+      criticita: "condizionante",
+      azioneRichiesta: "Verifica disciplinare DOC/DOCG per compatibilità agrivoltaico",
     },
     {
-      id: "ag_04",
-      categoria: "Vincoli Agricoli",
+      id: "ag_04", categoria: "Vincoli Agricoli",
       sottocategoria: "Uliveti storici e produzioni DOP/IGP",
       normativa: "L. 168/2017 - Reg. UE 1151/2012",
       presenza: randomPresenza([["assente", 55], ["verifica", 30], ["presente", 15]]),
-      descrizione: "Zone di produzione con marchi DOP/IGP agricoli che possono avere vincoli paesaggistici e disciplinari incompatibili",
+      descrizione: "Zone DOP/IGP con vincoli paesaggistici e disciplinari",
       fonte: "MIPAAF / Consorzi di tutela",
+      criticita: "condizionante",
+      azioneRichiesta: "Verifica disciplinare DOP/IGP + valutazione impatto",
     },
     {
-      id: "ag_05",
-      categoria: "Vincoli Agricoli",
-      sottocategoria: "Colture pregiate e paesaggio rurale storico",
-      normativa: "D.M. 17/10/2012 - Registro Paesaggi Rurali Storici",
+      id: "ag_05", categoria: "Vincoli Agricoli",
+      sottocategoria: "Paesaggio rurale storico",
+      normativa: "DM 17/10/2012",
       presenza: randomPresenza([["assente", 65], ["verifica", 25], ["presente", 10]]),
-      descrizione: "Area inclusa nel Registro Nazionale dei Paesaggi Rurali di Interesse Storico. Richiede valutazione specifica",
-      fonte: "MIPAAF - Osservatorio Nazionale del Paesaggio Rurale",
+      descrizione: "Registro Nazionale Paesaggi Rurali di Interesse Storico",
+      fonte: "MIPAAF",
+      criticita: "condizionante",
+      azioneRichiesta: "Valutazione impatto paesaggistico specifico",
     },
   ];
   if (inPuglia) {
     vincoli.push({
-      id: "ag_06",
-      categoria: "Vincoli Agricoli",
-      sottocategoria: "🌳 Olivi monumentali (L.R. Puglia 14/2007 - L. 168/2017)",
-      normativa: "L. 168/2017 - L.R. Puglia 14/2007 e s.m.i.",
+      id: "ag_06", categoria: "Vincoli Agricoli",
+      sottocategoria: "🌳 Olivi monumentali (L.R. Puglia 14/2007)",
+      normativa: "L. 168/2017 - L.R. Puglia 14/2007",
       presenza: "verifica",
-      descrizione: "Puglia: verifica obbligatoria presenza olivi monumentali. Vietato sradicare, espianto o alterazione delle piante iscritte al Registro Regionale",
-      fonte: "Regione Puglia - Registro degli ulivi monumentali",
-      note: "ATTENZIONE PUGLIA: L'olivo monumentale è inabbattibile. Le strutture agrivoltaiche devono essere progettate attorno ad essi. Verificare registro comunale e regionale",
+      descrizione: "Puglia: verifica obbligatoria olivi monumentali. Vietato sradicare/alterare",
+      fonte: "Regione Puglia - Registro ulivi monumentali",
+      note: "ATTENZIONE: L'olivo monumentale è inabbattibile",
+      criticita: "escludente",
+      azioneRichiesta: "Strutture agrivoltaiche devono essere progettate attorno ad essi",
     });
   }
   return vincoli;
@@ -532,33 +629,35 @@ function buildVincoliAgricoli(particelle: Particella[]): VincoloItem[] {
 function buildVincoliMilitariRadar(_particelle: Particella[]): VincoloItem[] {
   return [
     {
-      id: "mil_01",
-      categoria: "Militari e Radar",
+      id: "mil_01", categoria: "Militari e Radar",
       sottocategoria: "Aree militari e zone di rispetto",
-      normativa: "Cod. Ordinamento Militare D.Lgs. 66/2010 - L. 898/1976",
+      normativa: "D.Lgs. 66/2010 - L. 898/1976",
       presenza: randomPresenza([["assente", 65], ["verifica", 25], ["presente", 10]]),
-      descrizione: "Zone di servitù militare con limitazioni all'uso del suolo e vincoli di altezza",
-      fonte: "Ministero della Difesa - SGDDNA",
+      descrizione: "Zone di servitù militare con limitazioni uso suolo",
+      fonte: "Ministero della Difesa",
+      criticita: "escludente",
+      azioneRichiesta: "Nulla osta Difesa — in zone di servitù: vietato",
     },
     {
-      id: "mil_02",
-      categoria: "Militari e Radar",
-      sottocategoria: "Zone di rispetto aeroportuale (ENAC)",
-      normativa: "Cod. della Navigazione Aerea - Reg. ENAC",
+      id: "mil_02", categoria: "Militari e Radar",
+      sottocategoria: "Zone rispetto aeroportuale (ENAC)",
+      normativa: "Cod. Navigazione Aerea - Reg. ENAC",
       presenza: randomPresenza([["assente", 60], ["verifica", 30], ["presente", 10]]),
-      descrizione: "Limitazioni di ostacolo e superfici di rispetto aeroportuali. Strutture agrivoltaiche devono rispettare altezze limite",
-      fonte: "ENAC - Piano di Rischio Aeroportuale",
-      note: "Richiesto nulla osta ENAC per strutture oltre determinate altezze nelle zone di rispetto aeroportuale",
+      descrizione: "Superfici di rispetto aeroportuali",
+      fonte: "ENAC - Piano Rischio",
+      note: "Nulla osta ENAC per strutture in zona di rispetto",
+      criticita: "condizionante",
+      azioneRichiesta: "Nulla osta ENAC + verifica altezze limite",
     },
     {
-      id: "mil_03",
-      categoria: "Militari e Radar",
-      sottocategoria: "Interferenze radar militari e civili",
-      normativa: "Cod. della Navigazione Aerea - ENAC/ENAV",
+      id: "mil_03", categoria: "Militari e Radar",
+      sottocategoria: "Interferenze radar ENAV",
+      normativa: "Cod. Navigazione - ENAC/ENAV",
       presenza: randomPresenza([["assente", 70], ["verifica", 25], ["presente", 5]]),
-      descrizione: "Zone di protezione radar: gli impianti agrivoltaici (strutture metalliche) possono interferire con i segnali radar",
+      descrizione: "Zone protezione radar — impianti metalici possono interferire",
       fonte: "ENAV / Aeronautica Militare",
-      note: "Verificare con ENAV/AM la presenza di zone di rispetto radar entro 10 km dall'area",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica con ENAV per zone radar entro 10 km",
     },
   ];
 }
@@ -566,32 +665,34 @@ function buildVincoliMilitariRadar(_particelle: Particella[]): VincoloItem[] {
 function buildVincoliForestali(_particelle: Particella[]): VincoloItem[] {
   return [
     {
-      id: "for_01",
-      categoria: "Vincoli Forestali",
-      sottocategoria: "Bosco secondo definizione regionale (D.Lgs. 34/2018)",
-      normativa: "D.Lgs. 34/2018 - TUFF - Definizioni regionali",
+      id: "for_01", categoria: "Vincoli Forestali",
+      sottocategoria: "Bosco (D.Lgs. 34/2018)",
+      normativa: "D.Lgs. 34/2018 - TUFF",
       presenza: randomPresenza([["assente", 55], ["verifica", 30], ["presente", 15]]),
-      descrizione: "Terreno classificato come bosco ai sensi del D.Lgs. 34/2018 e/o della definizione regionale. Vietata la trasformazione",
+      descrizione: "Terreno classificato come bosco. Vietata la trasformazione",
       fonte: "Regione - Inventario Forestale",
+      criticita: "escludente",
+      azioneRichiesta: "Vietato in area boscata salvo compensazione forestale",
     },
     {
-      id: "for_02",
-      categoria: "Vincoli Forestali",
+      id: "for_02", categoria: "Vincoli Forestali",
       sottocategoria: "Aree percorse da incendio (vincolo 15 anni)",
-      normativa: "L. 353/2000 - Legge Quadro Incendi Boschivi",
+      normativa: "L. 353/2000",
       presenza: randomPresenza([["assente", 65], ["verifica", 25], ["presente", 10]]),
-      descrizione: "Aree percorse da incendio soggette a vincolo di 15 anni: vietato cambio di destinazione d'uso e costruzioni",
-      fonte: "Comune - Catasto Aree Percorse da Fuoco",
-      note: "Il vincolo decadenziale di 15 anni è assoluto. Verificare i registri comunali obbligatori per legge",
+      descrizione: "Vincolo 15 anni: vietato cambio destinazione e costruzioni",
+      fonte: "Comune - Catasto Incendi",
+      criticita: "escludente",
+      azioneRichiesta: "Vincolo assoluto per 15 anni dalla data dell'incendio",
     },
     {
-      id: "for_03",
-      categoria: "Vincoli Forestali",
-      sottocategoria: "Taglio bosco e autorizzazione forestale",
-      normativa: "D.Lgs. 34/2018 - Legislazione forestale regionale",
+      id: "for_03", categoria: "Vincoli Forestali",
+      sottocategoria: "Autorizzazione forestale per taglio",
+      normativa: "D.Lgs. 34/2018",
       presenza: randomPresenza([["assente", 60], ["verifica", 30], ["presente", 10]]),
-      descrizione: "Eventuale presenza di vegetazione arborea che richiede autorizzazione per taglio o diradamento",
+      descrizione: "Eventuale vegetazione arborea che richiede autorizzazione",
       fonte: "Regione - Ufficio Foreste",
+      criticita: "da_verificare",
+      azioneRichiesta: "Autorizzazione taglio piante presso ufficio forestale",
     },
   ];
 }
@@ -599,22 +700,24 @@ function buildVincoliForestali(_particelle: Particella[]): VincoloItem[] {
 function buildVincoliSismici(_particelle: Particella[]): VincoloItem[] {
   return [
     {
-      id: "sis_01",
-      categoria: "Vincoli Sismici",
-      sottocategoria: "Classificazione sismica del Comune (Zone 1-4)",
-      normativa: "OPCM 3274/2003 - D.M. 17/01/2018 NTC",
+      id: "sis_01", categoria: "Vincoli Sismici",
+      sottocategoria: "Classificazione sismica Comune (Zone 1-4)",
+      normativa: "OPCM 3274/2003 - DM 17/01/2018 NTC",
       presenza: "presente",
-      descrizione: "Tutti i comuni italiani sono classificati in zone sismiche 1-4. Per agrivoltaico: fondazioni e strutture devono rispettare le NTC",
-      fonte: "Dipartimento Protezione Civile - Classificazione sismica",
+      descrizione: "Fondazioni e strutture devono rispettare NTC per la zona sismica",
+      fonte: "Protezione Civile",
+      criticita: "da_verificare",
+      azioneRichiesta: "Progettazione strutturale conforme NTC 2018 per zona sismica",
     },
     {
-      id: "sis_02",
-      categoria: "Vincoli Sismici",
+      id: "sis_02", categoria: "Vincoli Sismici",
       sottocategoria: "Microzonazione sismica",
-      normativa: "OPCM 3907/2010 - Indirizzi e Criteri Microzonazione Sismica",
+      normativa: "OPCM 3907/2010",
       presenza: randomPresenza([["non_rilevabile", 50], ["verifica", 35], ["assente", 15]]),
-      descrizione: "Studi di microzonazione sismica che individuano zone a comportamento sismico omogeneo. Può imporre verifiche specifiche",
-      fonte: "Regione / Portale MS Italia",
+      descrizione: "Studi microzonazione che individuano zone a comportamento omogeneo",
+      fonte: "Regione / MS Italia",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica studi MS per eventuali amplificazioni locali",
     },
   ];
 }
@@ -622,32 +725,35 @@ function buildVincoliSismici(_particelle: Particella[]): VincoloItem[] {
 function buildVincoliCatastali(_particelle: Particella[]): VincoloItem[] {
   return [
     {
-      id: "cat_01",
-      categoria: "Vincoli Catastali e Proprietà",
+      id: "cat_01", categoria: "Vincoli Catastali",
       sottocategoria: "Usi civici e diritti collettivi",
-      normativa: "L. 1766/1927 - L. 168/2017 - Sent. Corte Cost. 210/2014",
+      normativa: "L. 1766/1927 - L. 168/2017",
       presenza: randomPresenza([["assente", 55], ["verifica", 35], ["presente", 10]]),
-      descrizione: "Terreni gravati da usi civici: diritti d'uso delle comunità locali insopprimibili. Blocco assoluto per impianti FER",
+      descrizione: "Usi civici — blocco assoluto per impianti FER",
       fonte: "Regione / Commissariato Usi Civici",
-      note: "Gli usi civici NON possono essere liquidati per costruire impianti FER. Verificare presso gli uffici regionali competenti PRIMA di qualsiasi impegno",
+      note: "NON possono essere liquidati per FER",
+      criticita: "escludente",
+      azioneRichiesta: "Verifica presso uffici regionali PRIMA di qualsiasi impegno",
     },
     {
-      id: "cat_02",
-      categoria: "Vincoli Catastali e Proprietà",
-      sottocategoria: "Servitù prediali attive e passive",
-      normativa: "Codice Civile artt. 1027-1099",
+      id: "cat_02", categoria: "Vincoli Catastali",
+      sottocategoria: "Servitù prediali",
+      normativa: "Cod. Civ. artt. 1027-1099",
       presenza: randomPresenza([["assente", 50], ["verifica", 35], ["presente", 15]]),
-      descrizione: "Servitù di passaggio, acquedotto, elettrodotto che gravano sul fondo e possono limitare il posizionamento delle strutture",
+      descrizione: "Servitù che possono limitare posizionamento strutture",
       fonte: "Conservatoria Registri Immobiliari",
+      criticita: "da_verificare",
+      azioneRichiesta: "Visure ipotecarie e verifica servitù attive",
     },
     {
-      id: "cat_03",
-      categoria: "Vincoli Catastali e Proprietà",
+      id: "cat_03", categoria: "Vincoli Catastali",
       sottocategoria: "Enfiteusi, livelli e usucapioni",
-      normativa: "Codice Civile artt. 957-977",
+      normativa: "Cod. Civ. artt. 957-977",
       presenza: randomPresenza([["assente", 70], ["verifica", 25], ["presente", 5]]),
-      descrizione: "Diritti reali di godimento minori che possono condizionare la disponibilità piena del fondo",
-      fonte: "Conservatoria Registri Immobiliari / Catasto",
+      descrizione: "Diritti reali di godimento minori",
+      fonte: "Conservatoria / Catasto",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica titolarità piena del fondo",
     },
   ];
 }
@@ -655,32 +761,35 @@ function buildVincoliCatastali(_particelle: Particella[]): VincoloItem[] {
 function buildCompatibilitaConnessione(_particelle: Particella[]): VincoloItem[] {
   return [
     {
-      id: "conn_01",
-      categoria: "Compatibilità Connessione Rete",
-      sottocategoria: "Distanza da cabina primaria AT/MT",
-      normativa: "D.Lgs. 199/2021 - Regole di Terna/Distributori",
+      id: "conn_01", categoria: "Compatibilità Connessione",
+      sottocategoria: "Distanza cabina primaria AT/MT",
+      normativa: "D.Lgs. 199/2021",
       presenza: randomPresenza([["verifica", 55], ["assente", 25], ["presente", 20]]),
-      descrizione: "Distanza dalla cabina primaria: determina costi e fattibilità della connessione. Ottimale < 5 km, critica > 15 km",
-      fonte: "Terna SpA / Gestore di Distribuzione locale",
+      descrizione: "Ottimale < 5 km, critica > 15 km",
+      fonte: "Terna / Distributore",
+      criticita: "neutro",
+      azioneRichiesta: "Richiedere preventivo connessione",
     },
     {
-      id: "conn_02",
-      categoria: "Compatibilità Connessione Rete",
-      sottocategoria: "Disponibilità STMG (Soluzione Tecnica Minima Garantita)",
-      normativa: "D.Lgs. 199/2021 - Delibera ARERA 99/08",
+      id: "conn_02", categoria: "Compatibilità Connessione",
+      sottocategoria: "Disponibilità STMG",
+      normativa: "D.Lgs. 199/2021 - ARERA 99/08",
       presenza: randomPresenza([["verifica", 60], ["assente", 25], ["presente", 15]]),
-      descrizione: "Capacità residua di connessione in rete: da verificare con richiesta preliminare al distributore o Terna",
-      fonte: "Gestore di rete / Portale Gaudi (ARERA)",
-      note: "Congestione di rete in alcune aree può rendere la connessione non economicamente sostenibile",
+      descrizione: "Capacità residua di connessione in rete",
+      fonte: "Portale Gaudi (ARERA)",
+      note: "Congestione rete può rendere connessione non sostenibile",
+      criticita: "neutro",
+      azioneRichiesta: "Richiesta STMG al distributore/Terna",
     },
     {
-      id: "conn_03",
-      categoria: "Compatibilità Connessione Rete",
-      sottocategoria: "Presenza linea AT esistente",
-      normativa: "Regole tecniche CEI - Standard Terna",
+      id: "conn_03", categoria: "Compatibilità Connessione",
+      sottocategoria: "Presenza linea AT nelle vicinanze",
+      normativa: "Regole CEI - Standard Terna",
       presenza: randomPresenza([["verifica", 50], ["assente", 30], ["presente", 20]]),
-      descrizione: "Verifica presenza di linee AT nelle vicinanze per valutare possibilità di connessione in AT senza cabina primaria",
-      fonte: "Terna SpA - Cartografia elettrica",
+      descrizione: "Valutazione connessione in AT senza nuova cabina",
+      fonte: "Terna",
+      criticita: "neutro",
+      azioneRichiesta: "Verifica cartografia Terna",
     },
   ];
 }
@@ -688,43 +797,47 @@ function buildCompatibilitaConnessione(_particelle: Particella[]): VincoloItem[]
 function buildAreeIdonee(_particelle: Particella[]): VincoloItem[] {
   return [
     {
-      id: "ai_01",
-      categoria: "Aree Idonee FV/Agrivoltaico",
-      sottocategoria: "Verifica aree idonee ex D.Lgs. 199/2021 art. 20",
-      normativa: "D.Lgs. 199/2021 art. 20 - D.M. Aree Idonee (2024)",
+      id: "ai_01", categoria: "Aree Idonee",
+      sottocategoria: "Area idonea ex D.Lgs. 199/2021 art. 20",
+      normativa: "D.Lgs. 199/2021 art. 20 - DM Aree Idonee",
       presenza: randomPresenza([["verifica", 60], ["assente", 25], ["presente", 15]]),
-      descrizione: "Verifica se il sito ricade in aree individuate come idonee dal D.M. Aree Idonee. In aree idonee: iter semplificato PAS",
-      fonte: "MASE / Geoportale Nazionale / Regioni",
-      note: "Le aree idonee godono di iter autorizzativo semplificato. Verificare la cartografia vigente nella regione specifica",
+      descrizione: "In aree idonee: iter semplificato PAS",
+      fonte: "MASE / Regioni",
+      note: "Le aree idonee godono di iter autorizzativo semplificato",
+      criticita: "neutro",
+      azioneRichiesta: "Verifica cartografia regionale aree idonee",
     },
     {
-      id: "ai_02",
-      categoria: "Aree Idonee FV/Agrivoltaico",
-      sottocategoria: "Aree agricole di pregio da escludere",
-      normativa: "D.Lgs. 199/2021 - D.M. Aree Idonee",
+      id: "ai_02", categoria: "Aree Idonee",
+      sottocategoria: "Aree agricole pregio da escludere",
+      normativa: "D.Lgs. 199/2021",
       presenza: randomPresenza([["verifica", 50], ["presente", 25], ["assente", 25]]),
-      descrizione: "Aree agricole di pregio esplicitamente escluse dalle aree idonee: LCC I, II, vigneti DOC, oliveti storici",
+      descrizione: "LCC I-II, vigneti DOC, oliveti storici — escluse da aree idonee",
       fonte: "MIPAAF / Regioni",
-      note: "Non confondere: l'agrivoltaico con mantenimento dell'attività agricola può essere ammesso anche in alcune aree di pregio",
+      note: "Agrivoltaico con continuità agricola può essere ammesso anche su pregio",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica classificazione e regime applicabile",
     },
     {
-      id: "ai_03",
-      categoria: "Aree Idonee FV/Agrivoltaico",
-      sottocategoria: "Fasce costiere e beni UNESCO (aree non idonee)",
+      id: "ai_03", categoria: "Aree Idonee",
+      sottocategoria: "Fasce costiere e UNESCO (non idonee)",
       normativa: "D.Lgs. 199/2021 - D.Lgs. 42/2004",
       presenza: randomPresenza([["assente", 65], ["verifica", 25], ["presente", 10]]),
-      descrizione: "Fasce costiere (variabile per regione) e buffer zone beni UNESCO: sempre escluse dalle aree idonee FER",
+      descrizione: "Sempre escluse dalle aree idonee FER",
       fonte: "MASE / Regioni",
+      criticita: "escludente",
+      azioneRichiesta: "Se in fascia costiera/UNESCO: area non idonea",
     },
     {
-      id: "ai_04",
-      categoria: "Aree Idonee FV/Agrivoltaico",
-      sottocategoria: "Iter autorizzativo applicabile (PAS/AU/VIA/PAUR)",
-      normativa: "D.Lgs. 199/2021 - D.Lgs. 152/2006 - L. 387/2003",
+      id: "ai_04", categoria: "Aree Idonee",
+      sottocategoria: "Iter autorizzativo (PAS/AU/VIA/PAUR)",
+      normativa: "D.Lgs. 199/2021 - D.Lgs. 152/2006",
       presenza: "verifica",
-      descrizione: "Determinazione dell'iter: PAS (<1MW, aree idonee), Autorizzazione Unica (AU), VIA, PAUR. Dipende da potenza, area e vincoli presenti",
+      descrizione: "Determinazione iter in base a potenza, area e vincoli",
       fonte: "Regione / MASE",
-      note: "Agrivoltaico avanzato DM 22/2022: può accedere a iter semplificato se rispetta tutti i requisiti tecnici",
+      note: "Agrivoltaico avanzato DM 22/2022: iter semplificato se conforme",
+      criticita: "da_verificare",
+      azioneRichiesta: "Determinare iter applicabile con analisi vincoli",
     },
   ];
 }
@@ -732,81 +845,194 @@ function buildAreeIdonee(_particelle: Particella[]): VincoloItem[] {
 function buildNormativaAgrivoltaico(_particelle: Particella[]): VincoloItem[] {
   return [
     {
-      id: "av_n01",
-      categoria: "Normativa Agrivoltaico (DM 22/2022)",
+      id: "av_n01", categoria: "Normativa Agrivoltaico",
       sottocategoria: "Continuità attività agricola certificata",
-      normativa: "D.M. 22/12/2022 - Linee guida agrivoltaico avanzato",
+      normativa: "DM 22/12/2022",
       presenza: "verifica",
-      descrizione: "Requisito fondamentale: l'attività agricola deve essere mantenuta attiva e certificata per tutta la vita dell'impianto",
-      fonte: "GSE - Gestore Servizi Energetici",
-      note: "Senza continuità agricola documentata l'impianto non è classificabile come agrivoltaico ma come FV a terra ordinario",
+      descrizione: "Attività agricola mantenuta per tutta la vita dell'impianto",
+      fonte: "GSE",
+      note: "Senza continuità: FV a terra ordinario, non agrivoltaico",
+      criticita: "da_verificare",
+      azioneRichiesta: "Piano colturale + accordo con conduttore agricolo",
     },
     {
-      id: "av_n02",
-      categoria: "Normativa Agrivoltaico (DM 22/2022)",
-      sottocategoria: "Altezza minima strutture e distanza tra file",
-      normativa: "D.M. 22/12/2022",
+      id: "av_n02", categoria: "Normativa Agrivoltaico",
+      sottocategoria: "Altezza minima strutture e distanza file",
+      normativa: "DM 22/12/2022",
       presenza: "verifica",
-      descrizione: "Moduli installati a un'altezza minima da terra compatibile con le colture sottostanti. Distanza tra file che garantisce passaggio mezzi agricoli",
-      fonte: "GSE - Linee guida agrivoltaico",
-      note: "DM 22/2022: altezza minima generalmente ≥ 2,1m dal suolo per permettere attività agricola meccanizzata",
+      descrizione: "Altezza minima ≥ 2,1m per meccanizzazione",
+      fonte: "GSE",
+      criticita: "da_verificare",
+      azioneRichiesta: "Progetto strutturale conforme DM 22/2022",
     },
     {
-      id: "av_n03",
-      categoria: "Normativa Agrivoltaico (DM 22/2022)",
+      id: "av_n03", categoria: "Normativa Agrivoltaico",
       sottocategoria: "LAOR - SAU non coperta (≥ 70%)",
-      normativa: "D.M. 22/12/2022",
+      normativa: "DM 22/12/2022",
       presenza: "verifica",
-      descrizione: "La superficie agricola non coperta dai moduli deve essere almeno il 70% (LAOR: Limite Addizionale Occupazione Residua)",
+      descrizione: "Superficie non coperta dai moduli almeno 70%",
       fonte: "GSE",
-      note: "Parametro fondamentale per classificazione agrivoltaico avanzato e accesso incentivi Decreto FER",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica layout impianto per LAOR ≥ 70%",
     },
     {
-      id: "av_n04",
-      categoria: "Normativa Agrivoltaico (DM 22/2022)",
-      sottocategoria: "Sistema di monitoraggio agricolo (PMRT)",
-      normativa: "D.M. 22/12/2022",
+      id: "av_n04", categoria: "Normativa Agrivoltaico",
+      sottocategoria: "PMRT - Piano Monitoraggio",
+      normativa: "DM 22/12/2022",
       presenza: "verifica",
-      descrizione: "Piano di Monitoraggio e Reporting Tecnico obbligatorio: produzione agricola, microclima, biodiversità, risparmio idrico",
+      descrizione: "Piano Monitoraggio Reporting Tecnico obbligatorio",
       fonte: "GSE - PMRT",
+      criticita: "da_verificare",
+      azioneRichiesta: "Predisporre PMRT conforme linee guida GSE",
     },
     {
-      id: "av_n05",
-      categoria: "Normativa Agrivoltaico (DM 22/2022)",
-      sottocategoria: "Sistema di agricoltura attiva (colture compatibili)",
-      normativa: "D.M. 22/12/2022 - Linee guida GSE",
+      id: "av_n05", categoria: "Normativa Agrivoltaico",
+      sottocategoria: "Colture compatibili",
+      normativa: "DM 22/12/2022",
       presenza: "verifica",
-      descrizione: "Le colture o l'allevamento praticato deve essere compatibile con la presenza dei moduli (pascolo, orticole, aromatiche, ecc.)",
+      descrizione: "Compatibilità agro-energetica per la produzione agricola prevista",
       fonte: "GSE",
-      note: "Verificare la compatibilità agro-energetica specifica per il tipo di produzione agricola prevista",
+      criticita: "da_verificare",
+      azioneRichiesta: "Verifica compatibilità colture con layout impianto",
     },
   ];
 }
 
-function computeRischioComplessivo(analisi: Omit<AnalisiVincolistica, "rischioComplessivo" | "areaUtileLordaHa" | "areaUtileNettaHa">): AnalisiVincolistica["rischioComplessivo"] {
-  const allVincoli = [
-    ...analisi.vincoliCulturali,
-    ...analisi.vincoliPaesaggistici,
-    ...analisi.vincoliIdrogeologici,
-    ...analisi.vincoliAmbientali,
-    ...analisi.rischioIdrico,
-    ...analisi.serviziReti,
-    ...analisi.altriVincoli,
-    ...analisi.vincoliAgricoli,
-    ...analisi.vincoliMilitariRadar,
-    ...analisi.vincoliForestali,
-    ...analisi.vincoliSismici,
-    ...analisi.vincoliCatastali,
-    ...analisi.compatibilitaConnessione,
-    ...analisi.areeIdonee,
-    ...analisi.normativaAgrivoltaico,
-  ];
+// ══════════════════════════════════════════════════════════════
+// STEP AUTORIZZATIVI — generati automaticamente dai vincoli rilevati
+// ══════════════════════════════════════════════════════════════
+
+function generateStepAutorizzativi(allVincoli: VincoloItem[]): StepAutorizzativo[] {
+  const steps: StepAutorizzativo[] = [];
+  const added = new Set<string>();
+
+  const addStep = (vincolo: VincoloItem, id: string, titolo: string, descrizione: string, normativa: string, ente: string, obbligatorio: boolean) => {
+    if (added.has(id)) return;
+    added.add(id);
+    steps.push({ id, titolo, descrizione, normativa, ente, obbligatorio, vincoloId: vincolo.id });
+  };
+
+  for (const v of allVincoli) {
+    if (v.presenza !== "presente" && v.presenza !== "verifica") continue;
+
+    // Natura 2000 → VIncA
+    if (["amb_01", "amb_02", "amb_02b"].includes(v.id) && v.presenza === "presente") {
+      addStep(v, "step_vinca", "Valutazione di Incidenza (VIncA)",
+        "Screening o valutazione appropriata per effetti su siti Natura 2000",
+        "DPR 357/1997 art. 5", "Regione / Ente gestore sito", true);
+    }
+
+    // Art. 142 → Autorizzazione paesaggistica
+    if (["pa_01", "pa_04", "pa_06"].includes(v.id) && v.presenza === "presente") {
+      addStep(v, "step_paesaggistica", "Autorizzazione paesaggistica ordinaria",
+        "Autorizzazione ex art. 146 D.Lgs. 42/2004 con parere Soprintendenza",
+        "D.Lgs. 42/2004 art. 146", "Regione / Soprintendenza", true);
+    }
+
+    // Art. 136 → Autorizzazione paesaggistica + parere vincolante
+    if (v.id === "pa_02" && v.presenza === "presente") {
+      addStep(v, "step_paesaggistica_136", "Autorizzazione paesaggistica (art. 136)",
+        "Autorizzazione con parere vincolante della Soprintendenza ABAP",
+        "D.Lgs. 42/2004 artt. 136-146", "Soprintendenza ABAP", true);
+    }
+
+    // Vincolo idrogeologico
+    if (v.id === "id_01" && v.presenza === "presente") {
+      addStep(v, "step_idrogeologico", "Autorizzazione vincolo idrogeologico",
+        "Nulla osta ente forestale per trasformazione terreni vincolati",
+        "R.D. 3267/1923", "Regione / Città Metropolitana", true);
+    }
+
+    // PAI frana P3 → studio geotecnico
+    if (v.id === "id_02b" && v.presenza === "presente") {
+      addStep(v, "step_geotecnico", "Studio geotecnico + parere AdB",
+        "Studio di compatibilità geologica e geotecnica con parere Autorità di Bacino",
+        "D.L. 180/1998 - PAI", "Autorità di Bacino Distrettuale", true);
+    }
+
+    // Alluvione P2 → studio idraulico
+    if (v.id === "id_03b" && v.presenza === "presente") {
+      addStep(v, "step_idraulico", "Studio di compatibilità idraulica",
+        "Studio idraulico per verifica non aggravamento rischio alluvionale",
+        "Dir. 2007/60/CE - D.Lgs. 49/2010", "Autorità di Bacino Distrettuale", true);
+    }
+
+    // VIA
+    if (v.id === "amb_05") {
+      addStep(v, "step_via", "Verifica assoggettabilità VIA",
+        "Determinare se il progetto è soggetto a VIA o verifica di assoggettabilità",
+        "D.Lgs. 152/2006 Titolo III", "MASE / Regione", true);
+    }
+
+    // Aeroportuale
+    if (v.id === "mil_02" && v.presenza === "presente") {
+      addStep(v, "step_enac", "Nulla osta ENAC",
+        "Verifica ostacoli e pericoli alla navigazione aerea",
+        "Cod. Navigazione Aerea", "ENAC", true);
+    }
+
+    // Zona urbanistica
+    if (v.id === "av_01") {
+      addStep(v, "step_urbanistica", "Verifica conformità urbanistica",
+        "Verifica compatibilità con NTA del PRG/PUC vigente",
+        "L. 1150/1942 - DPR 380/2001", "Comune", true);
+    }
+
+    // Ferrovia
+    if (v.id === "sr_05" && v.presenza === "presente") {
+      addStep(v, "step_rfi", "Nulla osta RFI",
+        "Autorizzazione per costruzioni in fascia di rispetto ferroviaria",
+        "DPR 753/1980", "RFI", true);
+    }
+
+    // Gasdotto
+    if (v.id === "sr_02" && v.presenza === "presente") {
+      addStep(v, "step_snam", "Nulla osta Snam",
+        "Verifica distanze di sicurezza da condotte gas",
+        "DM 17/4/2008", "Snam Rete Gas", true);
+    }
+
+    // Consorzio di bonifica
+    if (v.id === "id_06" && (v.presenza === "presente" || v.presenza === "verifica")) {
+      addStep(v, "step_bonifica", "Nulla osta Consorzio di Bonifica",
+        "Verifica interferenze con reticolo idrografico e opere di bonifica",
+        "R.D. 215/1933", "Consorzio di Bonifica competente", false);
+    }
+  }
+
+  // Always add: Autorizzazione Unica / PAS
+  addStep(
+    { id: "system", categoria: "", sottocategoria: "", normativa: "", presenza: "verifica", descrizione: "" },
+    "step_au_pas", "Autorizzazione Unica o PAS",
+    "Determinare l'iter autorizzativo: PAS (<1MW aree idonee), AU, o PAUR",
+    "D.Lgs. 387/2003 - D.Lgs. 199/2021", "Regione / Comune", true
+  );
+
+  return steps;
+}
+
+// ══════════════════════════════════════════════════════════════
+// CLASSIFICAZIONE IDONEITÀ
+// ══════════════════════════════════════════════════════════════
+
+function computeClassificazione(allVincoli: VincoloItem[]): ClassificazioneIdoneita {
+  const hasEscludente = allVincoli.some(v => v.presenza === "presente" && v.criticita === "escludente");
+  if (hasEscludente) return "non_idoneo";
+
+  const hasCondizionante = allVincoli.some(v => v.presenza === "presente" && v.criticita === "condizionante");
+  if (hasCondizionante) return "condizionato";
+
+  return "potenzialmente_idoneo";
+}
+
+function computeRischioComplessivo(allVincoli: VincoloItem[]): AnalisiVincolistica["rischioComplessivo"] {
   const presenti = allVincoli.filter(v => v.presenza === "presente").length;
   const verifica = allVincoli.filter(v => v.presenza === "verifica").length;
+  const escludenti = allVincoli.filter(v => v.presenza === "presente" && v.criticita === "escludente").length;
 
-  if (presenti >= 10) return "molto_alto";
-  if (presenti >= 6) return "alto";
-  if (presenti >= 3 || verifica >= 10) return "medio";
+  if (escludenti >= 2) return "molto_alto";
+  if (escludenti >= 1 || presenti >= 8) return "alto";
+  if (presenti >= 4 || verifica >= 10) return "medio";
   if (presenti >= 1 || verifica >= 5) return "basso";
   return "nessuno";
 }
@@ -834,33 +1060,36 @@ export async function runAnalisiVincolistica(particelle: Particella[]): Promise<
     normativaAgrivoltaico: buildNormativaAgrivoltaico(particelle),
   };
 
-  const rischioComplessivo = computeRischioComplessivo(partial);
-
-  // ── AUL / AUN ──
-  const areaUtileLordaHa = particelle.reduce((sum, p) => sum + (p.superficieMq ?? 0), 0) / 10_000;
-
-  // AUN: stima l'area netta sottraendo una % per ogni vincolo "presente"
-  // Le "aree idonee" sono POSITIVE (non riducono l'area, anzi la rendono più accessibile)
-  const vincoliNegativi = [
+  const allVincoli = [
     ...partial.vincoliCulturali, ...partial.vincoliPaesaggistici,
     ...partial.vincoliIdrogeologici, ...partial.vincoliAmbientali,
     ...partial.rischioIdrico, ...partial.serviziReti, ...partial.altriVincoli,
     ...partial.vincoliAgricoli, ...partial.vincoliMilitariRadar,
     ...partial.vincoliForestali, ...partial.vincoliSismici,
     ...partial.vincoliCatastali, ...partial.compatibilitaConnessione,
-    ...partial.normativaAgrivoltaico,
+    ...partial.areeIdonee, ...partial.normativaAgrivoltaico,
   ];
-  // Aree idonee sono positive: se presenti aumentano l'area utile
+
+  const rischioComplessivo = computeRischioComplessivo(allVincoli);
+  const classificazioneIdoneita = computeClassificazione(allVincoli);
+  const stepAutorizzativi = generateStepAutorizzativi(allVincoli);
+
+  // AUL / AUN
+  const areaUtileLordaHa = particelle.reduce((sum, p) => sum + (p.superficieMq ?? 0), 0) / 10_000;
+  
+  const vincoliNegativi = allVincoli.filter(v => 
+    v.categoria !== "Aree Idonee" && v.categoria !== "Compatibilità Connessione" && v.categoria !== "Normativa Agrivoltaico"
+  );
   const areeIdoneeFavorevoli = partial.areeIdonee.filter(v => 
-    v.presenza === "presente" && !v.sottocategoria.toLowerCase().includes("esclud") && !v.sottocategoria.toLowerCase().includes("non idonee")
+    v.presenza === "presente" && !v.sottocategoria.toLowerCase().includes("esclud") && !v.sottocategoria.toLowerCase().includes("non idon")
   ).length;
   
-  const presenti = vincoliNegativi.filter(v => v.presenza === "presente").length;
+  const escludentiPresenti = vincoliNegativi.filter(v => v.presenza === "presente" && v.criticita === "escludente").length;
+  const condizionantiPresenti = vincoliNegativi.filter(v => v.presenza === "presente" && v.criticita === "condizionante").length;
   const verificare = vincoliNegativi.filter(v => v.presenza === "verifica").length;
   
-  // Ogni vincolo presente riduce ~8% dell'area, ogni "verifica" ~2% (cautelativo)
-  // Ogni area idonea favorevole recupera +5% dell'area
-  const riduzioneBase = presenti * 0.08 + verificare * 0.02;
+  // Escludenti riducono 15%, condizionanti 6%, da verificare 2%, idonee +5%
+  const riduzioneBase = escludentiPresenti * 0.15 + condizionantiPresenti * 0.06 + verificare * 0.015;
   const bonusIdonee = areeIdoneeFavorevoli * 0.05;
   const riduzionePerc = Math.max(0, Math.min(0.95, riduzioneBase - bonusIdonee));
   const areaUtileNettaHa = Math.max(0, areaUtileLordaHa * (1 - riduzionePerc));
@@ -868,6 +1097,8 @@ export async function runAnalisiVincolistica(particelle: Particella[]): Promise<
   return {
     ...partial,
     rischioComplessivo,
+    classificazioneIdoneita,
+    stepAutorizzativi,
     areaUtileLordaHa: Math.round(areaUtileLordaHa * 1000) / 1000,
     areaUtileNettaHa: Math.round(areaUtileNettaHa * 1000) / 1000,
   };
