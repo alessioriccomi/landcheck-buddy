@@ -141,12 +141,17 @@ export function AnalysisPanel({
               Particelle
             </TabsTrigger>
             {step === "results" && (
-              <TabsTrigger value="risultati" className="text-[10px] flex-1">
-                Risultati
-              </TabsTrigger>
+              <>
+                <TabsTrigger value="risultati" className="text-[10px] flex-1">
+                  Risultati
+                </TabsTrigger>
+                <TabsTrigger value="cdu" className="text-[10px] flex-1">
+                  CDU
+                </TabsTrigger>
+              </>
             )}
             <TabsTrigger value="vincoli" className="text-[10px] flex-1">
-              Vincoli custom
+              Custom
             </TabsTrigger>
           </TabsList>
 
