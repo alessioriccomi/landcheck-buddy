@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Map, Download, Loader2, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LegendPanel } from "@/components/LegendPanel";
@@ -16,6 +16,7 @@ import { Particella, AnalisiVincolistica } from "@/types/vincoli";
 import { runAnalisiVincolistica } from "@/lib/analisiVincoli";
 import { exportReportPDF } from "@/lib/exportPDF";
 import { cn } from "@/lib/utils";
+import { probeAllServers, type ServerHealth } from "@/lib/wmsHealthProbe";
 
 type Step = "input" | "analyzing" | "results";
 
