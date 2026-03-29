@@ -127,12 +127,30 @@ export function exportCDUPDF(
   else doc.setTextColor(22, 163, 74);
   doc.text(classLabel, 15, y);
   doc.setTextColor(0, 0, 0);
-  y += 12;
+  y += 4;
+
+  // AUL / AUN
+  if (analisi && analisi.areaUtileLordaHa > 0) {
+    if (y > 260) { doc.addPage(); y = 20; }
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("RIEPILOGO AREE", 15, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Area Utile Lorda (AUL): ${analisi.areaUtileLordaHa.toFixed(4)} ha`, 15, y);
+    y += 5;
+    doc.text(`Area Utile Netta (AUN): ${analisi.areaUtileNettaHa.toFixed(4)} ha`, 15, y);
+    y += 5;
+    const pct = ((analisi.areaUtileNettaHa / analisi.areaUtileLordaHa) * 100).toFixed(1);
+    doc.text(`Percentuale utilizzabile: ${pct}%`, 15, y);
+    y += 10;
+  }
 
   doc.setFontSize(7);
   doc.setFont("helvetica", "italic");
   doc.setTextColor(120, 120, 120);
-  const disclaimer = "Il presente CDU sintetico è generato automaticamente da WMS pubblici e NON sostituisce il CDU rilasciato dal Comune ai sensi dell'art. 30 DPR 380/2001.";
+  const disclaimer = "Il presente CDU sintetico è generato automaticamente da WMS pubblici e NON sostituisce il CDU rilasciato dal Comune ai sensi dell'art. 30 DPR 380/2001. Verificare sempre con l'Ufficio Tecnico Comunale.";
   doc.text(doc.splitTextToSize(disclaimer, w - 30), 15, y);
   doc.setTextColor(0, 0, 0);
 
