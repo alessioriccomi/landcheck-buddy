@@ -32,6 +32,36 @@ export function LegendPanel({
     setExpandedGroups(prev => ({ ...prev, [gid]: !prev[gid] }));
   };
 
+  const getLayerStatus = (l: { arcgisUrl?: string; wmsUrl?: string }): ServerStatus => {
+    const url = l.arcgisUrl || l.wmsUrl;
+    return getServerStatusForUrl(url, serverStatuses);
+  };
+
+  const statusDot = (status: ServerStatus) => {
+    switch (status) {
+      case "online": return <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" title="Server online" />;
+      case "offline": return <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0 animate-pulse" title="Server offline" />;
+      case "checking": return <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0 animate-pulse" title="Verifica in corso..." />;
+      default: return <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 flex-shrink-0" title="Stato sconosciuto" />;
+    }
+  };
+
+  // Compute server summary
+  const allStatuses = Object.values(serverStatuses);
+  const onlineCount = allStatuses.filter(s => s.status === "online").length;
+  const offlineCount = allStatuses.filter(s => s.status === "offline").length;
+  const checkingCount = allStatuses.filter(s => s.status === "checking").length;
+  const totalHosts = allStatuses.length;
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    clearHealthCache();
+    onRefreshStatuses?.();
+    setTimeout(() => setRefreshing(false), 3000);
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex-shrink-0 px-4 py-3 border-b border-border">
