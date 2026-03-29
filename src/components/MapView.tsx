@@ -234,6 +234,7 @@ interface CustomConstraintLayer {
 interface MapViewProps {
   particelle: Particella[];
   activeLayers: Record<string, boolean>;
+  layerOpacity?: Record<string, number>;
   customConstraints?: CustomConstraintLayer[];
   onParcelGeometries?: (geoms: Record<string, L.LatLngExpression[][]>) => void;
   onParcelAreaUpdate?: (id: string, mq: number) => void;
