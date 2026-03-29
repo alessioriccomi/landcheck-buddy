@@ -55,7 +55,14 @@ export function exportCDUPDF(particella: Particella, analisi: AnalisiVincolistic
   y += 10;
 
   // Vincoli rilevati
-  const vincoli = analisi?.vincoli.filter(v => v.presente) ?? [];
+  const allVincoli = analisi ? [
+    ...analisi.vincoliCulturali, ...analisi.vincoliPaesaggistici, ...analisi.vincoliIdrogeologici,
+    ...analisi.vincoliAmbientali, ...analisi.rischioIdrico, ...analisi.serviziReti,
+    ...analisi.altriVincoli, ...analisi.vincoliAgricoli, ...analisi.vincoliMilitariRadar,
+    ...analisi.vincoliForestali, ...analisi.vincoliSismici, ...analisi.vincoliCatastali,
+    ...analisi.compatibilitaConnessione, ...analisi.areeIdonee, ...analisi.normativaAgrivoltaico,
+  ] : [];
+  const vincoli = allVincoli.filter(v => v.presenza === "presente" || v.presenza === "verifica");
   doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
   doc.text(`VINCOLI RILEVATI (${vincoli.length})`, 15, y);

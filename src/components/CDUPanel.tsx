@@ -1,4 +1,4 @@
-import { Particella, AnalisiVincolistica, CRITICITA_CONFIG } from "@/types/vincoli";
+import { Particella, AnalisiVincolistica, VincoloItem, CRITICITA_CONFIG } from "@/types/vincoli";
 import { Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { exportCDUPDF } from "@/lib/exportCDU";
@@ -9,7 +9,14 @@ interface CDUPanelProps {
 }
 
 export function CDUPanel({ particella, analisi }: CDUPanelProps) {
-  const vincoliParticella = analisi?.vincoli.filter(v => v.presente) ?? [];
+  const allVincoli = analisi ? [
+    ...analisi.vincoliCulturali, ...analisi.vincoliPaesaggistici, ...analisi.vincoliIdrogeologici,
+    ...analisi.vincoliAmbientali, ...analisi.rischioIdrico, ...analisi.serviziReti,
+    ...analisi.altriVincoli, ...analisi.vincoliAgricoli, ...analisi.vincoliMilitariRadar,
+    ...analisi.vincoliForestali, ...analisi.vincoliSismici, ...analisi.vincoliCatastali,
+    ...analisi.compatibilitaConnessione, ...analisi.areeIdonee, ...analisi.normativaAgrivoltaico,
+  ] : [];
+  const vincoliParticella = allVincoli.filter(v => v.presenza === "presente" || v.presenza === "verifica");
 
   const classificazione = analisi?.classificazioneIdoneita ?? "potenzialmente_idoneo";
   const classLabel = classificazione === "non_idoneo"
