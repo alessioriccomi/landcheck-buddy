@@ -8,6 +8,7 @@ import area from "@turf/area";
 import turfUnion from "@turf/union";
 import { ALL_LAYERS } from "@/lib/layerDefinitions";
 import { toast } from "@/hooks/use-toast";
+import { getServerStatusForUrl, type ServerHealth } from "@/lib/wmsHealthProbe";
 
 // Fix Leaflet icon paths for Vite
 import iconUrl from "leaflet/dist/images/marker-icon.png";
@@ -242,6 +243,7 @@ interface MapViewProps {
   selectedParcelIds: string[];
   onToggleSelectParcel: (id: string) => void;
   onClearSelection: () => void;
+  serverStatuses?: Record<string, ServerHealth>;
 }
 
 type ParcelStatus = "idle" | "loading" | "real" | "placeholder";
@@ -257,6 +259,7 @@ export function MapView({
   selectedParcelIds,
   onToggleSelectParcel,
   onClearSelection,
+  serverStatuses = {},
 }: MapViewProps) {
   const showCatasto = activeLayers["catasto"] ?? true;
   const containerRef = useRef<HTMLDivElement>(null);
