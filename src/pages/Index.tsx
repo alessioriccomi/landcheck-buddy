@@ -189,6 +189,15 @@ export default function Index() {
               onToggleLayer={handleToggleLayer}
               onSetOpacity={handleSetOpacity}
               onToggleAllInGroup={handleToggleAllInGroup}
+              serverStatuses={serverStatuses}
+              onRefreshStatuses={() => {
+                const urls: string[] = [];
+                for (const l of ALL_LAYERS) {
+                  if (l.arcgisUrl) urls.push(l.arcgisUrl);
+                  if (l.wmsUrl) urls.push(l.wmsUrl);
+                }
+                probeAllServers(urls, setServerStatuses);
+              }}
             />
           </div>
         </aside>
