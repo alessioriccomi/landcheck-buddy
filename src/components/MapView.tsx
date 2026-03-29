@@ -446,8 +446,9 @@ export function MapView({
     let urlOverrides: Record<string, { wmsUrl?: string; arcgisUrl?: string; wmsLayer?: string; arcgisLayers?: string }> = {};
     try { urlOverrides = JSON.parse(localStorage.getItem("lc_layer_url_overrides") || "{}"); } catch {}
 
-    // Create all WMS layers and populate the ref
-    for (const layerDef of ALL_LAYERS) {
+    // Create all WMS layers (merged: built-in + custom from settings)
+    const mergedLayers = getMergedLayers();
+    for (const layerDef of mergedLayers) {
       try {
         const ov = urlOverrides[layerDef.id];
         const arcUrl = ov?.arcgisUrl || layerDef.arcgisUrl;
