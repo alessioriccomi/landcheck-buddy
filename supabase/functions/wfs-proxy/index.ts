@@ -847,10 +847,12 @@ serve(async (req) => {
         "servizimoka.regione.emilia-romagna.it",
         "webgis2.regione.sardegna.it",
         "geoportale.regione.calabria.it",
-        // MiC / Vincoli in Rete
+        // MiC / Vincoli in Rete / SITAP
         "wms.minicultura.it",
         "culturaitalia.it",
         "vincoliinrete.beniculturali.it",
+        "sitap.cultura.gov.it",
+        "sitap.beniculturali.it",
       ];
       let parsedUrl: URL;
       try {

@@ -70,6 +70,50 @@ export const LAYER_GROUPS: LayerGroup[] = [
         opacity: 0.55,
         description: "Beni culturali e ambientali esposti a rischio — PCN",
       },
+      // ── SITAP — Vincoli paesaggistici "decretati" (Art. 136/157) ──
+      {
+        id: "sitap_vincoli_136",
+        label: "SITAP - Vincoli Art. 136/157 (decretati)",
+        color: "#7c3aed",
+        defaultOn: false,
+        wmsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_public/wms",
+        wmsLayer: "sitap_public:sitap_v1497_public",
+        opacity: 0.55,
+        description: "Vincoli paesaggistici 'decretati' Art. 136/157 D.Lgs. 42/2004 — SITAP MiC",
+      },
+      // ── Vincoli in Rete — Aree archeologiche vincolate ──
+      {
+        id: "vir_aree_archeologiche",
+        label: "Aree archeologiche vincolate (VIR)",
+        color: "#b45309",
+        defaultOn: false,
+        wmsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wms",
+        wmsLayer: "sitap_ws:tab_vir_geo_aree_archeol_vincolate",
+        opacity: 0.55,
+        description: "Aree archeologiche vincolate — Vincoli in Rete / Carta del Rischio (MiC)",
+      },
+      // ── Zone di interesse archeologico Art. 142 lett. m ──
+      {
+        id: "sitap_art142m_archeo",
+        label: "Zone interesse archeologico Art. 142 lett. m",
+        color: "#92400e",
+        defaultOn: false,
+        wmsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_ws_clone/wms",
+        wmsLayer: "sitap_ws_clone:geo_aree_archeol_vincolate",
+        opacity: 0.55,
+        description: "Aree di interesse archeologico vincolate ai sensi dell'Art. 142 c.1 lett. m — SITAP MiC",
+      },
+      // ── Alberi monumentali (MiC / SITAP) ──
+      {
+        id: "sitap_alberi_monumentali",
+        label: "Alberi monumentali d'Italia",
+        color: "#15803d",
+        defaultOn: false,
+        wmsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_ws_clone/wms",
+        wmsLayer: "sitap_ws_clone:alberi_monumentali",
+        opacity: 0.6,
+        description: "Elenco degli alberi monumentali d'Italia — MiC / SITAP",
+      },
     ],
   },
 
