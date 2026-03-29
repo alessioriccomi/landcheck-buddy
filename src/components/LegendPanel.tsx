@@ -150,6 +150,11 @@ export function LegendPanel({
                           )}>
                             {l.label}
                           </span>
+                          {usingFallback && (
+                            <span className="text-[8px] bg-amber-500/20 text-amber-600 rounded px-1 flex-shrink-0 font-semibold" title="Usando server alternativo (ISPRA)">
+                              FB
+                            </span>
+                          )}
                           {statusDot(layerStatus)}
                           {isActive
                             ? <Eye size={10} className="text-primary flex-shrink-0" />
