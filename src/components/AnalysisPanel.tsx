@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FileSearch, AlertCircle, Download, RotateCcw, Loader2,
-  Search, LogIn, Plus, Trash2, Eye, EyeOff, LogOut, User, FileSpreadsheet,
+  Search, LogIn, Plus, Trash2, Eye, EyeOff, LogOut, User, FileSpreadsheet, Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
