@@ -202,7 +202,7 @@ export function AnalysisPanel({
           {/* Tab: CDU */}
           {step === "results" && analisi && particelle.length > 0 && (
             <TabsContent value="cdu" className="flex-1 overflow-y-auto p-3 mt-0">
-              <CDUPanel particella={particelle[0]} analisi={analisi} />
+              <CDUPanel particelle={particelle} analisi={analisi} />
             </TabsContent>
           )}
 
