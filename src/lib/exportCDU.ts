@@ -79,7 +79,7 @@ export function exportCDUPDF(
   } else {
     doc.setFontSize(8);
     for (const v of vincoli) {
-      if (y > 260) { doc.addPage(); y = 20; }
+      if (y > 250) { doc.addPage(); y = 20; }
       const cfg = v.criticita ? CRITICITA_CONFIG[v.criticita] : null;
       const prefix = cfg?.label ?? "—";
       doc.setFont("helvetica", "bold");
@@ -88,12 +88,27 @@ export function exportCDUPDF(
       const nameLines = doc.splitTextToSize(v.descrizione, 140);
       doc.text(nameLines, 40, y);
       y += nameLines.length * 4 + 2;
-      if (v.fonte) {
-        doc.setTextColor(120, 120, 120);
-        doc.text(v.fonte, 40, y);
+      // Normativa reference
+      if (v.normativa) {
+        doc.setTextColor(60, 60, 180);
+        doc.text(`Rif. ${v.normativa}`, 40, y);
         doc.setTextColor(0, 0, 0);
         y += 4;
       }
+      if (v.fonte) {
+        doc.setTextColor(120, 120, 120);
+        doc.text(`Fonte: ${v.fonte}`, 40, y);
+        doc.setTextColor(0, 0, 0);
+        y += 4;
+      }
+      if (v.azioneRichiesta) {
+        doc.setTextColor(180, 100, 0);
+        const actionLines = doc.splitTextToSize(`Azione: ${v.azioneRichiesta}`, 140);
+        doc.text(actionLines, 40, y);
+        doc.setTextColor(0, 0, 0);
+        y += actionLines.length * 4 + 1;
+      }
+      y += 1;
     }
   }
   y += 5;
