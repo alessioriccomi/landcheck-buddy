@@ -166,7 +166,34 @@ export function LegendPanel({
         })}
       </div>
 
-      <div className="flex-shrink-0 p-2 border-t border-border">
+      <div className="flex-shrink-0 p-2 border-t border-border space-y-1.5">
+        {/* Server status summary */}
+        {totalHosts > 0 && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              {offlineCount > 0 ? (
+                <WifiOff size={10} className="text-destructive" />
+              ) : (
+                <Wifi size={10} className="text-green-600" />
+              )}
+              <span className="text-[9px] text-muted-foreground">
+                {checkingCount > 0
+                  ? `Verifica ${checkingCount} server...`
+                  : offlineCount > 0
+                    ? `${offlineCount}/${totalHosts} server offline`
+                    : `${onlineCount} server online`}
+              </span>
+            </div>
+            <button
+              onClick={handleRefresh}
+              className="p-0.5 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
+              title="Aggiorna stato server"
+              disabled={refreshing}
+            >
+              <RefreshCw size={9} className={cn(refreshing && "animate-spin")} />
+            </button>
+          </div>
+        )}
         <p className="text-[9px] text-muted-foreground text-center leading-tight">
           Sorgenti: Geoportale Nazionale (PCN), ISPRA, MiC SITAP
         </p>
