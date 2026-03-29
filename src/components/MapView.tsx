@@ -459,9 +459,9 @@ export function MapView({
         const wLayer = ov?.wmsLayer || layerDef.wmsLayer;
 
         if (arcUrl) {
-          wmsLayersRef.current[layerDef.id] = makeArcGISLayer(arcUrl, arcLayers, layerDef.opacity ?? 0.5);
+          wmsLayersRef.current[layerDef.id] = makeArcGISLayer(arcUrl, arcLayers, layerDef.opacity ?? 0.5, layerDef.tlsBypass);
         } else if (wUrl && wLayer) {
-          wmsLayersRef.current[layerDef.id] = makeProxiedWmsLayer(wUrl, wLayer, layerDef.opacity ?? 0.5);
+          wmsLayersRef.current[layerDef.id] = makeProxiedWmsLayer(wUrl, wLayer, layerDef.opacity ?? 0.5, layerDef.tlsBypass);
         }
         console.log(`[LayerInit] Created layer: ${layerDef.id}${ov ? ' (override)' : ''}`);
       } catch (err) {
