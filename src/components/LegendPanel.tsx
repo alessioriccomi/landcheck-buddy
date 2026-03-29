@@ -111,13 +111,14 @@ export function LegendPanel({
                   {group.layers.map(l => {
                     const isActive = layerState[l.id] ?? false;
                     const opacity = layerOpacity[l.id] ?? (l.opacity ?? 0.5);
+                    const layerStatus = getLayerStatus(l);
 
                     return (
                       <div key={l.id} className="group">
                         <button
                           onClick={() => onToggleLayer(l.id)}
                           className="w-full flex items-center gap-2 py-1 px-1.5 rounded hover:bg-muted/40 transition-colors text-left"
-                          title={l.description}
+                          title={`${l.description}${layerStatus === "offline" ? " ⚠️ Server offline" : ""}`}
                         >
                           <div
                             className="w-3 h-3 rounded-sm border flex-shrink-0 transition-colors"
@@ -128,10 +129,12 @@ export function LegendPanel({
                           />
                           <span className={cn(
                             "text-[11px] flex-1 leading-tight",
-                            isActive ? "text-foreground" : "text-muted-foreground"
+                            isActive ? "text-foreground" : "text-muted-foreground",
+                            layerStatus === "offline" && "line-through opacity-60"
                           )}>
                             {l.label}
                           </span>
+                          {statusDot(layerStatus)}
                           {isActive
                             ? <Eye size={10} className="text-primary flex-shrink-0" />
                             : <EyeOff size={10} className="text-muted-foreground/40 flex-shrink-0 opacity-0 group-hover:opacity-100" />}
