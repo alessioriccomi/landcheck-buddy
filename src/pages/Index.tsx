@@ -6,8 +6,8 @@ import { AnalysisPanel } from "@/components/AnalysisPanel";
 import { MapView } from "@/components/MapView";
 import { AuthDialog } from "@/components/AuthDialog";
 import { WmsLegend } from "@/components/WmsLegend";
-import { ALL_LAYERS } from "@/lib/layerDefinitions";
-import { LAYER_GROUPS } from "@/lib/layerDefinitions";
+import { ALL_LAYERS, LAYER_GROUPS } from "@/lib/layerDefinitions";
+import { getMergedLayers, getMergedGroups } from "@/lib/settingsLayers";
 import { useAuth } from "@/hooks/useAuth";
 import { useCustomConstraints } from "@/hooks/useCustomConstraints";
 import { useSavedAnalyses, SavedAnalysis } from "@/hooks/useSavedAnalyses";
@@ -28,12 +28,16 @@ export default function Index() {
   const [selectedParcelIds, setSelectedParcelIds] = useState<string[]>([]);
   const [authOpen, setAuthOpen] = useState(false);
 
+  // Use merged layers (built-in + custom from settings, minus deleted)
+  const mergedLayers = getMergedLayers();
+  const mergedGroups = getMergedGroups();
+
   // Layer state
   const [layerState, setLayerState] = useState<Record<string, boolean>>(
-    Object.fromEntries(ALL_LAYERS.map(l => [l.id, l.defaultOn]))
+    Object.fromEntries(mergedLayers.map(l => [l.id, l.defaultOn]))
   );
   const [layerOpacity, setLayerOpacity] = useState<Record<string, number>>(
-    Object.fromEntries(ALL_LAYERS.map(l => [l.id, l.opacity ?? 0.5]))
+    Object.fromEntries(mergedLayers.map(l => [l.id, l.opacity ?? 0.5]))
   );
 
   // Panel visibility
@@ -46,7 +50,7 @@ export default function Index() {
   // Probe WMS servers on mount
   useEffect(() => {
     const urls: string[] = [];
-    for (const l of ALL_LAYERS) {
+    for (const l of mergedLayers) {
       if (l.arcgisUrl) urls.push(l.arcgisUrl);
       if (l.wmsUrl) urls.push(l.wmsUrl);
       if (l.fallbackUrls) urls.push(...l.fallbackUrls);
