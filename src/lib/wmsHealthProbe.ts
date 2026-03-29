@@ -56,14 +56,26 @@ async function probeEndpoint(url: string, timeoutMs = 8000): Promise<boolean> {
     clearTimeout(timer);
     // Check if response is valid (not 503, not HTML error page)
     if (!resp.ok) return false;
-    const contentType = resp.headers.get("content-type") || "";
     const text = await resp.text();
-    // 503/HTML error pages from upstream
-    if (text.includes("503 Service") || text.includes("Service Temporarily Unavailable")) {
-      return false;
+    if (text.length < 50) return false;
+    // Detect HTML error pages (503, 404, Drupal pages, generic redirects)
+    const lower = text.substring(0, 2000).toLowerCase();
+    if (lower.includes("503 service") || lower.includes("service temporarily unavailable")) return false;
+    if (lower.includes("<!doctype html") || lower.includes("<html")) {
+      // HTML response — only valid if it's a WMS GetCapabilities wrapped in XML
+      // Real WMS/ArcGIS responses are JSON or XML, never full HTML pages
+      if (!lower.includes("<wms_capabilities") && !lower.includes("<wmt_ms_capabilities") && !lower.includes('"mapname"')) {
+        return false;
+      }
     }
-    // Valid JSON or XML response means server is alive
-    return text.length > 50;
+    // Check for proxy-level errors
+    if (text.startsWith("{")) {
+      try {
+        const json = JSON.parse(text);
+        if (json.error) return false;
+      } catch { /* not JSON, that's fine */ }
+    }
+    return true;
   } catch {
     clearTimeout(timer);
     return false;
