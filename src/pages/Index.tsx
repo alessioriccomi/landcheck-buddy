@@ -158,7 +158,7 @@ export default function Index() {
             leftOpen ? "w-[280px]" : "w-0"
           )}
         >
-          <div className="min-w-[280px]">
+          <div className="min-w-[280px] h-full flex flex-col overflow-hidden">
             <LegendPanel
               layerState={layerState}
               layerOpacity={layerOpacity}
