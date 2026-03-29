@@ -913,7 +913,7 @@ export function MapView({
     setLocalAreas({});
 
     if (particelle.length === 0) {
-      map.setView(CENTER, 13);
+      // Don't recenter to default — stay where the user is
       return;
     }
 
