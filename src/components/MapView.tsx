@@ -395,7 +395,8 @@ export function MapView({
 
     // ── Dynamic layers from ALL_LAYERS definitions ──
     // Uses L.TileLayer.extend + getTileUrl (same proven pattern as catasto layers)
-    const makeProxiedWmsLayer = (wmsBaseUrl: string, wmsLayerName: string, opacity: number): L.TileLayer => {
+    const makeProxiedWmsLayer = (wmsBaseUrl: string, wmsLayerName: string, opacity: number, skipTls = false): L.TileLayer => {
+      const tlsParam = skipTls ? "&skipTls=true" : "";
       const TileLayerClass = L.TileLayer.extend({
         getTileUrl(coords: L.Coords): string {
           const m = (this as unknown as { _map: L.Map })._map;
@@ -409,7 +410,7 @@ export function MapView({
           const east = Math.max(nw.lng, se.lng);
           const sep = wmsBaseUrl.includes("?") ? "&" : "?";
           const targetUrl = `${wmsBaseUrl}${sep}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${encodeURIComponent(wmsLayerName)}&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:4326&WIDTH=${sz}&HEIGHT=${sz}&BBOX=${south},${west},${north},${east}`;
-          return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}`;
+          return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}${tlsParam}`;
         },
       });
       return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
@@ -419,7 +420,8 @@ export function MapView({
     };
 
     // ArcGIS REST MapServer export — uses L.TileLayer.extend + getTileUrl
-    const makeArcGISLayer = (arcgisUrl: string, arcgisLayers: string | undefined, opacity: number): L.TileLayer => {
+    const makeArcGISLayer = (arcgisUrl: string, arcgisLayers: string | undefined, opacity: number, skipTls = false): L.TileLayer => {
+      const tlsParam = skipTls ? "&skipTls=true" : "";
       const TileLayerClass = L.TileLayer.extend({
         getTileUrl(coords: L.Coords): string {
           const m = (this as unknown as { _map: L.Map })._map;
@@ -433,7 +435,7 @@ export function MapView({
           const east = Math.max(nw.lng, se.lng);
           let targetUrl = `${arcgisUrl}/export?bbox=${west},${south},${east},${north}&bboxSR=4326&imageSR=4326&size=${sz},${sz}&format=png32&transparent=true&f=image`;
           if (arcgisLayers) targetUrl += `&layers=${encodeURIComponent(arcgisLayers)}`;
-          return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}`;
+          return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}${tlsParam}`;
         },
       });
       return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
