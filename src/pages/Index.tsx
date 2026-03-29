@@ -10,6 +10,8 @@ import { ALL_LAYERS } from "@/lib/layerDefinitions";
 import { LAYER_GROUPS } from "@/lib/layerDefinitions";
 import { useAuth } from "@/hooks/useAuth";
 import { useCustomConstraints } from "@/hooks/useCustomConstraints";
+import { useSavedAnalyses, SavedAnalysis } from "@/hooks/useSavedAnalyses";
+import { useProfile } from "@/hooks/useProfile";
 import { Particella, AnalisiVincolistica } from "@/types/vincoli";
 import { runAnalisiVincolistica } from "@/lib/analisiVincoli";
 import { exportReportPDF } from "@/lib/exportPDF";
@@ -39,6 +41,14 @@ export default function Index() {
 
   const { user, isAuthenticated, signOut } = useAuth();
   const { constraints, addConstraint, toggleConstraint, deleteConstraint } = useCustomConstraints(user?.id);
+  const { analyses: savedAnalyses, loading: savedAnalysesLoading, saveAnalysis, deleteAnalysis } = useSavedAnalyses(user?.id);
+  const { profile, loading: profileLoading, updateProfile } = useProfile(user?.id);
+
+  const handleLoadAnalysis = useCallback((a: SavedAnalysis) => {
+    setParticelle(a.particelle);
+    setAnalisi(a.results);
+    setStep("results");
+  }, []);
 
   const handleToggleSelectParcel = useCallback((id: string) => {
     setSelectedParcelIds(prev =>
@@ -158,7 +168,7 @@ export default function Index() {
             leftOpen ? "w-[280px]" : "w-0"
           )}
         >
-          <div className="min-w-[280px]">
+          <div className="min-w-[280px] h-full flex flex-col overflow-hidden">
             <LegendPanel
               layerState={layerState}
               layerOpacity={layerOpacity}
@@ -222,6 +232,10 @@ export default function Index() {
               isAuthenticated={isAuthenticated}
               user={user}
               constraints={constraints}
+              savedAnalyses={savedAnalyses}
+              savedAnalysesLoading={savedAnalysesLoading}
+              profile={profile}
+              profileLoading={profileLoading}
               onSetParticelle={setParticelle}
               onToggleSelectParcel={handleToggleSelectParcel}
               onClearSelection={handleClearSelection}
@@ -233,6 +247,10 @@ export default function Index() {
               onAddConstraint={addConstraint}
               onToggleConstraint={toggleConstraint}
               onDeleteConstraint={deleteConstraint}
+              onSaveAnalysis={saveAnalysis}
+              onDeleteAnalysis={deleteAnalysis}
+              onLoadAnalysis={handleLoadAnalysis}
+              onUpdateProfile={updateProfile}
             />
           </div>
         </aside>

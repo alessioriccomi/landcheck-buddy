@@ -9,8 +9,12 @@ import { ParcelInput } from "@/components/ParcelInput";
 import { ConstraintPanel } from "@/components/ConstraintPanel";
 import { CustomConstraintDialog } from "@/components/CustomConstraintDialog";
 import { CDUPanel } from "@/components/CDUPanel";
+import { SavedAnalysesPanel } from "@/components/SavedAnalysesPanel";
+import { ProfilePanel } from "@/components/ProfilePanel";
 import { exportAnalisiExcel } from "@/lib/exportExcel";
 import { Particella, AnalisiVincolistica } from "@/types/vincoli";
+import { SavedAnalysis } from "@/hooks/useSavedAnalyses";
+import { UserProfile } from "@/hooks/useProfile";
 
 interface AnalysisPanelProps {
   step: "input" | "analyzing" | "results";
@@ -21,6 +25,12 @@ interface AnalysisPanelProps {
   isAuthenticated: boolean;
   user: { id: string; email?: string } | null;
   constraints: Array<{ id: string; name: string; description?: string | null; color: string; active: boolean; url: string }>;
+  // Saved analyses
+  savedAnalyses: SavedAnalysis[];
+  savedAnalysesLoading: boolean;
+  // Profile
+  profile: UserProfile | null;
+  profileLoading: boolean;
   onSetParticelle: (p: Particella[]) => void;
   onToggleSelectParcel: (id: string) => void;
   onClearSelection: () => void;
@@ -32,28 +42,23 @@ interface AnalysisPanelProps {
   onAddConstraint: (data: { name: string; url: string; color: string; description?: string }) => Promise<{ error: any }>;
   onToggleConstraint: (id: string, active: boolean) => void;
   onDeleteConstraint: (id: string) => void;
+  onSaveAnalysis: (name: string, particelle: Particella[], results: AnalisiVincolistica, desc?: string) => Promise<{ error: any }>;
+  onDeleteAnalysis: (id: string) => void;
+  onLoadAnalysis: (analysis: SavedAnalysis) => void;
+  onUpdateProfile: (updates: { display_name?: string; company?: string }) => Promise<void>;
 }
 
 export function AnalysisPanel({
-  step,
-  particelle,
-  analisi,
-  selectedParcelIds,
-  pdfLoading,
-  isAuthenticated,
-  user,
-  constraints,
-  onSetParticelle,
-  onToggleSelectParcel,
-  onClearSelection,
-  onAnalisi,
-  onReset,
-  onExportPDF,
-  onAuthOpen,
-  onSignOut,
-  onAddConstraint,
-  onToggleConstraint,
-  onDeleteConstraint,
+  step, particelle, analisi, selectedParcelIds, pdfLoading,
+  isAuthenticated, user, constraints,
+  savedAnalyses, savedAnalysesLoading,
+  profile, profileLoading,
+  onSetParticelle, onToggleSelectParcel, onClearSelection,
+  onAnalisi, onReset, onExportPDF,
+  onAuthOpen, onSignOut,
+  onAddConstraint, onToggleConstraint, onDeleteConstraint,
+  onSaveAnalysis, onDeleteAnalysis, onLoadAnalysis,
+  onUpdateProfile,
 }: AnalysisPanelProps) {
   const [constraintDialogOpen, setConstraintDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("particelle");
@@ -76,12 +81,11 @@ export function AnalysisPanel({
               : "Particelle, vincoli e risultati"}
           </p>
         </div>
-        {/* Auth */}
         {isAuthenticated ? (
           <div className="flex items-center gap-1">
             <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
               <User size={11} />
-              <span className="max-w-[80px] truncate hidden xl:block">{user?.email}</span>
+              <span className="max-w-[80px] truncate hidden xl:block">{profile?.display_name || user?.email}</span>
             </div>
             <button onClick={onSignOut} className="p-1 text-muted-foreground hover:text-foreground" title="Esci">
               <LogOut size={11} />
@@ -105,9 +109,7 @@ export function AnalysisPanel({
           </div>
           <div>
             <p className="text-sm font-semibold text-foreground">Analisi in corso...</p>
-            <p className="text-[10px] text-muted-foreground mt-1">
-              Interrogazione banche dati nazionali e regionali
-            </p>
+            <p className="text-[10px] text-muted-foreground mt-1">Interrogazione banche dati nazionali e regionali</p>
           </div>
           <div className="w-full space-y-1 text-left bg-muted/30 rounded-lg p-2">
             {[
@@ -121,11 +123,7 @@ export function AnalysisPanel({
               "Aree non idonee regionali",
             ].map((s, i) => (
               <div key={s} className="flex items-center gap-2">
-                <Loader2
-                  size={9}
-                  className="text-primary animate-spin flex-shrink-0"
-                  style={{ animationDelay: `${i * 200}ms` }}
-                />
+                <Loader2 size={9} className="text-primary animate-spin flex-shrink-0" style={{ animationDelay: `${i * 200}ms` }} />
                 <span className="text-[10px] text-muted-foreground">{s}</span>
               </div>
             ))}
@@ -136,23 +134,17 @@ export function AnalysisPanel({
       {/* Main content with tabs */}
       {step !== "analyzing" && (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="flex-shrink-0 mx-2 mt-2 h-8">
-            <TabsTrigger value="particelle" className="text-[10px] flex-1">
-              Particelle
-            </TabsTrigger>
+          <TabsList className="flex-shrink-0 mx-2 mt-2 h-8 flex-wrap">
+            <TabsTrigger value="particelle" className="text-[10px] flex-1">Particelle</TabsTrigger>
             {step === "results" && (
               <>
-                <TabsTrigger value="risultati" className="text-[10px] flex-1">
-                  Risultati
-                </TabsTrigger>
-                <TabsTrigger value="cdu" className="text-[10px] flex-1">
-                  CDU
-                </TabsTrigger>
+                <TabsTrigger value="risultati" className="text-[10px] flex-1">Risultati</TabsTrigger>
+                <TabsTrigger value="cdu" className="text-[10px] flex-1">CDU</TabsTrigger>
               </>
             )}
-            <TabsTrigger value="vincoli" className="text-[10px] flex-1">
-              Custom
-            </TabsTrigger>
+            <TabsTrigger value="vincoli" className="text-[10px] flex-1">Custom</TabsTrigger>
+            <TabsTrigger value="salvate" className="text-[10px] flex-1">Salvate</TabsTrigger>
+            <TabsTrigger value="profilo" className="text-[10px] flex-1">Profilo</TabsTrigger>
           </TabsList>
 
           {/* Tab: Particelle */}
@@ -166,42 +158,25 @@ export function AnalysisPanel({
             />
             <div className="pt-2 border-t border-border space-y-2">
               {step === "input" && (
-                <Button
-                  onClick={onAnalisi}
-                  disabled={particelle.length === 0}
-                  className="w-full gap-2 h-9 text-xs"
-                >
+                <Button onClick={onAnalisi} disabled={particelle.length === 0} className="w-full gap-2 h-9 text-xs">
                   <FileSearch size={14} />
                   Avvia analisi vincolistica
                 </Button>
               )}
               {step === "results" && (
                 <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onExportPDF}
-                    disabled={pdfLoading}
-                    className="flex-1 h-8 text-xs gap-1"
-                  >
+                  <Button variant="outline" size="sm" onClick={onExportPDF} disabled={pdfLoading} className="flex-1 h-8 text-xs gap-1">
                     {pdfLoading ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
                     PDF
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onReset}
-                    className="flex-1 h-8 text-xs gap-1"
-                  >
+                  <Button variant="outline" size="sm" onClick={onReset} className="flex-1 h-8 text-xs gap-1">
                     <RotateCcw size={11} />
                     Nuova analisi
                   </Button>
                 </div>
               )}
               {particelle.length === 0 && step === "input" && (
-                <p className="text-[10px] text-muted-foreground text-center">
-                  Aggiungi almeno una particella
-                </p>
+                <p className="text-[10px] text-muted-foreground text-center">Aggiungi almeno una particella</p>
               )}
             </div>
           </TabsContent>
@@ -211,12 +186,7 @@ export function AnalysisPanel({
             <TabsContent value="risultati" className="flex-1 overflow-y-auto p-3 space-y-3 mt-0">
               <ConstraintPanel analisi={analisi} />
               <div className="flex gap-2 pt-2 border-t border-border">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => exportAnalisiExcel(analisi)}
-                  className="flex-1 h-7 text-[10px] gap-1"
-                >
+                <Button variant="outline" size="sm" onClick={() => exportAnalisiExcel(analisi)} className="flex-1 h-7 text-[10px] gap-1">
                   <FileSpreadsheet size={11} /> Excel
                 </Button>
               </div>
@@ -244,12 +214,7 @@ export function AnalysisPanel({
                 <p className="text-[10px] text-muted-foreground">Layer WMS/ArcGIS aggiuntivi</p>
               </div>
               {isAuthenticated ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setConstraintDialogOpen(true)}
-                  className="h-6 text-[10px] gap-1"
-                >
+                <Button variant="outline" size="sm" onClick={() => setConstraintDialogOpen(true)} className="h-6 text-[10px] gap-1">
                   <Plus size={10} /> Aggiungi
                 </Button>
               ) : (
@@ -258,20 +223,17 @@ export function AnalysisPanel({
                 </Button>
               )}
             </div>
-
             {!isAuthenticated && (
               <div className="text-[10px] text-muted-foreground bg-muted/40 rounded-lg p-3 text-center">
                 <LogIn size={14} className="mx-auto mb-1 opacity-50" />
                 Accedi per aggiungere layer personalizzati
               </div>
             )}
-
             {isAuthenticated && constraints.length === 0 && (
               <div className="text-[10px] text-muted-foreground bg-muted/40 rounded-lg p-3 text-center">
                 Nessun vincolo personalizzato.
               </div>
             )}
-
             {isAuthenticated && constraints.length > 0 && (
               <div className="space-y-1.5">
                 {constraints.map(c => (
@@ -279,26 +241,51 @@ export function AnalysisPanel({
                     <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: c.color }} />
                     <div className="flex-1 min-w-0">
                       <p className="text-[10px] font-medium truncate text-foreground">{c.name}</p>
-                      {c.description && (
-                        <p className="text-[9px] text-muted-foreground truncate">{c.description}</p>
-                      )}
+                      {c.description && <p className="text-[9px] text-muted-foreground truncate">{c.description}</p>}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => onToggleConstraint(c.id, !c.active)}
-                        className="text-muted-foreground hover:text-foreground transition-colors"
-                      >
+                      <button onClick={() => onToggleConstraint(c.id, !c.active)} className="text-muted-foreground hover:text-foreground transition-colors">
                         {c.active ? <Eye size={11} className="text-primary" /> : <EyeOff size={11} />}
                       </button>
-                      <button
-                        onClick={() => onDeleteConstraint(c.id)}
-                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
-                      >
+                      <button onClick={() => onDeleteConstraint(c.id)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all">
                         <Trash2 size={11} />
                       </button>
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Tab: Salvate */}
+          <TabsContent value="salvate" className="flex-1 overflow-y-auto p-3 mt-0">
+            <SavedAnalysesPanel
+              analyses={savedAnalyses}
+              loading={savedAnalysesLoading}
+              isAuthenticated={isAuthenticated}
+              currentAnalisi={analisi}
+              currentParticelle={particelle}
+              onSave={onSaveAnalysis}
+              onDelete={onDeleteAnalysis}
+              onLoad={onLoadAnalysis}
+              onAuthOpen={onAuthOpen}
+            />
+          </TabsContent>
+
+          {/* Tab: Profilo */}
+          <TabsContent value="profilo" className="flex-1 overflow-y-auto p-3 mt-0">
+            {isAuthenticated ? (
+              <ProfilePanel
+                profile={profile}
+                email={user?.email}
+                loading={profileLoading}
+                onUpdate={onUpdateProfile}
+              />
+            ) : (
+              <div className="text-center py-6">
+                <User size={20} className="mx-auto mb-2 text-muted-foreground/50" />
+                <p className="text-[10px] text-muted-foreground mb-2">Accedi per gestire il tuo profilo</p>
+                <Button variant="outline" size="sm" onClick={onAuthOpen} className="h-7 text-[10px]">Accedi</Button>
               </div>
             )}
           </TabsContent>
