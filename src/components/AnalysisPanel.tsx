@@ -1,13 +1,15 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import {
   FileSearch, AlertCircle, Download, RotateCcw, Loader2,
-  Search, LogIn, Plus, Trash2, Eye, EyeOff, LogOut, User,
+  Search, LogIn, Plus, Trash2, Eye, EyeOff, LogOut, User, FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ParcelInput } from "@/components/ParcelInput";
 import { ConstraintPanel } from "@/components/ConstraintPanel";
 import { CustomConstraintDialog } from "@/components/CustomConstraintDialog";
+import { CDUPanel } from "@/components/CDUPanel";
+import { exportAnalisiExcel } from "@/lib/exportExcel";
 import { Particella, AnalisiVincolistica } from "@/types/vincoli";
 
 interface AnalysisPanelProps {
