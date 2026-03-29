@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Map, Download, Loader2, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LegendPanel } from "@/components/LegendPanel";
@@ -16,6 +16,7 @@ import { Particella, AnalisiVincolistica } from "@/types/vincoli";
 import { runAnalisiVincolistica } from "@/lib/analisiVincoli";
 import { exportReportPDF } from "@/lib/exportPDF";
 import { cn } from "@/lib/utils";
+import { probeAllServers, type ServerHealth } from "@/lib/wmsHealthProbe";
 
 type Step = "input" | "analyzing" | "results";
 
@@ -38,6 +39,19 @@ export default function Index() {
   // Panel visibility
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
+
+  // WMS server health statuses
+  const [serverStatuses, setServerStatuses] = useState<Record<string, ServerHealth>>({});
+
+  // Probe WMS servers on mount
+  useEffect(() => {
+    const urls: string[] = [];
+    for (const l of ALL_LAYERS) {
+      if (l.arcgisUrl) urls.push(l.arcgisUrl);
+      if (l.wmsUrl) urls.push(l.wmsUrl);
+    }
+    probeAllServers(urls, setServerStatuses);
+  }, []);
 
   const { user, isAuthenticated, signOut } = useAuth();
   const { constraints, addConstraint, toggleConstraint, deleteConstraint } = useCustomConstraints(user?.id);
@@ -175,6 +189,15 @@ export default function Index() {
               onToggleLayer={handleToggleLayer}
               onSetOpacity={handleSetOpacity}
               onToggleAllInGroup={handleToggleAllInGroup}
+              serverStatuses={serverStatuses}
+              onRefreshStatuses={() => {
+                const urls: string[] = [];
+                for (const l of ALL_LAYERS) {
+                  if (l.arcgisUrl) urls.push(l.arcgisUrl);
+                  if (l.wmsUrl) urls.push(l.wmsUrl);
+                }
+                probeAllServers(urls, setServerStatuses);
+              }}
             />
           </div>
         </aside>

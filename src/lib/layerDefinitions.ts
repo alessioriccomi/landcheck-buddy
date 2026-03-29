@@ -17,6 +17,8 @@ export interface LayerDef {
   description?: string;
   /** Bounding box [south, west, north, east] — layer only loads when map intersects */
   bounds?: [number, number, number, number];
+  /** Alternative ArcGIS/WMS URLs to try if the primary is offline */
+  fallbackUrls?: string[];
 }
 
 export interface LayerGroup {
