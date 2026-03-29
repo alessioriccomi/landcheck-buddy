@@ -2,6 +2,7 @@ import { Particella, AnalisiVincolistica, VincoloItem, CRITICITA_CONFIG } from "
 import { Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { exportCDUPDF } from "@/lib/exportCDU";
+import { getVincoliPresenti } from "@/lib/vincoliUtils";
 
 interface CDUPanelProps {
   particella: Particella;
@@ -9,14 +10,7 @@ interface CDUPanelProps {
 }
 
 export function CDUPanel({ particella, analisi }: CDUPanelProps) {
-  const allVincoli = analisi ? [
-    ...analisi.vincoliCulturali, ...analisi.vincoliPaesaggistici, ...analisi.vincoliIdrogeologici,
-    ...analisi.vincoliAmbientali, ...analisi.rischioIdrico, ...analisi.serviziReti,
-    ...analisi.altriVincoli, ...analisi.vincoliAgricoli, ...analisi.vincoliMilitariRadar,
-    ...analisi.vincoliForestali, ...analisi.vincoliSismici, ...analisi.vincoliCatastali,
-    ...analisi.compatibilitaConnessione, ...analisi.areeIdonee, ...analisi.normativaAgrivoltaico,
-  ] : [];
-  const vincoliParticella = allVincoli.filter(v => v.presenza === "presente" || v.presenza === "verifica");
+  const vincoliParticella = analisi ? getVincoliPresenti(analisi) : [];
 
   const classificazione = analisi?.classificazioneIdoneita ?? "potenzialmente_idoneo";
   const classLabel = classificazione === "non_idoneo"
@@ -47,7 +41,6 @@ export function CDUPanel({ particella, analisi }: CDUPanelProps) {
         </Button>
       </div>
 
-      {/* Dati catastali */}
       <div className="bg-muted/40 rounded-lg p-2.5 space-y-1.5">
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Dati Catastali</p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1">
@@ -60,7 +53,6 @@ export function CDUPanel({ particella, analisi }: CDUPanelProps) {
         </div>
       </div>
 
-      {/* Zona urbanistica */}
       <div className="bg-muted/40 rounded-lg p-2.5 space-y-1.5">
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Zona Urbanistica</p>
         <p className="text-xs text-foreground">
@@ -68,7 +60,6 @@ export function CDUPanel({ particella, analisi }: CDUPanelProps) {
         </p>
       </div>
 
-      {/* Vincoli rilevati */}
       <div className="bg-muted/40 rounded-lg p-2.5 space-y-1.5">
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
           Vincoli Rilevati ({vincoliParticella.length})
@@ -83,7 +74,7 @@ export function CDUPanel({ particella, analisi }: CDUPanelProps) {
                 <div key={v.id} className="flex items-start gap-1.5">
                   <span className="text-[10px] flex-shrink-0">{cfg?.emoji ?? "⚪"}</span>
                   <div className="min-w-0">
-                    <p className="text-[10px] text-foreground leading-tight">{v.nome}</p>
+                    <p className="text-[10px] text-foreground leading-tight">{v.descrizione}</p>
                     {v.fonte && <p className="text-[9px] text-muted-foreground">{v.fonte}</p>}
                   </div>
                 </div>
@@ -93,18 +84,15 @@ export function CDUPanel({ particella, analisi }: CDUPanelProps) {
         )}
       </div>
 
-      {/* Classificazione */}
       <div className="bg-muted/40 rounded-lg p-2.5 space-y-1">
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Idoneità FV/Agrivoltaico</p>
         <p className={`text-xs font-bold ${classColor}`}>{classLabel}</p>
       </div>
 
-      {/* Disclaimer */}
       <div className="border border-border rounded-lg p-2">
         <p className="text-[8px] text-muted-foreground leading-relaxed">
           Il presente CDU sintetico è generato automaticamente da WMS pubblici e NON sostituisce il Certificato
-          di Destinazione Urbanistica rilasciato dal Comune ai sensi dell'art. 30 DPR 380/2001. Verificare
-          sempre con l'Ufficio Tecnico Comunale.
+          di Destinazione Urbanistica rilasciato dal Comune ai sensi dell'art. 30 DPR 380/2001.
         </p>
       </div>
     </div>
