@@ -1180,24 +1180,7 @@ export function MapView({
         </div>
       )}
 
-      {/* Click mode toggle button — positioned bottom-left above legend */}
-      {onAddParticella && (
-        <div className="absolute top-3 left-3 z-[1000]">
-          <button
-            onClick={() => setClickMode(m => !m)}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border shadow-md transition-all",
-              clickMode
-                ? "bg-primary text-primary-foreground border-primary animate-pulse"
-                : "bg-card/95 backdrop-blur text-foreground border-border hover:bg-muted"
-            )}
-            title="Attiva per cliccare sulla mappa e aggiungere una particella"
-          >
-            <MousePointer size={12} />
-            {clickMode ? "Clicca sulla mappa…" : "Aggiungi da mappa"}
-          </button>
-        </div>
-      )}
+      {/* Click mode removed — clicking map always adds parcels */}
 
       {/* Basemap switcher */}
       <div className="absolute bottom-8 right-3 z-[1000] flex flex-col gap-1">
