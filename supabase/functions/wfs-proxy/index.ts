@@ -850,6 +850,7 @@ serve(async (req) => {
         "webgis2.regione.sardegna.it",
         "geoportale.regione.calabria.it",
         "rsdi.regione.basilicata.it",
+        "geoportale.regione.abruzzo.it",
         "geoserver.regione.abruzzo.it",
         "iperpiano.regione.molise.it",
         "sit.regione.molise.it",

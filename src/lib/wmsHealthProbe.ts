@@ -3,6 +3,8 @@
 // and provides fallback URL resolution
 // ══════════════════════════════════════════════════════════════
 
+import { getEndpointHost, getEndpointKey, getKnownEndpointIssue } from "@/lib/wmsEndpointIssues";
+
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
@@ -16,17 +18,9 @@ export interface ServerHealth {
   errorDetail?: string;
 }
 
-// Cache: host → health (avoids repeated probes within 5 min)
+// Cache: endpoint → health (avoids repeated probes within 5 min)
 const healthCache = new Map<string, ServerHealth>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-function extractHost(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return url;
-  }
-}
 
 /**
  * Probe a single endpoint via proxy to avoid CORS.
@@ -56,12 +50,13 @@ async function probeEndpoint(url: string, timeoutMs = 8000, skipTls = false): Pr
     );
     clearTimeout(timer);
     if (!resp.ok) {
-      // Check for TLS error in response
       try {
         const json = await resp.json();
-        if (json.error === "TLS_INVALID_CERT") {
-          return { ok: false, tlsError: true, detail: json.userMessage || json.detail };
-        }
+        return {
+          ok: false,
+          tlsError: json.error === "TLS_INVALID_CERT",
+          detail: json.userMessage || json.detail || json.error,
+        };
       } catch { /* not json */ }
       return { ok: false };
     }
@@ -91,8 +86,21 @@ async function probeEndpoint(url: string, timeoutMs = 8000, skipTls = false): Pr
  * Check health of a server (by host), with caching.
  */
 export async function checkServerHealth(baseUrl: string): Promise<ServerHealth> {
-  const host = extractHost(baseUrl);
-  const cached = healthCache.get(host);
+  const key = getEndpointKey(baseUrl);
+  const host = getEndpointHost(baseUrl);
+  const knownIssue = getKnownEndpointIssue(baseUrl);
+  if (knownIssue) {
+    const health: ServerHealth = {
+      host,
+      status: knownIssue.status,
+      checkedAt: Date.now(),
+      errorDetail: knownIssue.message,
+    };
+    healthCache.set(key, health);
+    return health;
+  }
+
+  const cached = healthCache.get(key);
   if (cached && Date.now() - cached.checkedAt < CACHE_TTL) {
     return cached;
   }
@@ -106,35 +114,34 @@ export async function checkServerHealth(baseUrl: string): Promise<ServerHealth> 
     latencyMs: Date.now() - start,
     errorDetail: result.detail,
   };
-  healthCache.set(host, health);
+  healthCache.set(key, health);
   return health;
 }
 
 /**
- * Probe all unique servers from a list of URLs.
- * Returns a map of host → ServerHealth.
+ * Probe all unique endpoints from a list of URLs.
+ * Returns a map of endpointKey → ServerHealth.
  */
 export async function probeAllServers(
   urls: string[],
   onUpdate?: (statuses: Record<string, ServerHealth>) => void
 ): Promise<Record<string, ServerHealth>> {
-  // Deduplicate by host
-  const hostMap = new Map<string, string>();
+  const endpointMap = new Map<string, string>();
   for (const url of urls) {
-    const host = extractHost(url);
-    if (!hostMap.has(host)) hostMap.set(host, url);
+    const endpointKey = getEndpointKey(url);
+    if (!endpointMap.has(endpointKey)) endpointMap.set(endpointKey, url);
   }
 
   const statuses: Record<string, ServerHealth> = {};
 
   // Set all to "checking" initially
-  for (const [host] of hostMap) {
-    statuses[host] = { host, status: "checking", checkedAt: Date.now() };
+  for (const [endpointKey, url] of endpointMap) {
+    statuses[endpointKey] = { host: getEndpointHost(url), status: "checking", checkedAt: Date.now() };
   }
   onUpdate?.(statuses);
 
   // Probe in parallel (max 6 concurrent)
-  const entries = Array.from(hostMap.entries());
+  const entries = Array.from(endpointMap.entries());
   const batchSize = 6;
   for (let i = 0; i < entries.length; i += batchSize) {
     const batch = entries.slice(i, i + batchSize);
@@ -142,12 +149,12 @@ export async function probeAllServers(
       batch.map(([, url]) => checkServerHealth(url))
     );
     for (let j = 0; j < batch.length; j++) {
-      const [host] = batch[j];
+      const [endpointKey, url] = batch[j];
       const result = results[j];
       if (result.status === "fulfilled") {
-        statuses[host] = result.value;
+        statuses[endpointKey] = result.value;
       } else {
-        statuses[host] = { host, status: "offline", checkedAt: Date.now() };
+        statuses[endpointKey] = { host: getEndpointHost(url), status: "offline", checkedAt: Date.now() };
       }
     }
     onUpdate?.({ ...statuses });
@@ -163,12 +170,14 @@ export async function resolveWithFallback(
   primaryUrl: string,
   fallbacks: string[] = []
 ): Promise<{ url: string; isOriginal: boolean }> {
-  // Check primary first
-  const primaryResult = await probeEndpoint(primaryUrl, 6000);
-  if (primaryResult.ok) return { url: primaryUrl, isOriginal: true };
+  if (!getKnownEndpointIssue(primaryUrl)) {
+    const primaryResult = await probeEndpoint(primaryUrl, 6000);
+    if (primaryResult.ok) return { url: primaryUrl, isOriginal: true };
+  }
 
   // Try fallbacks
   for (const fb of fallbacks) {
+    if (getKnownEndpointIssue(fb)) continue;
     const fbResult = await probeEndpoint(fb, 6000);
     if (fbResult.ok) return { url: fb, isOriginal: false };
   }
@@ -185,8 +194,7 @@ export function getServerStatusForUrl(
   statuses: Record<string, ServerHealth>
 ): ServerStatus {
   if (!url) return "unknown";
-  const host = extractHost(url);
-  return statuses[host]?.status ?? "unknown";
+  return statuses[getEndpointKey(url)]?.status ?? "unknown";
 }
 
 /**
