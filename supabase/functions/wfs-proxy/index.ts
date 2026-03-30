@@ -894,7 +894,7 @@ serve(async (req) => {
 
       try {
         const fetchOptions: RequestInit & { client?: unknown } = {
-          redirect: "follow",
+          redirect: "manual",
           headers: {
             "User-Agent": "Mozilla/5.0 (compatible; GeoVincoliProxy/1.0)",
             Accept: "image/png,image/*,application/json,text/xml",
@@ -908,18 +908,75 @@ serve(async (req) => {
             /* fallback to default if createHttpClient not available */
           }
         }
+        let finalResp: Response | null = null;
+        let currentUrl = targetUrl;
+        const visitedUrls = new Set<string>();
 
-        let finalResp: Response;
-        try {
-          finalResp = await fetch(targetUrl, fetchOptions);
-        } catch (fetchErr) {
-          const msg = String(fetchErr);
-          const isTls = msg.includes("UnknownIssuer") || msg.includes("certificate") || msg.includes("SSL") || msg.includes("TLS");
-          return new Response(JSON.stringify(
-            isTls
-              ? { error: "TLS_INVALID_CERT", detail: msg, userMessage: "Il server ha un certificato TLS non valido. Il layer non può essere caricato in modo sicuro." }
-              : { error: "WMS fetch failed", detail: msg }
-          ), {
+        for (let i = 0; i < 20; i++) {
+          let resp: Response;
+          try {
+            resp = await fetch(currentUrl, fetchOptions);
+          } catch (fetchErr) {
+            const msg = String(fetchErr);
+            const isTls = msg.includes("UnknownIssuer") || msg.includes("certificate") || msg.includes("SSL") || msg.includes("TLS");
+            const isDns = msg.includes("dns error") || msg.includes("failed to lookup address information") || msg.includes("Name or service not known");
+            return new Response(JSON.stringify(
+              isTls
+                ? { error: "TLS_INVALID_CERT", detail: msg, userMessage: "Il server ha un certificato TLS non valido. Il layer non può essere caricato in modo sicuro." }
+                : isDns
+                  ? { error: "UPSTREAM_DNS_FAILURE", detail: msg, userMessage: "Il dominio del server remoto non risponde correttamente via DNS." }
+                  : { error: "WMS fetch failed", detail: msg }
+            ), {
+              status: 502,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+
+          if (resp.status >= 300 && resp.status < 400) {
+            const loc = resp.headers.get("location");
+            try { await resp.arrayBuffer(); } catch { /* ignore */ }
+            if (!loc) {
+              return new Response(JSON.stringify({ error: "Redirect without location" }), {
+                status: 502,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+
+            const nextUrl = new URL(loc, currentUrl).toString();
+            const nextHost = new URL(nextUrl).hostname;
+            if (!isAllowedDomain(nextHost)) {
+              return new Response(JSON.stringify({ error: "Redirect to disallowed domain" }), {
+                status: 403,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+
+            const looksLikeAuthRedirect = /cassrv\/login|gateway=true/i.test(nextUrl);
+            if (visitedUrls.has(nextUrl) || looksLikeAuthRedirect) {
+              return new Response(JSON.stringify({
+                error: "UPSTREAM_AUTH_REQUIRED",
+                detail: `Redirect loop or authentication gateway detected for ${nextUrl}`,
+                userMessage: "Il server remoto richiede autenticazione e non espone un endpoint pubblico utilizzabile dal layer.",
+              }), {
+                status: 502,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+
+            visitedUrls.add(currentUrl);
+            currentUrl = nextUrl;
+            continue;
+          }
+
+          finalResp = resp;
+          break;
+        }
+
+        if (!finalResp) {
+          return new Response(JSON.stringify({
+            error: "Too many redirects",
+            detail: `Exceeded redirect limit for ${targetUrl}`,
+          }), {
             status: 502,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
