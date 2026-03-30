@@ -831,85 +831,48 @@ serve(async (req) => {
       }
 
       const allowedDomains = [
-        // PCN / MASE
         "wms.pcn.minambiente.it",
         "www.pcn.minambiente.it",
-        "gn.mase.gov.it",
-        // MIT
         "geodata.mit.gov.it",
-        // Agenzia delle Entrate
         "wms.cartografia.agenziaentrate.gov.it",
-        // ISPRA
         "idrogeo.isprambiente.it",
         "sinacloud.isprambiente.it",
-        "geoportale.isprambiente.it",
-        "geoserver.isprambiente.it",
-        // Protezione Civile
-        "geossdi.dpc.gov.it",
-        // MiC / SITAP / Vincoli in Rete
-        "sitap.cultura.gov.it",
-        "sitap.beniculturali.it",
-        "wms.minicultura.it",
-        "culturaitalia.it",
-        "vincoliinrete.beniculturali.it",
-        // Distretto Appennino Meridionale
-        "wms.distrettoappenninomeridionale.it",
-        // Puglia
         "webapps.sit.puglia.it",
-        // Toscana
         "www502.regione.toscana.it",
-        "geoserver.lamma.rete.toscana.it",
-        // Lombardia
         "www.cartografia.servizirl.it",
-        // Campania
         "sit2.regione.campania.it",
         "sit.regione.campania.it",
-        // Sicilia
         "www.sitr.regione.sicilia.it",
-        // Lazio
         "geoportale.regione.lazio.it",
-        // Veneto
         "idt2.regione.veneto.it",
-        // Piemonte
         "geomap.reteunitaria.piemonte.it",
-        "www.geoportale.piemonte.it",
-        // Emilia-Romagna
         "servizimoka.regione.emilia-romagna.it",
-        "servizigis.regione.emilia-romagna.it",
-        // Sardegna
         "webgis2.regione.sardegna.it",
-        "sardegnageoportale.it",
-        "www.sardegnageoportale.it",
-        // Calabria
         "geoportale.regione.calabria.it",
-        // Basilicata
         "rsdi.regione.basilicata.it",
-        "geoserver.regione.basilicata.it",
-        // Abruzzo
         "geoportale.regione.abruzzo.it",
         "geoserver.regione.abruzzo.it",
-        // Molise
         "iperpiano.regione.molise.it",
         "sit.regione.molise.it",
         "sit2.regione.molise.it",
-        // Liguria
         "geoportale.regione.liguria.it",
         "srvcarto.regione.liguria.it",
-        // Friuli Venezia Giulia
         "irdat.regione.fvg.it",
-        // Umbria
         "geoportale.regione.umbria.it",
         "www.umbriageo.regione.umbria.it",
         "umbriageo.regione.umbria.it",
-        // Marche
         "siat.regione.marche.it",
         "sitr.regione.marche.it",
-        // Trentino-Alto Adige
         "webgis.regione.taa.it",
+        "mappe.regione.vda.it",
         "siat.provincia.tn.it",
         "siat.provincia.bz.it",
-        // Valle d'Aosta
-        "mappe.regione.vda.it",
+        // MiC / Vincoli in Rete / SITAP
+        "wms.minicultura.it",
+        "culturaitalia.it",
+        "vincoliinrete.beniculturali.it",
+        "sitap.cultura.gov.it",
+        "sitap.beniculturali.it",
       ];
       let parsedUrl: URL;
       try {
