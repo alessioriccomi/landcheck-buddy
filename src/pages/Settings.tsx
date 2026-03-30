@@ -1,12 +1,20 @@
-import { useState } from "react";
-import { ArrowLeft, Save, RotateCcw, Search, Plus, Trash2, ChevronDown, ChevronRight, X, Download, Upload, Wifi, WifiOff, Loader2, ShieldAlert, ShieldCheck, Edit2, FolderPlus } from "lucide-react";
+import { useState, useCallback } from "react";
+import { ArrowLeft, Save, RotateCcw, Search, Plus, Trash2, ChevronDown, ChevronRight, X, Download, Upload, Wifi, WifiOff, Loader2, ShieldAlert, ShieldCheck, Edit2, FolderPlus, RefreshCw, Globe, AlertTriangle, Clock, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useNavigate } from "react-router-dom";
 import { LAYER_GROUPS, type LayerDef, type LayerGroup } from "@/lib/layerDefinitions";
 import { toast } from "sonner";
-import { getKnownEndpointIssue } from "@/lib/wmsEndpointIssues";
+import {
+  probeAllServers,
+  checkServerHealth,
+  clearHealthCache,
+  discoverAlternativeUrls,
+  getEndpointHost,
+  type ServerHealth,
+  type ServerStatus,
+} from "@/lib/wmsHealthProbe";
 
 const OVERRIDES_KEY = "lc_layer_url_overrides";
 const CUSTOM_LAYERS_KEY = "lc_custom_layers";
@@ -59,9 +67,6 @@ function generateId() {
   return "custom_" + Math.random().toString(36).slice(2, 10);
 }
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
-
 export default function Settings() {
   const navigate = useNavigate();
   const [overrides, setOverrides] = useState<Overrides>(loadOverrides);
@@ -73,39 +78,140 @@ export default function Settings() {
   const [expandedFallbacks, setExpandedFallbacks] = useState<Set<string>>(new Set());
   const [addingToGroup, setAddingToGroup] = useState<string | null>(null);
   const [newLayer, setNewLayer] = useState<Partial<CustomLayer>>({});
-  const [testingUrls, setTestingUrls] = useState<Record<string, "checking" | "online" | "offline">>({});
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
   const [editGroupData, setEditGroupData] = useState<{ label: string; icon: string }>({ label: "", icon: "" });
   const [showAddGroup, setShowAddGroup] = useState(false);
   const [newGroup, setNewGroup] = useState<{ label: string; icon: string }>({ label: "", icon: "📌" });
 
+  // Server health testing
+  const [serverStatuses, setServerStatuses] = useState<Record<string, ServerHealth>>({});
+  const [testingAll, setTestingAll] = useState(false);
+  const [testProgress, setTestProgress] = useState<{ done: number; total: number } | null>(null);
+  const [testingSingle, setTestingSingle] = useState<Record<string, boolean>>({});
+  const [discovering, setDiscovering] = useState<Record<string, boolean>>({});
+  const [discoveryResults, setDiscoveryResults] = useState<Record<string, { url: string; status: ServerStatus }[]>>({});
+
   const markDirty = () => setDirty(true);
 
-  // ── Test connection ──
-  const testUrl = async (url: string, layerId?: string) => {
+  // ── Get effective URL for a layer ──
+  const getEffectiveUrl = useCallback((layer: LayerDef | CustomLayer, isCustom: boolean): string => {
+    const ov = overrides[layer.id] || {};
+    if (isCustom) {
+      return (layer as CustomLayer).wmsUrl || (layer as CustomLayer).arcgisUrl || "";
+    }
+    return ov.wmsUrl || ov.arcgisUrl || layer.wmsUrl || layer.arcgisUrl || "";
+  }, [overrides]);
+
+  // ── Test single URL ──
+  const testSingleLayer = useCallback(async (layerId: string, url: string) => {
     if (!url) return;
-    setTestingUrls(prev => ({ ...prev, [url]: "checking" }));
-    const knownIssue = getKnownEndpointIssue(url);
-    if (knownIssue) {
-      setTestingUrls(prev => ({ ...prev, [url]: "offline" }));
-      toast.error(knownIssue.message);
-      return;
-    }
+    setTestingSingle(prev => ({ ...prev, [layerId]: true }));
+    const skip = tlsBypass[layerId] ?? false;
     try {
-      const skip = layerId ? (tlsBypass[layerId] ?? false) : false;
-      const isArcgis = url.includes("/rest/services/") || url.includes("/MapServer");
-      const probeUrl = isArcgis ? `${url}${url.includes("?") ? "&" : "?"}f=json` : `${url}${url.includes("?") ? "&" : "?"}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities`;
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/wfs-proxy?mode=wms_ext&url=${encodeURIComponent(probeUrl)}${skip ? "&skipTls=true" : ""}`, {
-        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
-        signal: AbortSignal.timeout(15000),
-      });
-      const text = await resp.text();
-      const ok = resp.ok && !text.includes("503 Service") && !text.includes("Pagina non trovata") && !text.includes("<title>40");
-      setTestingUrls(prev => ({ ...prev, [url]: ok ? "online" : "offline" }));
+      const health = await checkServerHealth(url, true, skip);
+      setServerStatuses(prev => ({ ...prev, [health.host]: health, [url]: health }));
+      // Also update by endpoint key
+      const { getEndpointKey } = await import("@/lib/wmsHealthProbe");
+      setServerStatuses(prev => ({ ...prev, [getEndpointKey(url)]: health }));
+      if (health.status === "online") {
+        toast.success(`${getEndpointHost(url)}: Online (${health.latencyMs}ms)`);
+      } else {
+        toast.error(`${getEndpointHost(url)}: ${health.errorDetail || health.status}`);
+      }
     } catch {
-      setTestingUrls(prev => ({ ...prev, [url]: "offline" }));
+      toast.error("Errore durante il test");
+    } finally {
+      setTestingSingle(prev => ({ ...prev, [layerId]: false }));
     }
-  };
+  }, [tlsBypass]);
+
+  // ── Test ALL servers ──
+  const testAllServers = useCallback(async () => {
+    setTestingAll(true);
+    clearHealthCache();
+
+    // Collect all unique URLs
+    const urls: string[] = [];
+    for (const group of LAYER_GROUPS) {
+      for (const layer of group.layers) {
+        const ov = overrides[layer.id] || {};
+        if (ov.deleted) continue;
+        const url = ov.wmsUrl || ov.arcgisUrl || layer.wmsUrl || layer.arcgisUrl;
+        if (url) urls.push(url);
+        const fbs = ov.fallbackUrls || layer.fallbackUrls || [];
+        urls.push(...fbs.filter(Boolean));
+      }
+    }
+    for (const cl of customLayers) {
+      const url = cl.wmsUrl || cl.arcgisUrl;
+      if (url) urls.push(url);
+      if (cl.fallbackUrls) urls.push(...cl.fallbackUrls.filter(Boolean));
+    }
+
+    const uniqueUrls = [...new Set(urls)];
+    setTestProgress({ done: 0, total: uniqueUrls.length });
+
+    let done = 0;
+    await probeAllServers(uniqueUrls, (statuses) => {
+      setServerStatuses(statuses);
+      done = Object.values(statuses).filter(s => s.status !== "checking").length;
+      setTestProgress({ done, total: uniqueUrls.length });
+    }, true);
+
+    setTestingAll(false);
+
+    // Summary
+    const final = Object.values(serverStatuses);
+    const online = final.filter(s => s.status === "online").length;
+    const offline = final.filter(s => s.status === "offline").length;
+    const tls = final.filter(s => s.status === "tls_error").length;
+    const forbidden = final.filter(s => s.status === "forbidden").length;
+    toast.info(`Test completato: ${online} online, ${offline} offline, ${tls} TLS, ${forbidden} non autorizzati`);
+    setTestProgress(null);
+  }, [overrides, customLayers, serverStatuses]);
+
+  // ── Auto-discovery ──
+  const startDiscovery = useCallback(async (layerId: string, url: string) => {
+    const host = getEndpointHost(url);
+    if (!host) return;
+    setDiscovering(prev => ({ ...prev, [layerId]: true }));
+    setDiscoveryResults(prev => ({ ...prev, [layerId]: [] }));
+
+    const results = await discoverAlternativeUrls(host, (discoveredUrl, status) => {
+      setDiscoveryResults(prev => ({
+        ...prev,
+        [layerId]: [...(prev[layerId] || []), { url: discoveredUrl, status }],
+      }));
+    });
+
+    setDiscovering(prev => ({ ...prev, [layerId]: false }));
+    const found = results.filter(r => r.status === "online");
+    if (found.length > 0) {
+      toast.success(`Trovati ${found.length} URL alternativi per ${host}`);
+    } else {
+      toast.info(`Nessun URL alternativo trovato per ${host}`);
+    }
+  }, []);
+
+  // ── Get status for a URL ──
+  const getUrlStatus = useCallback((url: string): ServerStatus => {
+    if (!url) return "unknown";
+    for (const [key, health] of Object.entries(serverStatuses)) {
+      if (key === url || url.startsWith(key) || key.includes(getEndpointHost(url))) {
+        return health.status;
+      }
+    }
+    return "unknown";
+  }, [serverStatuses]);
+
+  const getUrlLatency = useCallback((url: string): number | undefined => {
+    for (const [key, health] of Object.entries(serverStatuses)) {
+      if (key === url || url.startsWith(key) || key.includes(getEndpointHost(url))) {
+        return health.latencyMs;
+      }
+    }
+    return undefined;
+  }, [serverStatuses]);
 
   // ── TLS bypass toggle ──
   const toggleTlsBypass = (layerId: string) => {
@@ -281,10 +387,19 @@ export default function Settings() {
   };
 
   const deleteGroup = (groupId: string) => {
-    // Move layers from this group to orphan
     setCustomLayers(prev => prev.map(l => l.groupId === groupId ? { ...l, groupId: "_orphan" } : l));
     setCustomGroups(prev => prev.filter(g => g.id !== groupId));
     markDirty();
+  };
+
+  // ── Apply discovery result ──
+  const applyDiscoveryUrl = (layerId: string, url: string, isArcgis: boolean) => {
+    if (isArcgis) {
+      updateField(layerId, "arcgisUrl", url);
+    } else {
+      updateField(layerId, "wmsUrl", url);
+    }
+    toast.success(`URL aggiornato per ${layerId}`);
   };
 
   // ── Save/Reset ──
@@ -320,35 +435,59 @@ export default function Settings() {
 
   const lowerSearch = search.toLowerCase();
 
-  // Build full group list: built-in + custom groups
+  // Build full group list
   const allGroups: (LayerGroup & { isCustomGroup?: boolean })[] = [
     ...LAYER_GROUPS.map(g => ({ ...g, isCustomGroup: false })),
-    ...customGroups.map(cg => ({
-      ...cg,
-      layers: [] as LayerDef[],
-      isCustomGroup: true,
-    })),
+    ...customGroups.map(cg => ({ ...cg, layers: [] as LayerDef[], isCustomGroup: true })),
   ];
 
-  // Merge custom layers into their respective groups
   const groupsWithCustom = allGroups.map(g => ({
     ...g,
-    layers: [
-      ...g.layers,
-      ...customLayers.filter(cl => cl.groupId === g.id),
-    ],
+    layers: [...g.layers, ...customLayers.filter(cl => cl.groupId === g.id)],
   }));
 
-  // Orphan custom layers (group doesn't exist in built-in or custom groups)
   const allGroupIds = new Set([...LAYER_GROUPS.map(g => g.id), ...customGroups.map(g => g.id)]);
   const orphanCustom = customLayers.filter(cl => !allGroupIds.has(cl.groupId));
 
-  const TestBtn = ({ url, layerId }: { url: string; layerId?: string }) => {
-    const st = testingUrls[url];
+  // ── Status indicator component ──
+  const StatusDot = ({ url }: { url: string }) => {
+    const status = getUrlStatus(url);
+    const latency = getUrlLatency(url);
+    const colors: Record<ServerStatus, string> = {
+      online: "bg-green-500",
+      offline: "bg-red-500",
+      tls_error: "bg-amber-500",
+      forbidden: "bg-orange-500",
+      checking: "bg-blue-400 animate-pulse",
+      unknown: "bg-muted-foreground/30",
+    };
+    const labels: Record<ServerStatus, string> = {
+      online: `Online${latency ? ` (${latency}ms)` : ""}`,
+      offline: "Offline",
+      tls_error: "Errore TLS",
+      forbidden: "Dominio non autorizzato",
+      checking: "In test...",
+      unknown: "Non testato",
+    };
     return (
-      <button onClick={() => testUrl(url, layerId)} className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border border-border hover:bg-muted" title="Test connessione">
-        {st === "checking" ? <Loader2 size={8} className="animate-spin" /> : st === "online" ? <Wifi size={8} className="text-green-500" /> : st === "offline" ? <WifiOff size={8} className="text-destructive" /> : <Wifi size={8} />}
-        <span>{st === "checking" ? "..." : st === "online" ? "OK" : st === "offline" ? "KO" : "Test"}</span>
+      <span className="flex items-center gap-1 text-[9px] text-muted-foreground" title={labels[status]}>
+        <span className={`w-2 h-2 rounded-full ${colors[status]} flex-shrink-0`} />
+        {status !== "unknown" && <span>{labels[status]}</span>}
+      </span>
+    );
+  };
+
+  const TestBtn = ({ url, layerId }: { url: string; layerId: string }) => {
+    const isTesting = testingSingle[layerId];
+    return (
+      <button
+        onClick={() => testSingleLayer(layerId, url)}
+        disabled={isTesting}
+        className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border border-border hover:bg-muted disabled:opacity-50"
+        title="Test connessione"
+      >
+        {isTesting ? <Loader2 size={8} className="animate-spin" /> : <Wifi size={8} />}
+        <span>{isTesting ? "..." : "Test"}</span>
       </button>
     );
   };
@@ -362,21 +501,25 @@ export default function Settings() {
     const noUrl = !isWms && !isArcgis;
     const effectiveFallbacks = ov.fallbackUrls || (layer as LayerDef).fallbackUrls || [];
     const fbExpanded = expandedFallbacks.has(layer.id);
-    const primaryUrl = isCustom
-      ? ((layer as CustomLayer).wmsUrl || (layer as CustomLayer).arcgisUrl || "")
-      : (ov.wmsUrl || ov.arcgisUrl || layer.wmsUrl || layer.arcgisUrl || "");
+    const primaryUrl = getEffectiveUrl(layer, isCustom);
     const isTlsBypassed = tlsBypass[layer.id] ?? false;
+    const layerType = isArcgis ? "ArcGIS" : isWms ? "WMS" : "—";
+    const isDiscovering = discovering[layer.id];
+    const layerDiscoveryResults = discoveryResults[layer.id] || [];
 
     if (isDeleted && search) return null;
 
     return (
       <div key={layer.id} className={`px-3 py-2.5 space-y-1.5 ${isDeleted ? "opacity-40" : ""}`}>
+        {/* Header row */}
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: layer.color }} />
+          {primaryUrl && <StatusDot url={primaryUrl} />}
           <span className={`text-[11px] font-medium flex-1 ${isDeleted ? "line-through" : ""}`}>
             {layer.label}
             {isCustom && <span className="ml-1 text-[9px] bg-primary/10 text-primary px-1 rounded">custom</span>}
           </span>
+          <span className="text-[9px] text-muted-foreground font-mono">{layerType}</span>
           <div className="flex items-center gap-1">
             {!isDeleted && primaryUrl && <TestBtn url={primaryUrl} layerId={layer.id} />}
             {isDeleted ? (
@@ -424,6 +567,7 @@ export default function Settings() {
               </div>
             )}
 
+            {/* URL fields for custom layers */}
             {isCustom && (
               <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
                 <span className="text-[9px] text-muted-foreground">Nome</span>
@@ -452,6 +596,7 @@ export default function Settings() {
               </div>
             )}
 
+            {/* URL fields for built-in WMS layers */}
             {!isCustom && isWms && (
               <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
                 <span className="text-[9px] text-muted-foreground font-mono">WMS URL</span>
@@ -461,6 +606,7 @@ export default function Settings() {
               </div>
             )}
 
+            {/* URL fields for built-in ArcGIS layers */}
             {!isCustom && isArcgis && (
               <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
                 <span className="text-[9px] text-muted-foreground font-mono">ArcGIS URL</span>
@@ -487,7 +633,8 @@ export default function Settings() {
                         ) : (
                           <Input value={fb} onChange={e => updateFallback(layer.id, i, e.target.value)} className="h-5 text-[9px] font-mono flex-1" />
                         )}
-                        {fb && <TestBtn url={fb} layerId={layer.id} />}
+                        {fb && <StatusDot url={fb} />}
+                        {fb && <TestBtn url={fb} layerId={`${layer.id}_fb${i}`} />}
                         <button onClick={() => isCustom ? removeCustomFallback(layer.id, i) : removeFallback(layer.id, i)} className="text-muted-foreground hover:text-destructive">
                           <X size={9} />
                         </button>
@@ -499,6 +646,38 @@ export default function Settings() {
                     >
                       <Plus size={8} /> Aggiungi fallback
                     </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Auto-discovery button for offline layers */}
+            {(isWms || isArcgis) && primaryUrl && getUrlStatus(primaryUrl) === "offline" && (
+              <div className="mt-1 space-y-1">
+                <button
+                  onClick={() => startDiscovery(layer.id, primaryUrl)}
+                  disabled={isDiscovering}
+                  className="flex items-center gap-1 text-[9px] text-amber-600 hover:text-amber-700 font-medium"
+                >
+                  {isDiscovering ? <Loader2 size={9} className="animate-spin" /> : <Globe size={9} />}
+                  {isDiscovering ? "Ricerca in corso..." : "Cerca URL alternativo"}
+                </button>
+                {layerDiscoveryResults.length > 0 && (
+                  <div className="ml-3 space-y-0.5">
+                    {layerDiscoveryResults.map((r, i) => (
+                      <div key={i} className="flex items-center gap-1 text-[9px]">
+                        <span className={`w-1.5 h-1.5 rounded-full ${r.status === "online" ? "bg-green-500" : "bg-red-400"}`} />
+                        <span className="font-mono truncate flex-1">{r.url}</span>
+                        {r.status === "online" && (
+                          <button
+                            onClick={() => applyDiscoveryUrl(layer.id, r.url, r.url.includes("/arcgis/") || r.url.includes("/MapServer"))}
+                            className="text-primary hover:underline font-medium"
+                          >
+                            Usa questo
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -545,11 +724,22 @@ export default function Settings() {
             <ArrowLeft size={16} />
           </Button>
           <div>
-            <h1 className="text-sm font-bold">Impostazioni Vincoli</h1>
-            <p className="text-[10px] text-muted-foreground">Gestisci gruppi, vincoli, URL e fallback</p>
+            <h1 className="text-sm font-bold">Impostazioni Layer</h1>
+            <p className="text-[10px] text-muted-foreground">Gestisci gruppi, vincoli, URL e fallback — test in tempo reale</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Test All button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={testAllServers}
+            disabled={testingAll}
+            className="h-7 text-[10px] gap-1"
+          >
+            {testingAll ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+            {testingAll ? `Test ${testProgress?.done ?? 0}/${testProgress?.total ?? "..."}` : "Testa tutti"}
+          </Button>
           <Button variant="ghost" size="sm" onClick={importConfig} className="h-7 text-[10px] gap-1">
             <Upload size={10} /> Importa
           </Button>
@@ -564,6 +754,17 @@ export default function Settings() {
           </Button>
         </div>
       </div>
+
+      {/* Summary bar */}
+      {Object.keys(serverStatuses).length > 0 && (
+        <div className="px-4 py-1.5 border-b border-border bg-muted/30 flex items-center gap-4 text-[10px]">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> {Object.values(serverStatuses).filter(s => s.status === "online").length} online</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> {Object.values(serverStatuses).filter(s => s.status === "offline").length} offline</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> {Object.values(serverStatuses).filter(s => s.status === "tls_error").length} TLS</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-500" /> {Object.values(serverStatuses).filter(s => s.status === "forbidden").length} non autorizzati</span>
+          {testingAll && <span className="flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Test in corso...</span>}
+        </div>
+      )}
 
       {/* Search + Add Group */}
       <div className="px-4 py-2 border-b border-border flex items-center gap-2">
@@ -580,18 +781,8 @@ export default function Settings() {
       {showAddGroup && (
         <div className="px-4 py-3 border-b border-border bg-primary/5">
           <div className="max-w-md flex items-center gap-2">
-            <Input
-              value={newGroup.icon}
-              onChange={e => setNewGroup(p => ({ ...p, icon: e.target.value }))}
-              className="h-7 text-sm w-12 text-center"
-              placeholder="📌"
-            />
-            <Input
-              value={newGroup.label}
-              onChange={e => setNewGroup(p => ({ ...p, label: e.target.value }))}
-              className="h-7 text-xs flex-1"
-              placeholder="Nome del gruppo..."
-            />
+            <Input value={newGroup.icon} onChange={e => setNewGroup(p => ({ ...p, icon: e.target.value }))} className="h-7 text-sm w-12 text-center" placeholder="📌" />
+            <Input value={newGroup.label} onChange={e => setNewGroup(p => ({ ...p, label: e.target.value }))} className="h-7 text-xs flex-1" placeholder="Nome del gruppo..." />
             <Button size="sm" onClick={addNewGroup} className="h-7 text-[10px]">Crea</Button>
             <Button variant="ghost" size="sm" onClick={() => setShowAddGroup(false)} className="h-7 text-[10px]">Annulla</Button>
           </div>
@@ -622,16 +813,8 @@ export default function Settings() {
               <div className="bg-muted/50 px-3 py-2 border-b border-border flex items-center justify-between gap-2">
                 {isEditingThis ? (
                   <div className="flex items-center gap-2 flex-1">
-                    <Input
-                      value={editGroupData.icon}
-                      onChange={e => setEditGroupData(p => ({ ...p, icon: e.target.value }))}
-                      className="h-6 text-sm w-10 text-center"
-                    />
-                    <Input
-                      value={editGroupData.label}
-                      onChange={e => setEditGroupData(p => ({ ...p, label: e.target.value }))}
-                      className="h-6 text-xs flex-1"
-                    />
+                    <Input value={editGroupData.icon} onChange={e => setEditGroupData(p => ({ ...p, icon: e.target.value }))} className="h-6 text-sm w-10 text-center" />
+                    <Input value={editGroupData.label} onChange={e => setEditGroupData(p => ({ ...p, label: e.target.value }))} className="h-6 text-xs flex-1" />
                     <Button size="sm" onClick={() => updateGroup(group.id)} className="h-6 text-[10px]">OK</Button>
                     <Button variant="ghost" size="sm" onClick={() => setEditingGroup(null)} className="h-6 text-[10px]">Annulla</Button>
                   </div>
@@ -645,27 +828,15 @@ export default function Settings() {
                   <div className="flex items-center gap-1">
                     {isCustomGroup && (
                       <>
-                        <button
-                          onClick={() => { setEditingGroup(group.id); setEditGroupData({ label: group.label, icon: group.icon }); }}
-                          className="p-1 text-muted-foreground hover:text-foreground"
-                          title="Modifica gruppo"
-                        >
+                        <button onClick={() => { setEditingGroup(group.id); setEditGroupData({ label: group.label, icon: group.icon }); }} className="p-1 text-muted-foreground hover:text-foreground" title="Modifica gruppo">
                           <Edit2 size={11} />
                         </button>
-                        <button
-                          onClick={() => deleteGroup(group.id)}
-                          className="p-1 text-muted-foreground hover:text-destructive"
-                          title="Elimina gruppo"
-                        >
+                        <button onClick={() => deleteGroup(group.id)} className="p-1 text-muted-foreground hover:text-destructive" title="Elimina gruppo">
                           <Trash2 size={11} />
                         </button>
                       </>
                     )}
-                    <Button
-                      variant="ghost" size="sm"
-                      onClick={() => { setAddingToGroup(addingToGroup === group.id ? null : group.id); setNewLayer({}); }}
-                      className="h-6 text-[10px] gap-1"
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => { setAddingToGroup(addingToGroup === group.id ? null : group.id); setNewLayer({}); }} className="h-6 text-[10px] gap-1">
                       <Plus size={10} /> Aggiungi
                     </Button>
                   </div>
