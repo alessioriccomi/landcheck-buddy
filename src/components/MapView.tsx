@@ -9,8 +9,7 @@ import turfUnion from "@turf/union";
 import { ALL_LAYERS } from "@/lib/layerDefinitions";
 import { getMergedLayers } from "@/lib/settingsLayers";
 import { toast } from "@/hooks/use-toast";
-import { getServerStatusForUrl, type ServerHealth } from "@/lib/wmsHealthProbe";
-import { getKnownEndpointIssue } from "@/lib/wmsEndpointIssues";
+import { getServerStatusForUrl, getLayerUrl, type ServerHealth } from "@/lib/wmsHealthProbe";
 
 // Fix Leaflet icon paths for Vite
 import iconUrl from "leaflet/dist/images/marker-icon.png";
@@ -806,8 +805,7 @@ export function MapView({
         const isActive = activeLayers[id] ?? false;
         const lb = boundsLookup[id];
         const sourceUrl = (layer as L.TileLayer & { _sourceUrl?: string })._sourceUrl;
-        const knownIssue = getKnownEndpointIssue(sourceUrl);
-        const sourceStatus = knownIssue?.status ?? getServerStatusForUrl(sourceUrl, serverStatuses);
+        const sourceStatus = getServerStatusForUrl(sourceUrl, serverStatuses);
         let inBounds = true;
         if (lb && isActive) {
           const [lS, lW, lN, lE] = lb;
