@@ -855,6 +855,7 @@ serve(async (req) => {
         "sit.regione.molise.it",
         "sit2.regione.molise.it",
         "geoportale.regione.liguria.it",
+        "srvcarto.regione.liguria.it",
         "irdat.regione.fvg.it",
         "geoportale.regione.umbria.it",
         "www.umbriageo.regione.umbria.it",
@@ -881,7 +882,10 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (!allowedDomains.some((d) => parsedUrl.hostname === d || parsedUrl.hostname.endsWith("." + d))) {
+      const isAllowedDomain = (hostname: string) =>
+        allowedDomains.some((d) => hostname === d || hostname.endsWith("." + d));
+
+      if (!isAllowedDomain(parsedUrl.hostname)) {
         return new Response(JSON.stringify({ error: "Domain not allowed" }), {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -889,71 +893,146 @@ serve(async (req) => {
       }
 
       try {
-        // Follow redirects manually to avoid infinite redirect loops
-        let currentUrl = targetUrl;
-        let finalResp: Response | null = null;
-        for (let i = 0; i < 10; i++) {
-          let resp: Response;
-          const fetchOptions: RequestInit & { client?: unknown } = {
-            redirect: "manual",
-            headers: {
-              "User-Agent": "Mozilla/5.0 (compatible; GeoVincoliProxy/1.0)",
-              Accept: "image/png,image/*,application/json,text/xml",
-            },
-          };
-          // If skipTls requested, create a custom HTTP client that ignores cert errors
-          if (skipTls) {
-            try {
-              const httpClient = (Deno as any).createHttpClient({ caCerts: [] });
-              (fetchOptions as any).client = httpClient;
-            } catch { /* fallback to default if createHttpClient not available */ }
+        const fetchOptions: RequestInit & { client?: unknown } = {
+          redirect: "manual",
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; GeoVincoliProxy/1.0)",
+            Accept: "image/png,image/*,application/json,text/xml",
+          },
+        };
+        if (skipTls) {
+          try {
+            const httpClient = (Deno as any).createHttpClient({ caCerts: [] });
+            (fetchOptions as any).client = httpClient;
+          } catch {
+            /* fallback to default if createHttpClient not available */
           }
+        }
+        let finalResp: Response | null = null;
+        let currentUrl = targetUrl;
+        const visitedUrls = new Set<string>();
+
+        for (let i = 0; i < 20; i++) {
+          let resp: Response;
           try {
             resp = await fetch(currentUrl, fetchOptions);
           } catch (fetchErr) {
             const msg = String(fetchErr);
             const isTls = msg.includes("UnknownIssuer") || msg.includes("certificate") || msg.includes("SSL") || msg.includes("TLS");
+            const isDns = msg.includes("dns error") || msg.includes("failed to lookup address information") || msg.includes("Name or service not known");
             return new Response(JSON.stringify(
               isTls
                 ? { error: "TLS_INVALID_CERT", detail: msg, userMessage: "Il server ha un certificato TLS non valido. Il layer non può essere caricato in modo sicuro." }
-                : { error: "WMS fetch failed", detail: msg }
+                : isDns
+                  ? { error: "UPSTREAM_DNS_FAILURE", detail: msg, userMessage: "Il dominio del server remoto non risponde correttamente via DNS." }
+                  : { error: "WMS fetch failed", detail: msg }
             ), {
               status: 502,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
           }
+
           if (resp.status >= 300 && resp.status < 400) {
             const loc = resp.headers.get("location");
-            // consume redirect body
             try { await resp.arrayBuffer(); } catch { /* ignore */ }
             if (!loc) {
               return new Response(JSON.stringify({ error: "Redirect without location" }), {
-                status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+                status: 502,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
               });
             }
-            const nextUrl = new URL(loc, currentUrl);
-            if (!allowedDomains.some((d) => nextUrl.hostname === d || nextUrl.hostname.endsWith("." + d))) {
+
+            const nextUrl = new URL(loc, currentUrl).toString();
+            const nextHost = new URL(nextUrl).hostname;
+            if (!isAllowedDomain(nextHost)) {
               return new Response(JSON.stringify({ error: "Redirect to disallowed domain" }), {
-                status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+                status: 403,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
               });
             }
-            currentUrl = nextUrl.toString();
+
+            const looksLikeAuthRedirect = /cassrv\/login|gateway=true/i.test(nextUrl);
+            if (visitedUrls.has(nextUrl) || looksLikeAuthRedirect) {
+              return new Response(JSON.stringify({
+                error: "UPSTREAM_AUTH_REQUIRED",
+                detail: `Redirect loop or authentication gateway detected for ${nextUrl}`,
+                userMessage: "Il server remoto richiede autenticazione e non espone un endpoint pubblico utilizzabile dal layer.",
+              }), {
+                status: 502,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              });
+            }
+
+            visitedUrls.add(currentUrl);
+            currentUrl = nextUrl;
             continue;
           }
-          // Non-redirect response — use it
+
           finalResp = resp;
           break;
         }
+
         if (!finalResp) {
-          return new Response(JSON.stringify({ error: "Too many redirects" }), {
-            status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          return new Response(JSON.stringify({
+            error: "Too many redirects",
+            detail: `Exceeded redirect limit for ${targetUrl}`,
+          }), {
+            status: 502,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+
+        try {
+          const finalUrl = new URL(finalResp.url);
+          if (!isAllowedDomain(finalUrl.hostname)) {
+            return new Response(JSON.stringify({ error: "Redirect to disallowed domain" }), {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        } catch {
+          return new Response(JSON.stringify({ error: "Invalid upstream response URL" }), {
+            status: 502,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const contentType = finalResp.headers.get("Content-Type") ?? "application/octet-stream";
+        if (contentType.includes("text/html")) {
+          const html = await finalResp.text();
+          const snippet = html.replace(/\s+/g, " ").slice(0, 180);
+          const isLoginRedirect = /cassrv\/login|gateway=true/i.test(finalResp.url) || /cas|accedi|login/i.test(snippet);
+          return new Response(JSON.stringify({
+            error: isLoginRedirect ? "UPSTREAM_AUTH_REQUIRED" : "UPSTREAM_HTML_RESPONSE",
+            detail: isLoginRedirect
+              ? "The remote GIS service redirected to an authentication page."
+              : `Unexpected HTML response from upstream (HTTP ${finalResp.status})`,
+            userMessage: isLoginRedirect
+              ? "Il server remoto richiede autenticazione e non espone un endpoint pubblico utilizzabile dal layer."
+              : "Il server remoto ha risposto con una pagina HTML invece che con dati GIS.",
+            snippet,
+          }), {
+            status: 502,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        if (!finalResp.ok) {
+          const detail = await finalResp.text().catch(() => "");
+          return new Response(JSON.stringify({
+            error: "WMS fetch failed",
+            detail: `Upstream returned HTTP ${finalResp.status}${detail ? `: ${detail.slice(0, 180)}` : ""}`,
+          }), {
+            status: 502,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
         const imageData = await finalResp.arrayBuffer();
         return new Response(imageData, {
           headers: {
             ...corsHeaders,
-            "Content-Type": finalResp.headers.get("Content-Type") ?? "image/png",
+            "Content-Type": contentType,
             "Cache-Control": "public, max-age=3600",
           },
         });
