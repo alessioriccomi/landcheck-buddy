@@ -10,6 +10,7 @@ import { ALL_LAYERS } from "@/lib/layerDefinitions";
 import { getMergedLayers } from "@/lib/settingsLayers";
 import { toast } from "@/hooks/use-toast";
 import { getServerStatusForUrl, type ServerHealth } from "@/lib/wmsHealthProbe";
+import { getKnownEndpointIssue } from "@/lib/wmsEndpointIssues";
 
 // Fix Leaflet icon paths for Vite
 import iconUrl from "leaflet/dist/images/marker-icon.png";
@@ -459,9 +460,13 @@ export function MapView({
         const wLayer = ov?.wmsLayer || layerDef.wmsLayer;
 
         if (arcUrl) {
-          wmsLayersRef.current[layerDef.id] = makeArcGISLayer(arcUrl, arcLayers, layerDef.opacity ?? 0.5, layerDef.tlsBypass);
+          const layer = makeArcGISLayer(arcUrl, arcLayers, layerDef.opacity ?? 0.5, layerDef.tlsBypass);
+          (layer as L.TileLayer & { _sourceUrl?: string })._sourceUrl = arcUrl;
+          wmsLayersRef.current[layerDef.id] = layer;
         } else if (wUrl && wLayer) {
-          wmsLayersRef.current[layerDef.id] = makeProxiedWmsLayer(wUrl, wLayer, layerDef.opacity ?? 0.5, layerDef.tlsBypass);
+          const layer = makeProxiedWmsLayer(wUrl, wLayer, layerDef.opacity ?? 0.5, layerDef.tlsBypass);
+          (layer as L.TileLayer & { _sourceUrl?: string })._sourceUrl = wUrl;
+          wmsLayersRef.current[layerDef.id] = layer;
         }
         console.log(`[LayerInit] Created layer: ${layerDef.id}${ov ? ' (override)' : ''}`);
       } catch (err) {
@@ -523,6 +528,7 @@ export function MapView({
           "",
           { opacity: layerDef.opacity ?? 0.5, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: "ISPRA (fallback)" }
         ) as L.TileLayer;
+        (newLayer as L.TileLayer & { _sourceUrl?: string })._sourceUrl = fbUrl;
 
         if (wasOnMap) {
           map.removeLayer(oldLayer);
@@ -799,12 +805,15 @@ export function MapView({
       for (const [id, layer] of Object.entries(wmsLayersRef.current)) {
         const isActive = activeLayers[id] ?? false;
         const lb = boundsLookup[id];
+        const sourceUrl = (layer as L.TileLayer & { _sourceUrl?: string })._sourceUrl;
+        const knownIssue = getKnownEndpointIssue(sourceUrl);
+        const sourceStatus = knownIssue?.status ?? getServerStatusForUrl(sourceUrl, serverStatuses);
         let inBounds = true;
         if (lb && isActive) {
           const [lS, lW, lN, lE] = lb;
           inBounds = !(mapN < lS || mapS > lN || mapE < lW || mapW > lE);
         }
-        const shouldShow = isActive && inBounds;
+        const shouldShow = isActive && inBounds && sourceStatus !== "offline" && sourceStatus !== "tls_error";
         if (shouldShow && !map.hasLayer(layer)) {
           console.log(`[LayerToggle] Adding layer: ${id}`);
           map.addLayer(layer);
@@ -819,7 +828,7 @@ export function MapView({
     updateLayers();
     map.on("moveend", updateLayers);
     return () => { map.off("moveend", updateLayers); };
-  }, [activeLayers]);
+  }, [activeLayers, serverStatuses]);
 
   // ── Apply dynamic opacity changes ──────────────────────────
   useEffect(() => {

@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { useNavigate } from "react-router-dom";
 import { LAYER_GROUPS, type LayerDef, type LayerGroup } from "@/lib/layerDefinitions";
 import { toast } from "sonner";
+import { getKnownEndpointIssue } from "@/lib/wmsEndpointIssues";
 
 const OVERRIDES_KEY = "lc_layer_url_overrides";
 const CUSTOM_LAYERS_KEY = "lc_custom_layers";
@@ -84,6 +85,12 @@ export default function Settings() {
   const testUrl = async (url: string, layerId?: string) => {
     if (!url) return;
     setTestingUrls(prev => ({ ...prev, [url]: "checking" }));
+    const knownIssue = getKnownEndpointIssue(url);
+    if (knownIssue) {
+      setTestingUrls(prev => ({ ...prev, [url]: "offline" }));
+      toast.error(knownIssue.message);
+      return;
+    }
     try {
       const skip = layerId ? (tlsBypass[layerId] ?? false) : false;
       const isArcgis = url.includes("/rest/services/") || url.includes("/MapServer");
