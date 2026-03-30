@@ -47,16 +47,8 @@ export default function Index() {
   // WMS server health statuses
   const [serverStatuses, setServerStatuses] = useState<Record<string, ServerHealth>>({});
 
-  // Probe WMS servers on mount
-  useEffect(() => {
-    const urls: string[] = [];
-    for (const l of mergedLayers) {
-      if (l.arcgisUrl) urls.push(l.arcgisUrl);
-      if (l.wmsUrl) urls.push(l.wmsUrl);
-      if (l.fallbackUrls) urls.push(...l.fallbackUrls);
-    }
-    probeAllServers(urls, setServerStatuses);
-  }, []);
+  // Don't auto-probe all servers on mount — it floods the proxy with requests to dead endpoints.
+  // Server health is checked on-demand: when user opens Settings or clicks "Test All".
 
   const { user, isAuthenticated, signOut } = useAuth();
   const { constraints, addConstraint, toggleConstraint, deleteConstraint } = useCustomConstraints(user?.id);
