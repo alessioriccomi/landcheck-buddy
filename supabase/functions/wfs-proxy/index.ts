@@ -852,6 +852,8 @@ serve(async (req) => {
         "rsdi.regione.basilicata.it",
         "geoserver.regione.abruzzo.it",
         "iperpiano.regione.molise.it",
+        "sit.regione.molise.it",
+        "sit2.regione.molise.it",
         "geoportale.regione.liguria.it",
         "irdat.regione.fvg.it",
         "geoportale.regione.umbria.it",
@@ -890,7 +892,7 @@ serve(async (req) => {
         // Follow redirects manually to avoid infinite redirect loops
         let currentUrl = targetUrl;
         let finalResp: Response | null = null;
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 10; i++) {
           let resp: Response;
           const fetchOptions: RequestInit & { client?: unknown } = {
             redirect: "manual",
