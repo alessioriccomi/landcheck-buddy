@@ -459,13 +459,17 @@ export function MapView({
         const wUrl = ov?.wmsUrl || layerDef.wmsUrl;
         const wLayer = ov?.wmsLayer || layerDef.wmsLayer;
 
-        if (arcUrl) {
+        // Prefer WMS when the ArcGIS host is known-offline
+        const arcOffline = arcUrl ? !!getKnownEndpointIssue(arcUrl) : false;
+        const useWms = wUrl && wLayer && (!arcUrl || arcOffline);
+
+        if (useWms) {
+          const layer = makeProxiedWmsLayer(wUrl!, wLayer!, layerDef.opacity ?? 0.5, layerDef.tlsBypass);
+          (layer as L.TileLayer & { _sourceUrl?: string })._sourceUrl = wUrl!;
+          wmsLayersRef.current[layerDef.id] = layer;
+        } else if (arcUrl) {
           const layer = makeArcGISLayer(arcUrl, arcLayers, layerDef.opacity ?? 0.5, layerDef.tlsBypass);
           (layer as L.TileLayer & { _sourceUrl?: string })._sourceUrl = arcUrl;
-          wmsLayersRef.current[layerDef.id] = layer;
-        } else if (wUrl && wLayer) {
-          const layer = makeProxiedWmsLayer(wUrl, wLayer, layerDef.opacity ?? 0.5, layerDef.tlsBypass);
-          (layer as L.TileLayer & { _sourceUrl?: string })._sourceUrl = wUrl;
           wmsLayersRef.current[layerDef.id] = layer;
         }
         console.log(`[LayerInit] Created layer: ${layerDef.id}${ov ? ' (override)' : ''}`);
