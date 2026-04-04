@@ -79,6 +79,7 @@ export default function Settings() {
   const [customLayers, setCustomLayers] = useState<CustomLayer[]>(loadCustomLayers);
   const [customGroups, setCustomGroups] = useState<CustomGroup[]>(loadCustomGroups);
   const [tlsBypass, setTlsBypass] = useState<Record<string, boolean>>(loadTlsBypass);
+  const [groupOverrides, setGroupOverrides] = useState<GroupOverrides>(loadGroupOverrides);
   const [search, setSearch] = useState("");
   const [dirty, setDirty] = useState(false);
   const [expandedFallbacks, setExpandedFallbacks] = useState<Set<string>>(new Set());
