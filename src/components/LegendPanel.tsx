@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Eye, EyeOff, ChevronDown, ChevronRight, Power, PowerOff, RefreshCw, Wifi, WifiOff, ShieldAlert } from "lucide-react";
+import { Eye, EyeOff, ChevronDown, ChevronRight, Power, PowerOff, RefreshCw, Wifi, WifiOff, ShieldAlert, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { LAYER_GROUPS, ALL_LAYERS, type LayerGroup } from "@/lib/layerDefinitions";
 import { getMergedGroups } from "@/lib/settingsLayers";
 import { getServerStatusForUrl, type ServerHealth, type ServerStatus, clearHealthCache, probeAllServers } from "@/lib/wmsHealthProbe";
@@ -82,6 +83,7 @@ export function LegendPanel({
   };
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="flex flex-col h-full">
       <div className="flex-shrink-0 px-4 py-3 border-b border-border">
         <h2 className="text-sm font-bold text-foreground">Legenda Layer</h2>
@@ -154,6 +156,20 @@ export function LegendPanel({
                           )}>
                             {l.label}
                           </span>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex cursor-help text-muted-foreground hover:text-primary transition-colors flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <Info size={11} />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="max-w-xs space-y-1 text-xs">
+                              <p className="font-semibold">{l.label}</p>
+                              <p className="text-muted-foreground">{l.description}</p>
+                              {(l.arcgisUrl || l.wmsUrl) && (
+                                <p className="text-[10px] text-muted-foreground/70 break-all">URL: {l.arcgisUrl || l.wmsUrl}</p>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
                           {usingFallback && (
                             <span className="text-[8px] bg-amber-500/20 text-amber-600 rounded px-1 flex-shrink-0 font-semibold" title="Usando server alternativo (ISPRA)">
                               FB
@@ -224,5 +240,6 @@ export function LegendPanel({
         </p>
       </div>
     </div>
+    </TooltipProvider>
   );
 }
