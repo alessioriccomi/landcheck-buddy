@@ -197,6 +197,9 @@ export function LegendPanel({
                             <TooltipContent side="right" className="max-w-xs space-y-1 text-xs">
                               <p className="font-semibold">{l.label}</p>
                               <p className="text-muted-foreground">{l.description}</p>
+                              {getGroupNormativa(group.id) && (
+                                <p className="text-[10px] text-primary/80 italic">📜 {getGroupNormativa(group.id)}</p>
+                              )}
                               {(l.arcgisUrl || l.wmsUrl) && (
                                 <p className="text-[10px] text-muted-foreground/70 break-all">URL: {l.arcgisUrl || l.wmsUrl}</p>
                               )}
