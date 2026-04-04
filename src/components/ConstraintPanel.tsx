@@ -314,5 +314,6 @@ export function ConstraintPanel({ analisi }: ConstraintPanelProps) {
       <CategorySection title="Vincoli Sismici" icon={<span className="text-base">〰️</span>} items={analisi.vincoliSismici} />
       <CategorySection title="Vincoli Militari e Radar" icon={<span className="text-base">📡</span>} items={analisi.vincoliMilitariRadar} />
     </div>
+    </TooltipProvider>
   );
 }
