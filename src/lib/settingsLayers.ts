@@ -47,6 +47,11 @@ function loadCustomGroups(): CustomGroupData[] {
   try { return JSON.parse(localStorage.getItem(CUSTOM_GROUPS_KEY) || "[]"); } catch { return []; }
 }
 
+type GroupOverride = { label?: string; icon?: string; deleted?: boolean };
+function loadGroupOverrides(): Record<string, GroupOverride> {
+  try { return JSON.parse(localStorage.getItem(GROUP_OVERRIDES_KEY) || "{}"); } catch { return {}; }
+}
+
 /** Returns TLS bypass settings per layer id */
 export function getTlsBypassSettings(): Record<string, boolean> {
   try { return JSON.parse(localStorage.getItem(TLS_BYPASS_KEY) || "{}"); } catch { return {}; }
