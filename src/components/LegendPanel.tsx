@@ -156,6 +156,20 @@ export function LegendPanel({
                           )}>
                             {l.label}
                           </span>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex cursor-help text-muted-foreground hover:text-primary transition-colors flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <Info size={11} />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="max-w-xs space-y-1 text-xs">
+                              <p className="font-semibold">{l.label}</p>
+                              <p className="text-muted-foreground">{l.description}</p>
+                              {(l.arcgisUrl || l.wmsUrl) && (
+                                <p className="text-[10px] text-muted-foreground/70 break-all">URL: {l.arcgisUrl || l.wmsUrl}</p>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
                           {usingFallback && (
                             <span className="text-[8px] bg-amber-500/20 text-amber-600 rounded px-1 flex-shrink-0 font-semibold" title="Usando server alternativo (ISPRA)">
                               FB
