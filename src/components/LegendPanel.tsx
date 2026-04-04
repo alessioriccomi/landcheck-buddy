@@ -27,6 +27,38 @@ export function LegendPanel({
   onRefreshStatuses,
 }: LegendPanelProps) {
   const mergedGroups = getMergedGroups();
+
+  // Normativa di riferimento per gruppo
+  const GROUP_NORMATIVA: Record<string, string> = {
+    catasto: "Agenzia delle Entrate — Catasto terreni e fabbricati",
+    beni_paesaggistici_136: "D.Lgs. 42/2004, Art. 136 — Beni paesaggistici decretati",
+    paesaggistici_142: "D.Lgs. 42/2004, Art. 142 — Vincoli ope legis",
+    notevole_interesse: "D.Lgs. 42/2004, Art. 136-141 — Dichiarazioni notevole interesse pubblico",
+    aree_protette: "L. 394/1991 — Aree naturali protette (EUAP)",
+    natura2000: "Dir. 92/43/CEE (Habitat) e Dir. 2009/147/CE (Uccelli)",
+    unesco: "Convenzione UNESCO 1972 — Patrimonio Mondiale",
+    vincoli_idrogeologici: "R.D. 3267/1923 — Vincolo idrogeologico; Progetto IFFI",
+    rischio_frana: "D.Lgs. 49/2010, PAI — Pericolosità e rischio frana",
+    rischio_alluvione: "Dir. 2007/60/CE, D.Lgs. 49/2010, PGRA — Rischio alluvioni",
+    autorita_bacino: "L. 183/1989, D.Lgs. 152/2006 — Autorità di Bacino Distrettuali",
+    vincoli_urbanistici: "D.P.R. 380/2001, L.R. — Strumenti urbanistici comunali e sovracomunali",
+    rete_ecologica: "Dir. 92/43/CEE, Conv. Ramsar 1971, L. 157/1992 — Rete ecologica",
+    infrastrutture: "D.M. 449/1988, D.M. 17/04/2008 — Fasce di rispetto infrastrutture",
+    fotovoltaico: "D.Lgs. 199/2021, DM 21/06/2024 — Aree idonee e non idonee FER",
+    fasce_rispetto: "Normative settoriali — Fasce di rispetto e servitù",
+    sismica: "OPCM 3274/2003, NTC 2018 — Classificazione sismica",
+    uso_suolo: "Corine Land Cover / DUSAF — Uso del suolo",
+    idrografia: "Reticolo idrografico — ISPRA / PCN",
+    territorio: "Dati territoriali — Confini, DTM, ortofoto",
+  };
+
+  const getGroupNormativa = (groupId: string): string | undefined => {
+    if (GROUP_NORMATIVA[groupId]) return GROUP_NORMATIVA[groupId];
+    // Regional groups
+    if (groupId.startsWith("reg_")) return "Normativa regionale — Piani paesaggistici e PAI regionali";
+    return undefined;
+  };
+
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
     Object.fromEntries(mergedGroups.map(g => [g.id, g.id === "catasto"]))
   );
