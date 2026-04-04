@@ -97,6 +97,7 @@ export function getMergedGroups(): LayerGroup[] {
   const custom = loadCustomLayers();
   const customGroupsData = loadCustomGroups();
   const tlsBypass = getTlsBypassSettings();
+  const grpOverrides = loadGroupOverrides();
 
   const toLayerDef = (cl: CustomLayerData): LayerDef => ({
     id: cl.id,
@@ -113,14 +114,21 @@ export function getMergedGroups(): LayerGroup[] {
     tlsBypass: tlsBypass[cl.id] ?? false,
   });
 
-  // Built-in groups
-  const groups: LayerGroup[] = LAYER_GROUPS.map(g => ({
-    ...g,
-    layers: [
-      ...g.layers.filter(l => !overrides[l.id]?.deleted).map(l => ({ ...l, tlsBypass: tlsBypass[l.id] ?? false })),
-      ...custom.filter(cl => cl.groupId === g.id).map(toLayerDef),
-    ],
-  }));
+  // Built-in groups (apply group overrides, skip soft-deleted groups)
+  const groups: LayerGroup[] = LAYER_GROUPS
+    .filter(g => !grpOverrides[g.id]?.deleted)
+    .map(g => {
+      const gov = grpOverrides[g.id];
+      return {
+        ...g,
+        label: gov?.label || g.label,
+        icon: gov?.icon || g.icon,
+        layers: [
+          ...g.layers.filter(l => !overrides[l.id]?.deleted).map(l => ({ ...l, tlsBypass: tlsBypass[l.id] ?? false })),
+          ...custom.filter(cl => cl.groupId === g.id).map(toLayerDef),
+        ],
+      };
+    });
 
   // Custom groups
   for (const cg of customGroupsData) {
