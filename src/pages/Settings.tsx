@@ -62,6 +62,9 @@ function loadCustomGroups(): CustomGroup[] {
 function loadTlsBypass(): Record<string, boolean> {
   try { return JSON.parse(localStorage.getItem(TLS_BYPASS_KEY) || "{}"); } catch { return {}; }
 }
+function loadGroupOverrides(): GroupOverrides {
+  try { return JSON.parse(localStorage.getItem(GROUP_OVERRIDES_KEY) || "{}"); } catch { return {}; }
+}
 
 function generateId() {
   return "custom_" + Math.random().toString(36).slice(2, 10);
