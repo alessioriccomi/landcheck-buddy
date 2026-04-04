@@ -83,6 +83,7 @@ export function LegendPanel({
   };
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="flex flex-col h-full">
       <div className="flex-shrink-0 px-4 py-3 border-b border-border">
         <h2 className="text-sm font-bold text-foreground">Legenda Layer</h2>
