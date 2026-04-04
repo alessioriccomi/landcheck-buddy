@@ -1,7 +1,8 @@
 import { VincoloItem, VincoloPresenza, RischioLevel, AnalisiVincolistica, CriticitaLevel, CRITICITA_CONFIG, CLASSIFICAZIONE_CONFIG, StepAutorizzativo } from "@/types/vincoli";
-import { CheckCircle2, AlertTriangle, XCircle, HelpCircle, ChevronDown, ChevronUp, FileText, ExternalLink, Shield, ArrowRight } from "lucide-react";
+import { CheckCircle2, AlertTriangle, XCircle, HelpCircle, ChevronDown, ChevronUp, FileText, ExternalLink, Shield, ArrowRight, Info } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
 const presenzaConfig: Record<VincoloPresenza, { label: string; icon: React.ReactNode; className: string; dot: string }> = {
   assente: { label: "Assente", icon: <CheckCircle2 size={13} />, className: "text-safe bg-safe-light border-safe/30", dot: "bg-safe" },
@@ -53,6 +54,21 @@ function VincoloRow({ v }: { v: VincoloItem }) {
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex cursor-help text-muted-foreground hover:text-primary transition-colors" onClick={(e) => e.stopPropagation()}>
+                <Info size={13} />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="max-w-xs space-y-1 text-xs">
+              <p><strong>Categoria:</strong> {v.categoria}</p>
+              <p><strong>Normativa:</strong> {v.normativa}</p>
+              {v.fonte && <p><strong>Fonte:</strong> {v.fonte}</p>}
+              {v.criticita && (
+                <p><strong>Criticità:</strong> <span className={CRITICITA_CONFIG[v.criticita].color}>{CRITICITA_CONFIG[v.criticita].emoji} {CRITICITA_CONFIG[v.criticita].label}</span></p>
+              )}
+            </TooltipContent>
+          </Tooltip>
           <PresenzaBadge presenza={v.presenza} />
           {open ? <ChevronUp size={12} className="text-muted-foreground" /> : <ChevronDown size={12} className="text-muted-foreground" />}
         </div>
@@ -193,6 +209,7 @@ export function ConstraintPanel({ analisi }: ConstraintPanelProps) {
   const hasPugliaOlives = analisi.vincoliAgricoli.some(v => v.id === "ag_06");
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="space-y-3">
       {/* Header */}
       <div className="bg-card border border-border rounded-xl p-4">
@@ -297,5 +314,6 @@ export function ConstraintPanel({ analisi }: ConstraintPanelProps) {
       <CategorySection title="Vincoli Sismici" icon={<span className="text-base">〰️</span>} items={analisi.vincoliSismici} />
       <CategorySection title="Vincoli Militari e Radar" icon={<span className="text-base">📡</span>} items={analisi.vincoliMilitariRadar} />
     </div>
+    </TooltipProvider>
   );
 }
