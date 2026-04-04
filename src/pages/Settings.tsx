@@ -363,13 +363,25 @@ export default function Settings() {
 
   const lowerSearch = search.toLowerCase();
 
-  // Build full group list: built-in + custom groups
-  const allGroups: (LayerGroup & { isCustomGroup?: boolean })[] = [
-    ...LAYER_GROUPS.map(g => ({ ...g, isCustomGroup: false })),
+  // Build full group list: built-in (with overrides applied, excluding soft-deleted) + custom groups
+  const allGroups: (LayerGroup & { isCustomGroup?: boolean; isDeletedGroup?: boolean; hasGroupOverride?: boolean })[] = [
+    ...LAYER_GROUPS.map(g => {
+      const ov = groupOverrides[g.id];
+      return {
+        ...g,
+        label: ov?.label || g.label,
+        icon: ov?.icon || g.icon,
+        isCustomGroup: false,
+        isDeletedGroup: ov?.deleted === true,
+        hasGroupOverride: !!ov && !ov.deleted,
+      };
+    }),
     ...customGroups.map(cg => ({
       ...cg,
       layers: [] as LayerDef[],
       isCustomGroup: true,
+      isDeletedGroup: false,
+      hasGroupOverride: false,
     })),
   ];
 
