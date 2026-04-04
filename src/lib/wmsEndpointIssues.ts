@@ -8,6 +8,7 @@ export interface KnownEndpointIssue {
 // Hosts that are entirely offline — every service on them fails
 const KNOWN_OFFLINE_HOSTS: Array<{ host: string; issue: KnownEndpointIssue }> = [
   { host: "www.pcn.minambiente.it", issue: { status: "offline", message: "Servizio PCN non pubblico o instabile: risponde con HTML 503 invece che con dati GIS." } },
+  { host: "wms.pcn.minambiente.it", issue: { status: "offline", message: "Servizio WMS PCN non disponibile: risponde con errore HTTP 500." } },
   { host: "geoportale.regione.calabria.it", issue: { status: "offline", message: "Endpoint Calabria non pubblico: risponde con pagina HTML 404." } },
   { host: "rsdi.regione.basilicata.it", issue: { status: "offline", message: "Endpoint Basilicata non pubblico: risponde con pagina HTML 404." } },
   { host: "www502.regione.toscana.it", issue: { status: "offline", message: "Endpoint Toscana reindirizza alla home HTML e non espone un servizio GIS pubblico." } },
