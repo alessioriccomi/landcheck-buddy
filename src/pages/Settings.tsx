@@ -656,6 +656,10 @@ export default function Settings() {
       {/* Layer groups */}
       <div className="max-w-5xl mx-auto p-4 space-y-6">
         {groupsWithCustom.map(group => {
+          const isDeletedGroup = (group as any).isDeletedGroup === true;
+          const isCustomGroup = (group as any).isCustomGroup === true;
+          const hasGroupOverride = (group as any).hasGroupOverride === true;
+
           const customInGroup = customLayers.filter(cl => cl.groupId === group.id);
           const allLayers = [
             ...group.layers.filter(l => !customLayers.some(cl => cl.id === l.id)),
@@ -667,13 +671,13 @@ export default function Settings() {
             ((l as LayerDef).wmsUrl || "").toLowerCase().includes(lowerSearch) ||
             ((l as LayerDef).arcgisUrl || "").toLowerCase().includes(lowerSearch)
           );
-          if (filteredLayers.length === 0 && addingToGroup !== group.id && !(group as any).isCustomGroup) return null;
+          // Show deleted groups (collapsed) so user can restore them
+          if (filteredLayers.length === 0 && addingToGroup !== group.id && !isCustomGroup && !isDeletedGroup) return null;
 
-          const isCustomGroup = (group as any).isCustomGroup === true;
           const isEditingThis = editingGroup === group.id;
 
           return (
-            <div key={group.id} className="border border-border rounded-lg overflow-hidden">
+            <div key={group.id} className={`border border-border rounded-lg overflow-hidden ${isDeletedGroup ? "opacity-50" : ""}`}>
               <div className="bg-muted/50 px-3 py-2 border-b border-border flex items-center justify-between gap-2">
                 {isEditingThis ? (
                   <div className="flex items-center gap-2 flex-1">
@@ -691,14 +695,18 @@ export default function Settings() {
                     <Button variant="ghost" size="sm" onClick={() => setEditingGroup(null)} className="h-6 text-[10px]">Annulla</Button>
                   </div>
                 ) : (
-                  <h2 className="text-xs font-semibold flex items-center gap-2">
+                  <h2 className={`text-xs font-semibold flex items-center gap-2 ${isDeletedGroup ? "line-through" : ""}`}>
                     <span>{group.icon}</span> {group.label}
-                    <span className="text-[10px] text-muted-foreground font-normal">({filteredLayers.length})</span>
+                    {!isDeletedGroup && <span className="text-[10px] text-muted-foreground font-normal">({filteredLayers.length})</span>}
+                    {isDeletedGroup && <span className="text-[10px] text-destructive font-normal">(nascosto)</span>}
+                    {hasGroupOverride && !isDeletedGroup && <span className="text-[9px] bg-primary/10 text-primary px-1 rounded">modificato</span>}
                   </h2>
                 )}
                 {!isEditingThis && (
                   <div className="flex items-center gap-1">
-                    {isCustomGroup && (
+                    {isDeletedGroup ? (
+                      <button onClick={() => restoreGroup(group.id)} className="text-[10px] text-primary hover:underline">Ripristina</button>
+                    ) : (
                       <>
                         <button
                           onClick={() => { setEditingGroup(group.id); setEditGroupData({ label: group.label, icon: group.icon }); }}
@@ -707,35 +715,52 @@ export default function Settings() {
                         >
                           <Edit2 size={11} />
                         </button>
-                        <button
-                          onClick={() => deleteGroup(group.id)}
-                          className="p-1 text-muted-foreground hover:text-destructive"
-                          title="Elimina gruppo"
+                        {hasGroupOverride && !isCustomGroup && (
+                          <button onClick={() => resetGroupOverride(group.id)} className="text-[9px] text-primary hover:underline" title="Reset nome/icona originale">Reset</button>
+                        )}
+                        {isCustomGroup ? (
+                          <button
+                            onClick={() => deleteGroup(group.id)}
+                            className="p-1 text-muted-foreground hover:text-destructive"
+                            title="Elimina gruppo"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => deleteGroup(group.id)}
+                            className="p-1 text-muted-foreground hover:text-destructive"
+                            title="Nascondi gruppo"
+                          >
+                            <X size={11} />
+                          </button>
+                        )}
+                        <Button
+                          variant="ghost" size="sm"
+                          onClick={() => { setAddingToGroup(addingToGroup === group.id ? null : group.id); setNewLayer({}); }}
+                          className="h-6 text-[10px] gap-1"
                         >
-                          <Trash2 size={11} />
-                        </button>
+                          <Plus size={10} /> Aggiungi
+                        </Button>
                       </>
                     )}
-                    <Button
-                      variant="ghost" size="sm"
-                      onClick={() => { setAddingToGroup(addingToGroup === group.id ? null : group.id); setNewLayer({}); }}
-                      className="h-6 text-[10px] gap-1"
-                    >
-                      <Plus size={10} /> Aggiungi
-                    </Button>
                   </div>
                 )}
               </div>
-              <div className="divide-y divide-border">
-                {filteredLayers.map(l => {
-                  const isCustom = customLayers.some(cl => cl.id === l.id);
-                  return renderLayerRow(l, isCustom);
-                })}
-                {filteredLayers.length === 0 && (
-                  <p className="px-3 py-4 text-[10px] text-muted-foreground text-center italic">Nessun vincolo in questo gruppo. Usa "Aggiungi" per crearne uno.</p>
-                )}
-              </div>
-              {addingToGroup === group.id && renderAddForm(group.id)}
+              {!isDeletedGroup && (
+                <>
+                  <div className="divide-y divide-border">
+                    {filteredLayers.map(l => {
+                      const isCustom = customLayers.some(cl => cl.id === l.id);
+                      return renderLayerRow(l, isCustom);
+                    })}
+                    {filteredLayers.length === 0 && (
+                      <p className="px-3 py-4 text-[10px] text-muted-foreground text-center italic">Nessun vincolo in questo gruppo. Usa "Aggiungi" per crearne uno.</p>
+                    )}
+                  </div>
+                  {addingToGroup === group.id && renderAddForm(group.id)}
+                </>
+              )}
             </div>
           );
         })}
