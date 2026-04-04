@@ -5,6 +5,7 @@ const CUSTOM_LAYERS_KEY = "lc_custom_layers";
 const OVERRIDES_KEY = "lc_layer_url_overrides";
 const CUSTOM_GROUPS_KEY = "lc_custom_groups";
 const TLS_BYPASS_KEY = "lc_tls_bypass";
+const GROUP_OVERRIDES_KEY = "lc_group_overrides";
 
 interface CustomLayerData {
   id: string;
