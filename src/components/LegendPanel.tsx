@@ -240,5 +240,6 @@ export function LegendPanel({
         </p>
       </div>
     </div>
+    </TooltipProvider>
   );
 }
