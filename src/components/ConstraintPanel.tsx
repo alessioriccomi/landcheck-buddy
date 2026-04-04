@@ -1,7 +1,8 @@
 import { VincoloItem, VincoloPresenza, RischioLevel, AnalisiVincolistica, CriticitaLevel, CRITICITA_CONFIG, CLASSIFICAZIONE_CONFIG, StepAutorizzativo } from "@/types/vincoli";
-import { CheckCircle2, AlertTriangle, XCircle, HelpCircle, ChevronDown, ChevronUp, FileText, ExternalLink, Shield, ArrowRight } from "lucide-react";
+import { CheckCircle2, AlertTriangle, XCircle, HelpCircle, ChevronDown, ChevronUp, FileText, ExternalLink, Shield, ArrowRight, Info } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
 const presenzaConfig: Record<VincoloPresenza, { label: string; icon: React.ReactNode; className: string; dot: string }> = {
   assente: { label: "Assente", icon: <CheckCircle2 size={13} />, className: "text-safe bg-safe-light border-safe/30", dot: "bg-safe" },
