@@ -12,6 +12,14 @@ const OVERRIDES_KEY = "lc_layer_url_overrides";
 const CUSTOM_LAYERS_KEY = "lc_custom_layers";
 const CUSTOM_GROUPS_KEY = "lc_custom_groups";
 const TLS_BYPASS_KEY = "lc_tls_bypass";
+const GROUP_OVERRIDES_KEY = "lc_group_overrides";
+
+type GroupOverride = {
+  label?: string;
+  icon?: string;
+  deleted?: boolean;
+};
+type GroupOverrides = Record<string, GroupOverride>;
 
 type Override = {
   wmsUrl?: string;
@@ -54,6 +62,9 @@ function loadCustomGroups(): CustomGroup[] {
 function loadTlsBypass(): Record<string, boolean> {
   try { return JSON.parse(localStorage.getItem(TLS_BYPASS_KEY) || "{}"); } catch { return {}; }
 }
+function loadGroupOverrides(): GroupOverrides {
+  try { return JSON.parse(localStorage.getItem(GROUP_OVERRIDES_KEY) || "{}"); } catch { return {}; }
+}
 
 function generateId() {
   return "custom_" + Math.random().toString(36).slice(2, 10);
@@ -68,6 +79,7 @@ export default function Settings() {
   const [customLayers, setCustomLayers] = useState<CustomLayer[]>(loadCustomLayers);
   const [customGroups, setCustomGroups] = useState<CustomGroup[]>(loadCustomGroups);
   const [tlsBypass, setTlsBypass] = useState<Record<string, boolean>>(loadTlsBypass);
+  const [groupOverrides, setGroupOverrides] = useState<GroupOverrides>(loadGroupOverrides);
   const [search, setSearch] = useState("");
   const [dirty, setDirty] = useState(false);
   const [expandedFallbacks, setExpandedFallbacks] = useState<Set<string>>(new Set());
@@ -115,7 +127,7 @@ export default function Settings() {
 
   // ── Export/Import ──
   const exportConfig = () => {
-    const config = { overrides, customLayers, customGroups, tlsBypass, exportedAt: new Date().toISOString() };
+    const config = { overrides, customLayers, customGroups, tlsBypass, groupOverrides, exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -137,6 +149,7 @@ export default function Settings() {
         if (config.customLayers) setCustomLayers(config.customLayers);
         if (config.customGroups) setCustomGroups(config.customGroups);
         if (config.tlsBypass) setTlsBypass(config.tlsBypass);
+        if (config.groupOverrides) setGroupOverrides(config.groupOverrides);
         markDirty();
         toast.success("Configurazione importata. Premi Salva per applicare.");
       } catch { toast.error("File non valido"); }
@@ -264,7 +277,7 @@ export default function Settings() {
     markDirty();
   };
 
-  // ── Custom group CRUD ──
+  // ── Group CRUD (custom + built-in overrides) ──
   const addNewGroup = () => {
     if (!newGroup.label) { toast.error("Inserisci un nome per il gruppo"); return; }
     const grp: CustomGroup = { id: "grp_" + Math.random().toString(36).slice(2, 8), label: newGroup.label, icon: newGroup.icon || "📌" };
@@ -275,15 +288,43 @@ export default function Settings() {
   };
 
   const updateGroup = (groupId: string) => {
-    setCustomGroups(prev => prev.map(g => g.id === groupId ? { ...g, label: editGroupData.label, icon: editGroupData.icon } : g));
+    const isCustom = customGroups.some(g => g.id === groupId);
+    if (isCustom) {
+      setCustomGroups(prev => prev.map(g => g.id === groupId ? { ...g, label: editGroupData.label, icon: editGroupData.icon } : g));
+    } else {
+      // Built-in group: store override
+      setGroupOverrides(prev => ({ ...prev, [groupId]: { ...prev[groupId], label: editGroupData.label, icon: editGroupData.icon } }));
+    }
     setEditingGroup(null);
     markDirty();
   };
 
   const deleteGroup = (groupId: string) => {
-    // Move layers from this group to orphan
-    setCustomLayers(prev => prev.map(l => l.groupId === groupId ? { ...l, groupId: "_orphan" } : l));
-    setCustomGroups(prev => prev.filter(g => g.id !== groupId));
+    const isCustom = customGroups.some(g => g.id === groupId);
+    if (isCustom) {
+      setCustomLayers(prev => prev.map(l => l.groupId === groupId ? { ...l, groupId: "_orphan" } : l));
+      setCustomGroups(prev => prev.filter(g => g.id !== groupId));
+    } else {
+      // Built-in group: soft-delete via override
+      setGroupOverrides(prev => ({ ...prev, [groupId]: { ...prev[groupId], deleted: true } }));
+    }
+    markDirty();
+  };
+
+  const restoreGroup = (groupId: string) => {
+    setGroupOverrides(prev => {
+      const next = { ...prev };
+      if (next[groupId]) {
+        delete next[groupId].deleted;
+        if (Object.keys(next[groupId]).length === 0) delete next[groupId];
+      }
+      return next;
+    });
+    markDirty();
+  };
+
+  const resetGroupOverride = (groupId: string) => {
+    setGroupOverrides(prev => { const next = { ...prev }; delete next[groupId]; return next; });
     markDirty();
   };
 
@@ -293,6 +334,7 @@ export default function Settings() {
     localStorage.setItem(CUSTOM_LAYERS_KEY, JSON.stringify(customLayers));
     localStorage.setItem(CUSTOM_GROUPS_KEY, JSON.stringify(customGroups));
     localStorage.setItem(TLS_BYPASS_KEY, JSON.stringify(tlsBypass));
+    localStorage.setItem(GROUP_OVERRIDES_KEY, JSON.stringify(groupOverrides));
     setDirty(false);
     toast.success("Configurazione salvata. Ricarica la mappa per applicare.");
   };
@@ -302,10 +344,12 @@ export default function Settings() {
     setCustomLayers([]);
     setCustomGroups([]);
     setTlsBypass({});
+    setGroupOverrides({});
     localStorage.removeItem(OVERRIDES_KEY);
     localStorage.removeItem(CUSTOM_LAYERS_KEY);
     localStorage.removeItem(CUSTOM_GROUPS_KEY);
     localStorage.removeItem(TLS_BYPASS_KEY);
+    localStorage.removeItem(GROUP_OVERRIDES_KEY);
     setDirty(false);
     toast.success("Tutto ripristinato ai valori predefiniti.");
   };
@@ -320,13 +364,25 @@ export default function Settings() {
 
   const lowerSearch = search.toLowerCase();
 
-  // Build full group list: built-in + custom groups
-  const allGroups: (LayerGroup & { isCustomGroup?: boolean })[] = [
-    ...LAYER_GROUPS.map(g => ({ ...g, isCustomGroup: false })),
+  // Build full group list: built-in (with overrides applied, excluding soft-deleted) + custom groups
+  const allGroups: (LayerGroup & { isCustomGroup?: boolean; isDeletedGroup?: boolean; hasGroupOverride?: boolean })[] = [
+    ...LAYER_GROUPS.map(g => {
+      const ov = groupOverrides[g.id];
+      return {
+        ...g,
+        label: ov?.label || g.label,
+        icon: ov?.icon || g.icon,
+        isCustomGroup: false,
+        isDeletedGroup: ov?.deleted === true,
+        hasGroupOverride: !!ov && !ov.deleted,
+      };
+    }),
     ...customGroups.map(cg => ({
       ...cg,
       layers: [] as LayerDef[],
       isCustomGroup: true,
+      isDeletedGroup: false,
+      hasGroupOverride: false,
     })),
   ];
 
@@ -601,6 +657,10 @@ export default function Settings() {
       {/* Layer groups */}
       <div className="max-w-5xl mx-auto p-4 space-y-6">
         {groupsWithCustom.map(group => {
+          const isDeletedGroup = (group as any).isDeletedGroup === true;
+          const isCustomGroup = (group as any).isCustomGroup === true;
+          const hasGroupOverride = (group as any).hasGroupOverride === true;
+
           const customInGroup = customLayers.filter(cl => cl.groupId === group.id);
           const allLayers = [
             ...group.layers.filter(l => !customLayers.some(cl => cl.id === l.id)),
@@ -612,13 +672,13 @@ export default function Settings() {
             ((l as LayerDef).wmsUrl || "").toLowerCase().includes(lowerSearch) ||
             ((l as LayerDef).arcgisUrl || "").toLowerCase().includes(lowerSearch)
           );
-          if (filteredLayers.length === 0 && addingToGroup !== group.id && !(group as any).isCustomGroup) return null;
+          // Show deleted groups (collapsed) so user can restore them
+          if (filteredLayers.length === 0 && addingToGroup !== group.id && !isCustomGroup && !isDeletedGroup) return null;
 
-          const isCustomGroup = (group as any).isCustomGroup === true;
           const isEditingThis = editingGroup === group.id;
 
           return (
-            <div key={group.id} className="border border-border rounded-lg overflow-hidden">
+            <div key={group.id} className={`border border-border rounded-lg overflow-hidden ${isDeletedGroup ? "opacity-50" : ""}`}>
               <div className="bg-muted/50 px-3 py-2 border-b border-border flex items-center justify-between gap-2">
                 {isEditingThis ? (
                   <div className="flex items-center gap-2 flex-1">
@@ -636,14 +696,18 @@ export default function Settings() {
                     <Button variant="ghost" size="sm" onClick={() => setEditingGroup(null)} className="h-6 text-[10px]">Annulla</Button>
                   </div>
                 ) : (
-                  <h2 className="text-xs font-semibold flex items-center gap-2">
+                  <h2 className={`text-xs font-semibold flex items-center gap-2 ${isDeletedGroup ? "line-through" : ""}`}>
                     <span>{group.icon}</span> {group.label}
-                    <span className="text-[10px] text-muted-foreground font-normal">({filteredLayers.length})</span>
+                    {!isDeletedGroup && <span className="text-[10px] text-muted-foreground font-normal">({filteredLayers.length})</span>}
+                    {isDeletedGroup && <span className="text-[10px] text-destructive font-normal">(nascosto)</span>}
+                    {hasGroupOverride && !isDeletedGroup && <span className="text-[9px] bg-primary/10 text-primary px-1 rounded">modificato</span>}
                   </h2>
                 )}
                 {!isEditingThis && (
                   <div className="flex items-center gap-1">
-                    {isCustomGroup && (
+                    {isDeletedGroup ? (
+                      <button onClick={() => restoreGroup(group.id)} className="text-[10px] text-primary hover:underline">Ripristina</button>
+                    ) : (
                       <>
                         <button
                           onClick={() => { setEditingGroup(group.id); setEditGroupData({ label: group.label, icon: group.icon }); }}
@@ -652,35 +716,52 @@ export default function Settings() {
                         >
                           <Edit2 size={11} />
                         </button>
-                        <button
-                          onClick={() => deleteGroup(group.id)}
-                          className="p-1 text-muted-foreground hover:text-destructive"
-                          title="Elimina gruppo"
+                        {hasGroupOverride && !isCustomGroup && (
+                          <button onClick={() => resetGroupOverride(group.id)} className="text-[9px] text-primary hover:underline" title="Reset nome/icona originale">Reset</button>
+                        )}
+                        {isCustomGroup ? (
+                          <button
+                            onClick={() => deleteGroup(group.id)}
+                            className="p-1 text-muted-foreground hover:text-destructive"
+                            title="Elimina gruppo"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => deleteGroup(group.id)}
+                            className="p-1 text-muted-foreground hover:text-destructive"
+                            title="Nascondi gruppo"
+                          >
+                            <X size={11} />
+                          </button>
+                        )}
+                        <Button
+                          variant="ghost" size="sm"
+                          onClick={() => { setAddingToGroup(addingToGroup === group.id ? null : group.id); setNewLayer({}); }}
+                          className="h-6 text-[10px] gap-1"
                         >
-                          <Trash2 size={11} />
-                        </button>
+                          <Plus size={10} /> Aggiungi
+                        </Button>
                       </>
                     )}
-                    <Button
-                      variant="ghost" size="sm"
-                      onClick={() => { setAddingToGroup(addingToGroup === group.id ? null : group.id); setNewLayer({}); }}
-                      className="h-6 text-[10px] gap-1"
-                    >
-                      <Plus size={10} /> Aggiungi
-                    </Button>
                   </div>
                 )}
               </div>
-              <div className="divide-y divide-border">
-                {filteredLayers.map(l => {
-                  const isCustom = customLayers.some(cl => cl.id === l.id);
-                  return renderLayerRow(l, isCustom);
-                })}
-                {filteredLayers.length === 0 && (
-                  <p className="px-3 py-4 text-[10px] text-muted-foreground text-center italic">Nessun vincolo in questo gruppo. Usa "Aggiungi" per crearne uno.</p>
-                )}
-              </div>
-              {addingToGroup === group.id && renderAddForm(group.id)}
+              {!isDeletedGroup && (
+                <>
+                  <div className="divide-y divide-border">
+                    {filteredLayers.map(l => {
+                      const isCustom = customLayers.some(cl => cl.id === l.id);
+                      return renderLayerRow(l, isCustom);
+                    })}
+                    {filteredLayers.length === 0 && (
+                      <p className="px-3 py-4 text-[10px] text-muted-foreground text-center italic">Nessun vincolo in questo gruppo. Usa "Aggiungi" per crearne uno.</p>
+                    )}
+                  </div>
+                  {addingToGroup === group.id && renderAddForm(group.id)}
+                </>
+              )}
             </div>
           );
         })}

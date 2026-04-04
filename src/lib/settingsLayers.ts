@@ -5,6 +5,7 @@ const CUSTOM_LAYERS_KEY = "lc_custom_layers";
 const OVERRIDES_KEY = "lc_layer_url_overrides";
 const CUSTOM_GROUPS_KEY = "lc_custom_groups";
 const TLS_BYPASS_KEY = "lc_tls_bypass";
+const GROUP_OVERRIDES_KEY = "lc_group_overrides";
 
 interface CustomLayerData {
   id: string;
@@ -44,6 +45,11 @@ function loadOverrides(): Record<string, Override> {
 
 function loadCustomGroups(): CustomGroupData[] {
   try { return JSON.parse(localStorage.getItem(CUSTOM_GROUPS_KEY) || "[]"); } catch { return []; }
+}
+
+type GroupOverride = { label?: string; icon?: string; deleted?: boolean };
+function loadGroupOverrides(): Record<string, GroupOverride> {
+  try { return JSON.parse(localStorage.getItem(GROUP_OVERRIDES_KEY) || "{}"); } catch { return {}; }
 }
 
 /** Returns TLS bypass settings per layer id */
@@ -91,6 +97,7 @@ export function getMergedGroups(): LayerGroup[] {
   const custom = loadCustomLayers();
   const customGroupsData = loadCustomGroups();
   const tlsBypass = getTlsBypassSettings();
+  const grpOverrides = loadGroupOverrides();
 
   const toLayerDef = (cl: CustomLayerData): LayerDef => ({
     id: cl.id,
@@ -107,14 +114,21 @@ export function getMergedGroups(): LayerGroup[] {
     tlsBypass: tlsBypass[cl.id] ?? false,
   });
 
-  // Built-in groups
-  const groups: LayerGroup[] = LAYER_GROUPS.map(g => ({
-    ...g,
-    layers: [
-      ...g.layers.filter(l => !overrides[l.id]?.deleted).map(l => ({ ...l, tlsBypass: tlsBypass[l.id] ?? false })),
-      ...custom.filter(cl => cl.groupId === g.id).map(toLayerDef),
-    ],
-  }));
+  // Built-in groups (apply group overrides, skip soft-deleted groups)
+  const groups: LayerGroup[] = LAYER_GROUPS
+    .filter(g => !grpOverrides[g.id]?.deleted)
+    .map(g => {
+      const gov = grpOverrides[g.id];
+      return {
+        ...g,
+        label: gov?.label || g.label,
+        icon: gov?.icon || g.icon,
+        layers: [
+          ...g.layers.filter(l => !overrides[l.id]?.deleted).map(l => ({ ...l, tlsBypass: tlsBypass[l.id] ?? false })),
+          ...custom.filter(cl => cl.groupId === g.id).map(toLayerDef),
+        ],
+      };
+    });
 
   // Custom groups
   for (const cg of customGroupsData) {
