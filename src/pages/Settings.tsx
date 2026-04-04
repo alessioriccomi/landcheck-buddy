@@ -276,7 +276,7 @@ export default function Settings() {
     markDirty();
   };
 
-  // ── Custom group CRUD ──
+  // ── Group CRUD (custom + built-in overrides) ──
   const addNewGroup = () => {
     if (!newGroup.label) { toast.error("Inserisci un nome per il gruppo"); return; }
     const grp: CustomGroup = { id: "grp_" + Math.random().toString(36).slice(2, 8), label: newGroup.label, icon: newGroup.icon || "📌" };
@@ -287,15 +287,43 @@ export default function Settings() {
   };
 
   const updateGroup = (groupId: string) => {
-    setCustomGroups(prev => prev.map(g => g.id === groupId ? { ...g, label: editGroupData.label, icon: editGroupData.icon } : g));
+    const isCustom = customGroups.some(g => g.id === groupId);
+    if (isCustom) {
+      setCustomGroups(prev => prev.map(g => g.id === groupId ? { ...g, label: editGroupData.label, icon: editGroupData.icon } : g));
+    } else {
+      // Built-in group: store override
+      setGroupOverrides(prev => ({ ...prev, [groupId]: { ...prev[groupId], label: editGroupData.label, icon: editGroupData.icon } }));
+    }
     setEditingGroup(null);
     markDirty();
   };
 
   const deleteGroup = (groupId: string) => {
-    // Move layers from this group to orphan
-    setCustomLayers(prev => prev.map(l => l.groupId === groupId ? { ...l, groupId: "_orphan" } : l));
-    setCustomGroups(prev => prev.filter(g => g.id !== groupId));
+    const isCustom = customGroups.some(g => g.id === groupId);
+    if (isCustom) {
+      setCustomLayers(prev => prev.map(l => l.groupId === groupId ? { ...l, groupId: "_orphan" } : l));
+      setCustomGroups(prev => prev.filter(g => g.id !== groupId));
+    } else {
+      // Built-in group: soft-delete via override
+      setGroupOverrides(prev => ({ ...prev, [groupId]: { ...prev[groupId], deleted: true } }));
+    }
+    markDirty();
+  };
+
+  const restoreGroup = (groupId: string) => {
+    setGroupOverrides(prev => {
+      const next = { ...prev };
+      if (next[groupId]) {
+        delete next[groupId].deleted;
+        if (Object.keys(next[groupId]).length === 0) delete next[groupId];
+      }
+      return next;
+    });
+    markDirty();
+  };
+
+  const resetGroupOverride = (groupId: string) => {
+    setGroupOverrides(prev => { const next = { ...prev }; delete next[groupId]; return next; });
     markDirty();
   };
 
@@ -305,6 +333,7 @@ export default function Settings() {
     localStorage.setItem(CUSTOM_LAYERS_KEY, JSON.stringify(customLayers));
     localStorage.setItem(CUSTOM_GROUPS_KEY, JSON.stringify(customGroups));
     localStorage.setItem(TLS_BYPASS_KEY, JSON.stringify(tlsBypass));
+    localStorage.setItem(GROUP_OVERRIDES_KEY, JSON.stringify(groupOverrides));
     setDirty(false);
     toast.success("Configurazione salvata. Ricarica la mappa per applicare.");
   };
@@ -314,10 +343,12 @@ export default function Settings() {
     setCustomLayers([]);
     setCustomGroups([]);
     setTlsBypass({});
+    setGroupOverrides({});
     localStorage.removeItem(OVERRIDES_KEY);
     localStorage.removeItem(CUSTOM_LAYERS_KEY);
     localStorage.removeItem(CUSTOM_GROUPS_KEY);
     localStorage.removeItem(TLS_BYPASS_KEY);
+    localStorage.removeItem(GROUP_OVERRIDES_KEY);
     setDirty(false);
     toast.success("Tutto ripristinato ai valori predefiniti.");
   };
