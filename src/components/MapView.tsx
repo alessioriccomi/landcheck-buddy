@@ -318,7 +318,7 @@ export function MapView({
       zoomControl: false,
     });
 
-    L.control.zoom({ position: "bottomright" }).addTo(map);
+    L.control.zoom({ position: "topright" }).addTo(map);
 
     // Custom pane for parcel polygons — always on top
     map.createPane("parcelsPane");
