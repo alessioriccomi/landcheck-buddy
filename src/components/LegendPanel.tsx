@@ -172,7 +172,6 @@ export function LegendPanel({
                           onClick={() => onToggleLayer(l.id)}
                           className="w-full flex items-center gap-2 py-1 px-1.5 rounded hover:bg-muted/40 transition-colors text-left"
                         >
-                        >
                           <div
                             className="w-3 h-3 rounded-sm border flex-shrink-0 transition-colors"
                             style={{
