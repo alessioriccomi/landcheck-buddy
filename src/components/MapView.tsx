@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Particella, PARCEL_COLORS } from "@/types/vincoli";
-import { Satellite, Map, Loader2, MousePointer } from "lucide-react";
+import { Satellite, Map, Loader2, MousePointer, Layers, Mountain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import area from "@turf/area";
 import turfUnion from "@turf/union";
