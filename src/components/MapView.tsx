@@ -196,17 +196,18 @@ function formatArea(mq: number): string {
 const CENTER: L.LatLngExpression = [41.897, 12.483];
 
 // ── Basemap definitions ────────────────────────────────────────
-type BasemapId = "osm" | "satellite";
+type BasemapId = "osm" | "satellite" | "topo";
 
 interface BasemapDef {
   id: BasemapId;
   label: string;
-  icon: "map" | "satellite";
+  icon: "map" | "satellite" | "mountain";
 }
 
 const BASEMAPS: BasemapDef[] = [
   { id: "osm", label: "Mappa", icon: "map" },
   { id: "satellite", label: "Satellite", icon: "satellite" },
+  { id: "topo", label: "Topografica", icon: "mountain" },
 ];
 
 function makeBaselayer(id: BasemapId): L.TileLayer {
@@ -219,6 +220,14 @@ function makeBaselayer(id: BasemapId): L.TileLayer {
     case "satellite":
       return L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution: "Tiles &copy; Esri",
+          maxZoom: 19,
+        }
+      );
+    case "topo":
+      return L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
         {
           attribution: "Tiles &copy; Esri",
           maxZoom: 19,
