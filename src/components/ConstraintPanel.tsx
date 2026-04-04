@@ -209,6 +209,7 @@ export function ConstraintPanel({ analisi }: ConstraintPanelProps) {
   const hasPugliaOlives = analisi.vincoliAgricoli.some(v => v.id === "ag_06");
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="space-y-3">
       {/* Header */}
       <div className="bg-card border border-border rounded-xl p-4">
