@@ -196,9 +196,17 @@ export function LegendPanel({
                             <TooltipContent side="right" className="max-w-xs space-y-1 text-xs">
                               <p className="font-semibold">{l.label}</p>
                               <p className="text-muted-foreground">{l.description}</p>
-                              {getGroupNormativa(group.id) && (
-                                <p className="text-[10px] text-primary/80 italic">📜 {getGroupNormativa(group.id)}</p>
-                              )}
+                              {(() => {
+                                const norm = getGroupNormativa(group.id);
+                                if (!norm) return null;
+                                return norm.url ? (
+                                  <a href={norm.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary hover:underline italic block" onClick={(e) => e.stopPropagation()}>
+                                    📜 {norm.text} ↗
+                                  </a>
+                                ) : (
+                                  <p className="text-[10px] text-primary/80 italic">📜 {norm.text}</p>
+                                );
+                              })()}
                               {(l.arcgisUrl || l.wmsUrl) && (
                                 <p className="text-[10px] text-muted-foreground/70 break-all">URL: {l.arcgisUrl || l.wmsUrl}</p>
                               )}
