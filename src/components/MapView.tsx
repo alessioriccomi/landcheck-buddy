@@ -1289,24 +1289,36 @@ export function MapView({
 
       {/* Click mode removed — clicking map always adds parcels */}
 
-      {/* Basemap switcher */}
-      <div className="absolute bottom-8 right-3 z-[1000] flex flex-col gap-1">
-        {BASEMAPS.map((bm) => (
-          <button
-            key={bm.id}
-            onClick={() => setActiveBase(bm.id)}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border shadow-md transition-all",
-              activeBase === bm.id
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-card/95 backdrop-blur text-foreground border-border hover:bg-muted"
-            )}
-          >
-            {bm.icon === "map" && <Map size={12} />}
-            {bm.icon === "satellite" && <Satellite size={12} />}
-            {bm.label}
-          </button>
-        ))}
+      {/* Basemap switcher — icon dropdown */}
+      <div className="absolute bottom-8 right-3 z-[1000]">
+        <button
+          onClick={() => setBasemapMenuOpen(o => !o)}
+          className="flex items-center justify-center w-9 h-9 rounded-lg bg-card/95 backdrop-blur border border-border shadow-md hover:bg-muted transition-colors"
+          title="Cambia mappa di sfondo"
+        >
+          <Layers size={16} className="text-foreground" />
+        </button>
+        {basemapMenuOpen && (
+          <div className="absolute bottom-11 right-0 bg-card/95 backdrop-blur border border-border rounded-lg shadow-lg p-1 space-y-0.5 min-w-[140px]">
+            {BASEMAPS.map((bm) => (
+              <button
+                key={bm.id}
+                onClick={() => { setActiveBase(bm.id); setBasemapMenuOpen(false); }}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all text-left",
+                  activeBase === bm.id
+                    ? "bg-primary text-primary-foreground"
+                    : "text-foreground hover:bg-muted"
+                )}
+              >
+                {bm.icon === "map" && <Map size={12} />}
+                {bm.icon === "satellite" && <Satellite size={12} />}
+                {bm.icon === "mountain" && <Mountain size={12} />}
+                {bm.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Parcel legend + total area */}
