@@ -149,6 +149,7 @@ export default function Settings() {
         if (config.customLayers) setCustomLayers(config.customLayers);
         if (config.customGroups) setCustomGroups(config.customGroups);
         if (config.tlsBypass) setTlsBypass(config.tlsBypass);
+        if (config.groupOverrides) setGroupOverrides(config.groupOverrides);
         markDirty();
         toast.success("Configurazione importata. Premi Salva per applicare.");
       } catch { toast.error("File non valido"); }
