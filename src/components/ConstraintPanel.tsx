@@ -54,6 +54,21 @@ function VincoloRow({ v }: { v: VincoloItem }) {
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex cursor-help text-muted-foreground hover:text-primary transition-colors" onClick={(e) => e.stopPropagation()}>
+                <Info size={13} />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="max-w-xs space-y-1 text-xs">
+              <p><strong>Categoria:</strong> {v.categoria}</p>
+              <p><strong>Normativa:</strong> {v.normativa}</p>
+              {v.fonte && <p><strong>Fonte:</strong> {v.fonte}</p>}
+              {v.criticita && (
+                <p><strong>Criticità:</strong> <span className={CRITICITA_CONFIG[v.criticita].color}>{CRITICITA_CONFIG[v.criticita].emoji} {CRITICITA_CONFIG[v.criticita].label}</span></p>
+              )}
+            </TooltipContent>
+          </Tooltip>
           <PresenzaBadge presenza={v.presenza} />
           {open ? <ChevronUp size={12} className="text-muted-foreground" /> : <ChevronDown size={12} className="text-muted-foreground" />}
         </div>
