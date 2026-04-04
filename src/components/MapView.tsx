@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Particella, PARCEL_COLORS } from "@/types/vincoli";
-import { Satellite, Map, Loader2, MousePointer } from "lucide-react";
+import { Satellite, Map, Loader2, MousePointer, Layers, Mountain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import area from "@turf/area";
 import turfUnion from "@turf/union";
@@ -196,17 +196,18 @@ function formatArea(mq: number): string {
 const CENTER: L.LatLngExpression = [41.897, 12.483];
 
 // ── Basemap definitions ────────────────────────────────────────
-type BasemapId = "osm" | "satellite";
+type BasemapId = "osm" | "satellite" | "topo";
 
 interface BasemapDef {
   id: BasemapId;
   label: string;
-  icon: "map" | "satellite";
+  icon: "map" | "satellite" | "mountain";
 }
 
 const BASEMAPS: BasemapDef[] = [
   { id: "osm", label: "Mappa", icon: "map" },
   { id: "satellite", label: "Satellite", icon: "satellite" },
+  { id: "topo", label: "Topografica", icon: "mountain" },
 ];
 
 function makeBaselayer(id: BasemapId): L.TileLayer {
@@ -219,6 +220,14 @@ function makeBaselayer(id: BasemapId): L.TileLayer {
     case "satellite":
       return L.tileLayer(
         "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution: "Tiles &copy; Esri",
+          maxZoom: 19,
+        }
+      );
+    case "topo":
+      return L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
         {
           attribution: "Tiles &copy; Esri",
           maxZoom: 19,
@@ -288,7 +297,8 @@ export function MapView({
   const parcelFeaturesRef = useRef<Record<string, GeoJSON.Feature[]>>({});
   const [selectionArea, setSelectionArea] = useState<{ mq: number; count: number } | null>(null);
   const [clickLoading, setClickLoading] = useState(false);
-  const [clickMode] = useState(false); // kept for compatibility, always false
+  const [clickMode] = useState(false);
+  const [basemapMenuOpen, setBasemapMenuOpen] = useState(false);
   // Track parcel IDs already drawn/fetched to prevent redundant re-runs
   const drawnParcelIdsRef = useRef<string>("");
 
@@ -1279,24 +1289,36 @@ export function MapView({
 
       {/* Click mode removed — clicking map always adds parcels */}
 
-      {/* Basemap switcher */}
-      <div className="absolute bottom-8 right-3 z-[1000] flex flex-col gap-1">
-        {BASEMAPS.map((bm) => (
-          <button
-            key={bm.id}
-            onClick={() => setActiveBase(bm.id)}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border shadow-md transition-all",
-              activeBase === bm.id
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-card/95 backdrop-blur text-foreground border-border hover:bg-muted"
-            )}
-          >
-            {bm.icon === "map" && <Map size={12} />}
-            {bm.icon === "satellite" && <Satellite size={12} />}
-            {bm.label}
-          </button>
-        ))}
+      {/* Basemap switcher — icon dropdown */}
+      <div className="absolute bottom-8 right-3 z-[1000]">
+        <button
+          onClick={() => setBasemapMenuOpen(o => !o)}
+          className="flex items-center justify-center w-9 h-9 rounded-lg bg-card/95 backdrop-blur border border-border shadow-md hover:bg-muted transition-colors"
+          title="Cambia mappa di sfondo"
+        >
+          <Layers size={16} className="text-foreground" />
+        </button>
+        {basemapMenuOpen && (
+          <div className="absolute bottom-11 right-0 bg-card/95 backdrop-blur border border-border rounded-lg shadow-lg p-1 space-y-0.5 min-w-[140px]">
+            {BASEMAPS.map((bm) => (
+              <button
+                key={bm.id}
+                onClick={() => { setActiveBase(bm.id); setBasemapMenuOpen(false); }}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all text-left",
+                  activeBase === bm.id
+                    ? "bg-primary text-primary-foreground"
+                    : "text-foreground hover:bg-muted"
+                )}
+              >
+                {bm.icon === "map" && <Map size={12} />}
+                {bm.icon === "satellite" && <Satellite size={12} />}
+                {bm.icon === "mountain" && <Mountain size={12} />}
+                {bm.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Parcel legend + total area */}

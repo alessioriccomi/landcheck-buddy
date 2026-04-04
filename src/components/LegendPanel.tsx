@@ -28,34 +28,33 @@ export function LegendPanel({
 }: LegendPanelProps) {
   const mergedGroups = getMergedGroups();
 
-  // Normativa di riferimento per gruppo
-  const GROUP_NORMATIVA: Record<string, string> = {
-    catasto: "Agenzia delle Entrate — Catasto terreni e fabbricati",
-    beni_paesaggistici_136: "D.Lgs. 42/2004, Art. 136 — Beni paesaggistici decretati",
-    paesaggistici_142: "D.Lgs. 42/2004, Art. 142 — Vincoli ope legis",
-    notevole_interesse: "D.Lgs. 42/2004, Art. 136-141 — Dichiarazioni notevole interesse pubblico",
-    aree_protette: "L. 394/1991 — Aree naturali protette (EUAP)",
-    natura2000: "Dir. 92/43/CEE (Habitat) e Dir. 2009/147/CE (Uccelli)",
-    unesco: "Convenzione UNESCO 1972 — Patrimonio Mondiale",
-    vincoli_idrogeologici: "R.D. 3267/1923 — Vincolo idrogeologico; Progetto IFFI",
-    rischio_frana: "D.Lgs. 49/2010, PAI — Pericolosità e rischio frana",
-    rischio_alluvione: "Dir. 2007/60/CE, D.Lgs. 49/2010, PGRA — Rischio alluvioni",
-    autorita_bacino: "L. 183/1989, D.Lgs. 152/2006 — Autorità di Bacino Distrettuali",
-    vincoli_urbanistici: "D.P.R. 380/2001, L.R. — Strumenti urbanistici comunali e sovracomunali",
-    rete_ecologica: "Dir. 92/43/CEE, Conv. Ramsar 1971, L. 157/1992 — Rete ecologica",
-    infrastrutture: "D.M. 449/1988, D.M. 17/04/2008 — Fasce di rispetto infrastrutture",
-    fotovoltaico: "D.Lgs. 199/2021, DM 21/06/2024 — Aree idonee e non idonee FER",
-    fasce_rispetto: "Normative settoriali — Fasce di rispetto e servitù",
-    sismica: "OPCM 3274/2003, NTC 2018 — Classificazione sismica",
-    uso_suolo: "Corine Land Cover / DUSAF — Uso del suolo",
-    idrografia: "Reticolo idrografico — ISPRA / PCN",
-    territorio: "Dati territoriali — Confini, DTM, ortofoto",
+  // Normativa di riferimento per gruppo con link
+  const GROUP_NORMATIVA: Record<string, { text: string; url?: string }> = {
+    catasto: { text: "Agenzia delle Entrate — Catasto terreni e fabbricati", url: "https://www.agenziaentrate.gov.it/portale/aree-tematiche/catasto" },
+    beni_paesaggistici_136: { text: "D.Lgs. 42/2004, Art. 136 — Beni paesaggistici decretati", url: "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2004-01-22;42" },
+    paesaggistici_142: { text: "D.Lgs. 42/2004, Art. 142 — Vincoli ope legis", url: "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2004-01-22;42" },
+    notevole_interesse: { text: "D.Lgs. 42/2004, Art. 136-141 — Dichiarazioni notevole interesse pubblico", url: "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2004-01-22;42" },
+    aree_protette: { text: "L. 394/1991 — Aree naturali protette (EUAP)", url: "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:1991-12-06;394" },
+    natura2000: { text: "Dir. 92/43/CEE (Habitat) e Dir. 2009/147/CE (Uccelli)", url: "https://www.mase.gov.it/pagina/rete-natura-2000" },
+    unesco: { text: "Convenzione UNESCO 1972 — Patrimonio Mondiale", url: "https://whc.unesco.org/en/list/" },
+    vincoli_idrogeologici: { text: "R.D. 3267/1923 — Vincolo idrogeologico; Progetto IFFI", url: "https://www.isprambiente.gov.it/it/progetti/cartella-progetti-in-corso/suolo-e-territorio-1/iffi-inventario-dei-fenomeni-franosi-in-italia" },
+    rischio_frana: { text: "D.Lgs. 49/2010, PAI — Pericolosità e rischio frana", url: "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2010-02-23;49" },
+    rischio_alluvione: { text: "Dir. 2007/60/CE, D.Lgs. 49/2010, PGRA — Rischio alluvioni", url: "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2010-02-23;49" },
+    autorita_bacino: { text: "L. 183/1989, D.Lgs. 152/2006 — Autorità di Bacino Distrettuali", url: "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2006-04-03;152" },
+    vincoli_urbanistici: { text: "D.P.R. 380/2001, L.R. — Strumenti urbanistici", url: "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.del.presidente.della.repubblica:2001-06-06;380" },
+    rete_ecologica: { text: "Dir. 92/43/CEE, Conv. Ramsar 1971, L. 157/1992 — Rete ecologica", url: "https://www.mase.gov.it/pagina/rete-ecologica" },
+    infrastrutture: { text: "D.M. 449/1988, D.M. 17/04/2008 — Fasce di rispetto infrastrutture" },
+    fotovoltaico: { text: "D.Lgs. 199/2021, DM 21/06/2024 — Aree idonee e non idonee FER", url: "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:decreto.legislativo:2021-11-08;199" },
+    fasce_rispetto: { text: "Normative settoriali — Fasce di rispetto e servitù" },
+    sismica: { text: "OPCM 3274/2003, NTC 2018 — Classificazione sismica", url: "https://www.protezionecivile.gov.it/it/approfondimento/classificazione-sismica/" },
+    uso_suolo: { text: "Corine Land Cover / DUSAF — Uso del suolo", url: "https://land.copernicus.eu/en/products/corine-land-cover" },
+    idrografia: { text: "Reticolo idrografico — ISPRA / PCN" },
+    territorio: { text: "Dati territoriali — Confini, DTM, ortofoto" },
   };
 
-  const getGroupNormativa = (groupId: string): string | undefined => {
+  const getGroupNormativa = (groupId: string): { text: string; url?: string } | undefined => {
     if (GROUP_NORMATIVA[groupId]) return GROUP_NORMATIVA[groupId];
-    // Regional groups
-    if (groupId.startsWith("reg_")) return "Normativa regionale — Piani paesaggistici e PAI regionali";
+    if (groupId.startsWith("reg_")) return { text: "Normativa regionale — Piani paesaggistici e PAI regionali" };
     return undefined;
   };
 
@@ -197,9 +196,17 @@ export function LegendPanel({
                             <TooltipContent side="right" className="max-w-xs space-y-1 text-xs">
                               <p className="font-semibold">{l.label}</p>
                               <p className="text-muted-foreground">{l.description}</p>
-                              {getGroupNormativa(group.id) && (
-                                <p className="text-[10px] text-primary/80 italic">📜 {getGroupNormativa(group.id)}</p>
-                              )}
+                              {(() => {
+                                const norm = getGroupNormativa(group.id);
+                                if (!norm) return null;
+                                return norm.url ? (
+                                  <a href={norm.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary hover:underline italic block" onClick={(e) => e.stopPropagation()}>
+                                    📜 {norm.text} ↗
+                                  </a>
+                                ) : (
+                                  <p className="text-[10px] text-primary/80 italic">📜 {norm.text}</p>
+                                );
+                              })()}
                               {(l.arcgisUrl || l.wmsUrl) && (
                                 <p className="text-[10px] text-muted-foreground/70 break-all">URL: {l.arcgisUrl || l.wmsUrl}</p>
                               )}
