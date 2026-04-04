@@ -127,7 +127,7 @@ export default function Settings() {
 
   // ── Export/Import ──
   const exportConfig = () => {
-    const config = { overrides, customLayers, customGroups, tlsBypass, exportedAt: new Date().toISOString() };
+    const config = { overrides, customLayers, customGroups, tlsBypass, groupOverrides, exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
