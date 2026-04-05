@@ -11,7 +11,7 @@ import { getProtocolPreferences } from "@/lib/protocolPreference";
 import { getMergedLayers } from "@/lib/settingsLayers";
 import { toast } from "@/hooks/use-toast";
 import { getServerStatusForUrl, type ServerHealth } from "@/lib/wmsHealthProbe";
-import { getKnownEndpointIssue } from "@/lib/wmsEndpointIssues";
+
 
 // Fix Leaflet icon paths for Vite
 import iconUrl from "leaflet/dist/images/marker-icon.png";
