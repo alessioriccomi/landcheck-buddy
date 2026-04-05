@@ -1,5 +1,5 @@
 // Per-layer protocol preference: which endpoint to use for rendering
-export type LayerProtocol = "auto" | "wms" | "arcgis";
+export type LayerProtocol = "auto" | "wms" | "wfs" | "arcgis";
 
 const STORAGE_KEY = "lc_layer_protocol";
 

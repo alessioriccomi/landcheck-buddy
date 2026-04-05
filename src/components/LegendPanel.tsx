@@ -247,14 +247,18 @@ export function LegendPanel({
                             {/* Protocol selector — only when multiple protocols available */}
                             {(() => {
                               const hasWms = !!(l.wmsUrl && l.wmsLayer);
+                              const hasWfs = !!(l.wfsUrl);
                               const hasArcgis = !!l.arcgisUrl;
-                              const available = [hasWms && "wms", hasArcgis && "arcgis"].filter(Boolean) as string[];
-                              if (available.length < 2) return null;
+                              const protocols: LayerProtocol[] = ["auto"];
+                              if (hasWms) protocols.push("wms");
+                              if (hasWfs) protocols.push("wfs");
+                              if (hasArcgis) protocols.push("arcgis");
+                              if (protocols.length < 3) return null; // need at least auto + 2 protocols
                               const current = protocolState[l.id] || "auto";
                               return (
                                 <div className="flex items-center gap-1 px-1.5">
                                   <span className="text-[8px] text-muted-foreground">Protocollo:</span>
-                                  {(["auto", "wms", "arcgis"] as const).map(p => (
+                                  {protocols.map(p => (
                                     <button
                                       key={p}
                                       onClick={(e) => {
