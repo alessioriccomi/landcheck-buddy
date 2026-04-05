@@ -32,6 +32,9 @@ interface AnalysisPanelProps {
   // Profile
   profile: UserProfile | null;
   profileLoading: boolean;
+  // Analysis mode
+  analysisMode: "auto" | "manual";
+  onSetAnalysisMode: (mode: "auto" | "manual") => void;
   onSetParticelle: (p: Particella[]) => void;
   onToggleSelectParcel: (id: string) => void;
   onClearSelection: () => void;
