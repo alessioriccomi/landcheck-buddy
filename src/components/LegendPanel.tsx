@@ -16,6 +16,7 @@ interface LegendPanelProps {
   onToggleAllInGroup: (groupId: string, on: boolean) => void;
   serverStatuses?: Record<string, ServerHealth>;
   onRefreshStatuses?: () => void;
+  onProtocolChange?: (layerId: string, protocol: LayerProtocol) => void;
 }
 
 export function LegendPanel({
