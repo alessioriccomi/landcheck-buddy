@@ -70,7 +70,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         wmsLayer: "sitap_public:sitap_v1497_public",
         wfsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_public/wfs",
         wfsLayer: "sitap_public:sitap_v1497_public",
-        arcgisUrl: "https://sig.beniculturali.it/arcgis/rest/services/Vincoli_Paesaggistici/MapServer",
+        // arcgisUrl: sig.beniculturali.it is dead (DNS failure) — SITAP WMS is the primary source
         srid: "32632",
         opacity: 0.55,
         description: "Vincoli paesaggistici 'decretati' Art. 136/157 D.Lgs. 42/2004 — SITAP MiC",
