@@ -115,7 +115,8 @@ export async function checkServerHealth(baseUrl: string, forceRefresh = false): 
  */
 export async function probeAllServers(
   urls: string[],
-  onUpdate?: (statuses: Record<string, ServerHealth>) => void
+  onUpdate?: (statuses: Record<string, ServerHealth>) => void,
+  forceRefresh = false
 ): Promise<Record<string, ServerHealth>> {
   const endpointMap = new Map<string, string>();
   for (const url of urls) {
