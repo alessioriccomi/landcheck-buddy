@@ -873,6 +873,7 @@ serve(async (req) => {
         "vincoliinrete.beniculturali.it",
         "sitap.cultura.gov.it",
         "sitap.beniculturali.it",
+        "gnac.beniculturali.it",
         // SNAM / Infrastrutture
         "gis.snam.it",
       ];
