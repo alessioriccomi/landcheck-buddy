@@ -42,7 +42,7 @@ async function probeEndpoint(url: string, timeoutMs = 8000, skipTls = false): Pr
 
   try {
     const resp = await fetch(
-      `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(testUrl)}${skipParam}`,
+      `${proxyBase}?mode=wms_ext&probe=true&url=${encodeURIComponent(testUrl)}${skipParam}`,
       {
         headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
         signal: controller.signal,

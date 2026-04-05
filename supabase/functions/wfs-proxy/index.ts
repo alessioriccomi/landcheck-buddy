@@ -823,11 +823,15 @@ serve(async (req) => {
     if (mode === "wms_ext") {
       const targetUrl = url.searchParams.get("url");
       const skipTls = url.searchParams.get("skipTls") === "true";
-      if (!targetUrl) {
-        return new Response(JSON.stringify({ error: "Missing url parameter" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+      const probeOnly = url.searchParams.get("probe") === "true";
+      const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+      const errorResponse = (payload: Record<string, unknown>, status = 502) =>
+        new Response(JSON.stringify(probeOnly ? { ok: false, ...payload } : payload), {
+          status: probeOnly ? 200 : status,
+          headers: jsonHeaders,
         });
+      if (!targetUrl) {
+        return errorResponse({ error: "Missing url parameter" }, 400);
       }
 
       const allowedDomains = [
@@ -885,19 +889,13 @@ serve(async (req) => {
       try {
         parsedUrl = new URL(targetUrl);
       } catch {
-        return new Response(JSON.stringify({ error: "Invalid url" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse({ error: "Invalid url" }, 400);
       }
       const isAllowedDomain = (hostname: string) =>
         allowedDomains.some((d) => hostname === d || hostname.endsWith("." + d));
 
       if (!isAllowedDomain(parsedUrl.hostname)) {
-        return new Response(JSON.stringify({ error: "Domain not allowed" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse({ error: "Domain not allowed" }, 403);
       }
 
       try {
@@ -928,47 +926,35 @@ serve(async (req) => {
             const msg = String(fetchErr);
             const isTls = msg.includes("UnknownIssuer") || msg.includes("certificate") || msg.includes("SSL") || msg.includes("TLS");
             const isDns = msg.includes("dns error") || msg.includes("failed to lookup address information") || msg.includes("Name or service not known");
-            return new Response(JSON.stringify(
+            return errorResponse(
               isTls
                 ? { error: "TLS_INVALID_CERT", detail: msg, userMessage: "Il server ha un certificato TLS non valido. Il layer non può essere caricato in modo sicuro." }
                 : isDns
                   ? { error: "UPSTREAM_DNS_FAILURE", detail: msg, userMessage: "Il dominio del server remoto non risponde correttamente via DNS." }
                   : { error: "WMS fetch failed", detail: msg }
-            ), {
-              status: 502,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
+            , 502);
           }
 
           if (resp.status >= 300 && resp.status < 400) {
             const loc = resp.headers.get("location");
             try { await resp.arrayBuffer(); } catch { /* ignore */ }
             if (!loc) {
-              return new Response(JSON.stringify({ error: "Redirect without location" }), {
-                status: 502,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-              });
+              return errorResponse({ error: "Redirect without location" }, 502);
             }
 
             const nextUrl = new URL(loc, currentUrl).toString();
             const nextHost = new URL(nextUrl).hostname;
             if (!isAllowedDomain(nextHost)) {
-              return new Response(JSON.stringify({ error: "Redirect to disallowed domain" }), {
-                status: 403,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-              });
+              return errorResponse({ error: "Redirect to disallowed domain" }, 403);
             }
 
             const looksLikeAuthRedirect = /cassrv\/login|gateway=true/i.test(nextUrl);
             if (visitedUrls.has(nextUrl) || looksLikeAuthRedirect) {
-              return new Response(JSON.stringify({
+              return errorResponse({
                 error: "UPSTREAM_AUTH_REQUIRED",
                 detail: `Redirect loop or authentication gateway detected for ${nextUrl}`,
                 userMessage: "Il server remoto richiede autenticazione e non espone un endpoint pubblico utilizzabile dal layer.",
-              }), {
-                status: 502,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-              });
+              }, 502);
             }
 
             visitedUrls.add(currentUrl);
@@ -981,28 +967,19 @@ serve(async (req) => {
         }
 
         if (!finalResp) {
-          return new Response(JSON.stringify({
+          return errorResponse({
             error: "Too many redirects",
             detail: `Exceeded redirect limit for ${targetUrl}`,
-          }), {
-            status: 502,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          }, 502);
         }
 
         try {
           const finalUrl = new URL(finalResp.url);
           if (!isAllowedDomain(finalUrl.hostname)) {
-            return new Response(JSON.stringify({ error: "Redirect to disallowed domain" }), {
-              status: 403,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
+            return errorResponse({ error: "Redirect to disallowed domain" }, 403);
           }
         } catch {
-          return new Response(JSON.stringify({ error: "Invalid upstream response URL" }), {
-            status: 502,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse({ error: "Invalid upstream response URL" }, 502);
         }
 
         const contentType = finalResp.headers.get("Content-Type") ?? "application/octet-stream";
@@ -1010,7 +987,7 @@ serve(async (req) => {
           const html = await finalResp.text();
           const snippet = html.replace(/\s+/g, " ").slice(0, 180);
           const isLoginRedirect = /cassrv\/login|gateway=true/i.test(finalResp.url) || /cas|accedi|login/i.test(snippet);
-          return new Response(JSON.stringify({
+          return errorResponse({
             error: isLoginRedirect ? "UPSTREAM_AUTH_REQUIRED" : "UPSTREAM_HTML_RESPONSE",
             detail: isLoginRedirect
               ? "The remote GIS service redirected to an authentication page."
@@ -1019,21 +996,15 @@ serve(async (req) => {
               ? "Il server remoto richiede autenticazione e non espone un endpoint pubblico utilizzabile dal layer."
               : "Il server remoto ha risposto con una pagina HTML invece che con dati GIS.",
             snippet,
-          }), {
-            status: 502,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          }, 502);
         }
 
         if (!finalResp.ok) {
           const detail = await finalResp.text().catch(() => "");
-          return new Response(JSON.stringify({
+          return errorResponse({
             error: "WMS fetch failed",
             detail: `Upstream returned HTTP ${finalResp.status}${detail ? `: ${detail.slice(0, 180)}` : ""}`,
-          }), {
-            status: 502,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          }, 502);
         }
 
         const imageData = await finalResp.arrayBuffer();
@@ -1045,10 +1016,7 @@ serve(async (req) => {
           },
         });
       } catch (err) {
-        return new Response(JSON.stringify({ error: "WMS fetch failed", detail: String(err) }), {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse({ error: "WMS fetch failed", detail: String(err) }, 502);
       }
     }
 
