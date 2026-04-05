@@ -14,8 +14,11 @@ interface CustomLayerData {
   color: string;
   wmsUrl?: string;
   wmsLayer?: string;
+  wfsUrl?: string;
+  wfsLayer?: string;
   arcgisUrl?: string;
   arcgisLayers?: string;
+  srid?: string;
   fallbackUrls?: string[];
   description?: string;
 }
@@ -28,9 +31,12 @@ interface CustomGroupData {
 
 type Override = {
   wmsUrl?: string;
-  arcgisUrl?: string;
   wmsLayer?: string;
+  wfsUrl?: string;
+  wfsLayer?: string;
+  arcgisUrl?: string;
   arcgisLayers?: string;
+  srid?: string;
   fallbackUrls?: string[];
   deleted?: boolean;
 };
@@ -74,21 +80,35 @@ export function getMergedLayers(): LayerDef[] {
     defaultOn: false,
     wmsUrl: cl.wmsUrl,
     wmsLayer: cl.wmsLayer,
+    wfsUrl: cl.wfsUrl,
+    wfsLayer: cl.wfsLayer,
     arcgisUrl: cl.arcgisUrl,
     arcgisLayers: cl.arcgisLayers,
+    srid: cl.srid,
     fallbackUrls: cl.fallbackUrls?.filter(Boolean),
     description: cl.description,
     opacity: 0.5,
     tlsBypass: tlsBypass[cl.id] ?? false,
   }));
 
-  // Apply tlsBypass to built-in layers
-  const builtInWithTls = builtIn.map(l => ({
-    ...l,
-    tlsBypass: tlsBypass[l.id] ?? false,
-  }));
+  // Apply overrides + tlsBypass to built-in layers
+  const builtInWithOverrides = builtIn.map(l => {
+    const ov = overrides[l.id];
+    return {
+      ...l,
+      ...(ov?.wmsUrl !== undefined && { wmsUrl: ov.wmsUrl }),
+      ...(ov?.wmsLayer !== undefined && { wmsLayer: ov.wmsLayer }),
+      ...(ov?.wfsUrl !== undefined && { wfsUrl: ov.wfsUrl }),
+      ...(ov?.wfsLayer !== undefined && { wfsLayer: ov.wfsLayer }),
+      ...(ov?.arcgisUrl !== undefined && { arcgisUrl: ov.arcgisUrl }),
+      ...(ov?.arcgisLayers !== undefined && { arcgisLayers: ov.arcgisLayers }),
+      ...(ov?.srid !== undefined && { srid: ov.srid }),
+      ...(ov?.fallbackUrls !== undefined && { fallbackUrls: ov.fallbackUrls }),
+      tlsBypass: tlsBypass[l.id] ?? false,
+    };
+  });
 
-  return [...builtInWithTls, ...customDefs];
+  return [...builtInWithOverrides, ...customDefs];
 }
 
 /** Returns LAYER_GROUPS merged with custom layers and custom groups, excluding soft-deleted */
@@ -106,13 +126,32 @@ export function getMergedGroups(): LayerGroup[] {
     defaultOn: false,
     wmsUrl: cl.wmsUrl,
     wmsLayer: cl.wmsLayer,
+    wfsUrl: cl.wfsUrl,
+    wfsLayer: cl.wfsLayer,
     arcgisUrl: cl.arcgisUrl,
     arcgisLayers: cl.arcgisLayers,
+    srid: cl.srid,
     fallbackUrls: cl.fallbackUrls?.filter(Boolean),
     description: cl.description,
     opacity: 0.5,
     tlsBypass: tlsBypass[cl.id] ?? false,
   });
+
+  const applyOverrides = (l: LayerDef): LayerDef => {
+    const ov = overrides[l.id];
+    return {
+      ...l,
+      ...(ov?.wmsUrl !== undefined && { wmsUrl: ov.wmsUrl }),
+      ...(ov?.wmsLayer !== undefined && { wmsLayer: ov.wmsLayer }),
+      ...(ov?.wfsUrl !== undefined && { wfsUrl: ov.wfsUrl }),
+      ...(ov?.wfsLayer !== undefined && { wfsLayer: ov.wfsLayer }),
+      ...(ov?.arcgisUrl !== undefined && { arcgisUrl: ov.arcgisUrl }),
+      ...(ov?.arcgisLayers !== undefined && { arcgisLayers: ov.arcgisLayers }),
+      ...(ov?.srid !== undefined && { srid: ov.srid }),
+      ...(ov?.fallbackUrls !== undefined && { fallbackUrls: ov.fallbackUrls }),
+      tlsBypass: tlsBypass[l.id] ?? false,
+    };
+  };
 
   // Built-in groups (apply group overrides, skip soft-deleted groups)
   const groups: LayerGroup[] = LAYER_GROUPS
@@ -124,7 +163,7 @@ export function getMergedGroups(): LayerGroup[] {
         label: gov?.label || g.label,
         icon: gov?.icon || g.icon,
         layers: [
-          ...g.layers.filter(l => !overrides[l.id]?.deleted).map(l => ({ ...l, tlsBypass: tlsBypass[l.id] ?? false })),
+          ...g.layers.filter(l => !overrides[l.id]?.deleted).map(applyOverrides),
           ...custom.filter(cl => cl.groupId === g.id).map(toLayerDef),
         ],
       };
