@@ -264,7 +264,7 @@ export default function Index() {
                   if (l.arcgisUrl) urls.push(l.arcgisUrl);
                   if (l.wmsUrl) urls.push(l.wmsUrl);
                 }
-                probeAllServers(urls, setServerStatuses);
+                probeAllServers(urls, setServerStatuses, true);
               }}
               onProtocolChange={() => {
                 window.location.reload();
