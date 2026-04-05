@@ -838,6 +838,7 @@ serve(async (req) => {
         "idrogeo.isprambiente.it",
         "sgi2.isprambiente.it",
         "sinacloud.isprambiente.it",
+        "annuario.isprambiente.it",
         "webapps.sit.puglia.it",
         "www502.regione.toscana.it",
         "www.cartografia.servizirl.it",

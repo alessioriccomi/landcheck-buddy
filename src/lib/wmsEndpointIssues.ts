@@ -34,6 +34,7 @@ const KNOWN_OFFLINE_HOSTS: Array<{ host: string; issue: KnownEndpointIssue }> = 
   { host: "www.webms.it", issue: { status: "offline", message: "Servizio webms.it (faglie) non disponibile: dominio non in allowlist." } },
   { host: "dati.protezionecivile.it", issue: { status: "offline", message: "Servizio DPC faglie non disponibile: endpoint dismesso." } },
   { host: "www.snam.it", issue: { status: "offline", message: "Servizio WMS/WFS SNAM non disponibile: non è un endpoint GIS pubblico." } },
+  { host: "sgi2.isprambiente.it", issue: { status: "offline", message: "Servizio ITHACA (ISPRA) instabile: connessione rifiutata dal server remoto (Connection reset)." } },
 ];
 
 export function getEndpointKey(url: string): string {
