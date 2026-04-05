@@ -27,13 +27,13 @@ export interface VincoloEndpoint {
 // Uses ArcGIS REST query where available (more reliable than WFS PCN which is offline)
 export const VINCOLI_ENDPOINT_MAP: VincoloEndpoint[] = [
   // ── Beni Culturali ─────────────────────────────────────────
-  { vincoloId: "bc_01", wfsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_public/wfs", wfsLayer: "sitap_public:sitap_v1497_public", srid: "32632" },
-  { vincoloId: "bc_02", wfsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wfs", wfsLayer: "sitap_ws:tab_vir_geo_aree_archeol_vincolate", srid: "32632" },
+  { vincoloId: "bc_01", wfsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wfs", wfsLayer: "sitap_ws:wms_sitap_v1497_pol_136", srid: "4326" },
+  { vincoloId: "bc_02", wfsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wfs", wfsLayer: "sitap_ws:tab_vir_geo_aree_archeol_vincolate", srid: "4326" },
   { vincoloId: "bc_05", arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/UNESCO/MapServer", arcgisLayerIds: "0", srid: "32632" },
 
   // ── Paesaggistici Art. 142 ──────────────────────────────────
   { vincoloId: "pa_01", arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Vincoli_Paesaggistici_Art142/MapServer", arcgisLayerIds: "0,1,2,3,4,5,6,7,8,9,10", srid: "32632" },
-  { vincoloId: "pa_02", wfsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_public/wfs", wfsLayer: "sitap_public:sitap_v1497_public", srid: "32632" },
+  { vincoloId: "pa_02", wfsUrl: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wfs", wfsLayer: "sitap_ws:wms_sitap_v1497_pol_136", srid: "4326" },
   { vincoloId: "pa_04", arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Vincoli_Paesaggistici_Art142/MapServer", arcgisLayerIds: "2", srid: "32632" },
   { vincoloId: "pa_05", arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Vincoli_Paesaggistici_Art142/MapServer", arcgisLayerIds: "6", srid: "32632" },
 
