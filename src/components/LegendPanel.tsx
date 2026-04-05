@@ -6,6 +6,7 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import { LAYER_GROUPS, ALL_LAYERS, type LayerGroup } from "@/lib/layerDefinitions";
 import { getMergedGroups } from "@/lib/settingsLayers";
 import { getServerStatusForUrl, type ServerHealth, type ServerStatus, clearHealthCache, probeAllServers } from "@/lib/wmsHealthProbe";
+import { getProtocolForLayer, setProtocolForLayer, type LayerProtocol } from "@/lib/protocolPreference";
 
 interface LegendPanelProps {
   layerState: Record<string, boolean>;
