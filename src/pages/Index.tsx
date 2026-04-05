@@ -288,6 +288,7 @@ export default function Index() {
             activeLayers={layerState}
             layerOpacity={layerOpacity}
             customConstraints={activeCustomConstraints}
+            onParcelGeometries={handleParcelGeometries}
             onParcelAreaUpdate={handleParcelAreaUpdate}
             selectedParcelIds={selectedParcelIds}
             onToggleSelectParcel={handleToggleSelectParcel}
