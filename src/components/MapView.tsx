@@ -832,8 +832,7 @@ export function MapView({
         const isActive = activeLayers[id] ?? false;
         const lb = boundsLookup[id];
         const sourceUrl = (layer as L.TileLayer & { _sourceUrl?: string })._sourceUrl;
-        const knownIssue = getKnownEndpointIssue(sourceUrl);
-        const sourceStatus = knownIssue?.status ?? getServerStatusForUrl(sourceUrl, serverStatuses);
+        const sourceStatus = getServerStatusForUrl(sourceUrl, serverStatuses);
         let inBounds = true;
         if (lb && isActive) {
           const [lS, lW, lN, lE] = lb;
