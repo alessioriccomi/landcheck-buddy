@@ -138,7 +138,7 @@ export async function probeAllServers(
   for (let i = 0; i < entries.length; i += batchSize) {
     const batch = entries.slice(i, i + batchSize);
     const results = await Promise.allSettled(
-      batch.map(([, url]) => checkServerHealth(url))
+      batch.map(([, url]) => checkServerHealth(url, forceRefresh))
     );
     for (let j = 0; j < batch.length; j++) {
       const [endpointKey, url] = batch[j];
