@@ -228,20 +228,54 @@ export function LegendPanel({
                             : <EyeOff size={10} className="text-muted-foreground/40 flex-shrink-0 opacity-0 group-hover:opacity-100" />}
                         </button>
 
-                        {/* Opacity slider — shown when layer is active */}
+                        {/* Opacity slider + protocol selector — shown when layer is active */}
                         {isActive && (
-                          <div className="flex items-center gap-2 px-1.5 pb-1 ml-5">
-                            <span className="text-[9px] text-muted-foreground w-6 flex-shrink-0">
-                              {Math.round(opacity * 100)}%
-                            </span>
-                            <Slider
-                              value={[opacity * 100]}
-                              min={0}
-                              max={100}
-                              step={5}
-                              onValueChange={([v]) => onSetOpacity(l.id, v / 100)}
-                              className="flex-1 h-4"
-                            />
+                          <div className="ml-5 space-y-0.5 pb-1">
+                            <div className="flex items-center gap-2 px-1.5">
+                              <span className="text-[9px] text-muted-foreground w-6 flex-shrink-0">
+                                {Math.round(opacity * 100)}%
+                              </span>
+                              <Slider
+                                value={[opacity * 100]}
+                                min={0}
+                                max={100}
+                                step={5}
+                                onValueChange={([v]) => onSetOpacity(l.id, v / 100)}
+                                className="flex-1 h-4"
+                              />
+                            </div>
+                            {/* Protocol selector — only when multiple protocols available */}
+                            {(() => {
+                              const hasWms = !!(l.wmsUrl && l.wmsLayer);
+                              const hasArcgis = !!l.arcgisUrl;
+                              const available = [hasWms && "wms", hasArcgis && "arcgis"].filter(Boolean) as string[];
+                              if (available.length < 2) return null;
+                              const current = protocolState[l.id] || "auto";
+                              return (
+                                <div className="flex items-center gap-1 px-1.5">
+                                  <span className="text-[8px] text-muted-foreground">Protocollo:</span>
+                                  {(["auto", "wms", "arcgis"] as const).map(p => (
+                                    <button
+                                      key={p}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setProtocolForLayer(l.id, p);
+                                        setProtocolState(prev => ({ ...prev, [l.id]: p }));
+                                        onProtocolChange?.(l.id, p);
+                                      }}
+                                      className={cn(
+                                        "text-[8px] px-1.5 py-0.5 rounded border transition-colors",
+                                        current === p
+                                          ? "bg-primary text-primary-foreground border-primary"
+                                          : "border-border text-muted-foreground hover:bg-muted"
+                                      )}
+                                    >
+                                      {p === "auto" ? "Auto" : p.toUpperCase()}
+                                    </button>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
                         )}
                       </div>
