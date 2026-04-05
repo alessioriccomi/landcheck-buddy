@@ -113,7 +113,13 @@ export default function Index() {
       const activeLayers = analysisMode === "manual"
         ? mergedLayers.filter(l => layerState[l.id]).map(l => l.id)
         : undefined;
-      const result = await runAnalisiVincolistica(particelle, activeLayers);
+
+      // Compute bounding box from particelle surface areas + approximate coordinates
+      // If particelle have geometries (superficieMq), we approximate a bbox
+      // This will be used for real WFS/ArcGIS spatial queries
+      const parcelBbox = computeParcelBboxFromParticelle(particelle);
+
+      const result = await runAnalisiVincolistica(particelle, activeLayers, parcelBbox);
       setAnalisi(result);
       setStep("results");
     } catch {
