@@ -85,24 +85,15 @@ async function probeEndpoint(url: string, timeoutMs = 8000, skipTls = false): Pr
 /**
  * Check health of a server (by host), with caching.
  */
-export async function checkServerHealth(baseUrl: string): Promise<ServerHealth> {
+export async function checkServerHealth(baseUrl: string, forceRefresh = false): Promise<ServerHealth> {
   const key = getEndpointKey(baseUrl);
   const host = getEndpointHost(baseUrl);
-  const knownIssue = getKnownEndpointIssue(baseUrl);
-  if (knownIssue) {
-    const health: ServerHealth = {
-      host,
-      status: knownIssue.status,
-      checkedAt: Date.now(),
-      errorDetail: knownIssue.message,
-    };
-    healthCache.set(key, health);
-    return health;
-  }
 
-  const cached = healthCache.get(key);
-  if (cached && Date.now() - cached.checkedAt < CACHE_TTL) {
-    return cached;
+  if (!forceRefresh) {
+    const cached = healthCache.get(key);
+    if (cached && Date.now() - cached.checkedAt < CACHE_TTL) {
+      return cached;
+    }
   }
 
   const start = Date.now();
