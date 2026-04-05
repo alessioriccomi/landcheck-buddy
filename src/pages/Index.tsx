@@ -106,6 +106,14 @@ export default function Index() {
   // Analysis mode: "auto" = all applicable, "manual" = only active layers
   const [analysisMode, setAnalysisMode] = useState<"auto" | "manual">("auto");
 
+  // Compute approximate bbox from particelle (uses stored geometry bounds if available)
+  const computeParcelBboxFromParticelle = useCallback((ps: Particella[]): { south: number; west: number; north: number; east: number } | undefined => {
+    // If MapView has stored parcel geometries in the particelle objects, use them
+    // For now we return undefined — real bbox will come from MapView parcel geometry
+    // TODO: pass actual parcel GeoJSON from MapView for precise spatial queries
+    return undefined;
+  }, []);
+
   const handleAnalisi = async () => {
     if (particelle.length === 0) return;
     setStep("analyzing");
@@ -114,9 +122,6 @@ export default function Index() {
         ? mergedLayers.filter(l => layerState[l.id]).map(l => l.id)
         : undefined;
 
-      // Compute bounding box from particelle surface areas + approximate coordinates
-      // If particelle have geometries (superficieMq), we approximate a bbox
-      // This will be used for real WFS/ArcGIS spatial queries
       const parcelBbox = computeParcelBboxFromParticelle(particelle);
 
       const result = await runAnalisiVincolistica(particelle, activeLayers, parcelBbox);
