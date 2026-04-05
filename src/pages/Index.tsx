@@ -94,20 +94,26 @@ export default function Index() {
   }, []);
 
   const handleToggleAllInGroup = useCallback((groupId: string, on: boolean) => {
-    const group = LAYER_GROUPS.find(g => g.id === groupId);
+    const group = mergedGroups.find(g => g.id === groupId);
     if (!group) return;
     setLayerState(prev => {
       const next = { ...prev };
       for (const l of group.layers) next[l.id] = on;
       return next;
     });
-  }, []);
+  }, [mergedGroups]);
+
+  // Analysis mode: "auto" = all applicable, "manual" = only active layers
+  const [analysisMode, setAnalysisMode] = useState<"auto" | "manual">("auto");
 
   const handleAnalisi = async () => {
     if (particelle.length === 0) return;
     setStep("analyzing");
     try {
-      const result = await runAnalisiVincolistica(particelle);
+      const activeLayers = analysisMode === "manual"
+        ? mergedLayers.filter(l => layerState[l.id]).map(l => l.id)
+        : undefined;
+      const result = await runAnalisiVincolistica(particelle, activeLayers);
       setAnalisi(result);
       setStep("results");
     } catch {
@@ -265,6 +271,8 @@ export default function Index() {
               savedAnalysesLoading={savedAnalysesLoading}
               profile={profile}
               profileLoading={profileLoading}
+              analysisMode={analysisMode}
+              onSetAnalysisMode={setAnalysisMode}
               onSetParticelle={setParticelle}
               onToggleSelectParcel={handleToggleSelectParcel}
               onClearSelection={handleClearSelection}

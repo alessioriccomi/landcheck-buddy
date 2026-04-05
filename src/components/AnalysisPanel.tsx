@@ -32,6 +32,9 @@ interface AnalysisPanelProps {
   // Profile
   profile: UserProfile | null;
   profileLoading: boolean;
+  // Analysis mode
+  analysisMode: "auto" | "manual";
+  onSetAnalysisMode: (mode: "auto" | "manual") => void;
   onSetParticelle: (p: Particella[]) => void;
   onToggleSelectParcel: (id: string) => void;
   onClearSelection: () => void;
@@ -54,6 +57,7 @@ export function AnalysisPanel({
   isAuthenticated, user, constraints,
   savedAnalyses, savedAnalysesLoading,
   profile, profileLoading,
+  analysisMode, onSetAnalysisMode,
   onSetParticelle, onToggleSelectParcel, onClearSelection,
   onAnalisi, onReset, onExportPDF,
   onAuthOpen, onSignOut,
@@ -167,6 +171,39 @@ export function AnalysisPanel({
               onClearSelection={onClearSelection}
             />
             <div className="pt-2 border-t border-border space-y-2">
+              {/* Analysis mode selector */}
+              {step === "input" && particelle.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] font-semibold text-foreground">Modalità analisi</p>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => onSetAnalysisMode("auto")}
+                      className={`flex-1 text-[10px] px-2 py-1.5 rounded-md border transition-colors ${
+                        analysisMode === "auto"
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-card text-muted-foreground border-border hover:border-primary/50"
+                      }`}
+                    >
+                      🔄 Automatica
+                    </button>
+                    <button
+                      onClick={() => onSetAnalysisMode("manual")}
+                      className={`flex-1 text-[10px] px-2 py-1.5 rounded-md border transition-colors ${
+                        analysisMode === "manual"
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-card text-muted-foreground border-border hover:border-primary/50"
+                      }`}
+                    >
+                      👁️ Layer attivi
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground leading-tight">
+                    {analysisMode === "auto"
+                      ? "Analizza tutti i vincoli applicabili alle particelle"
+                      : "Analizza solo i vincoli dei layer attualmente accesi nella legenda"}
+                  </p>
+                </div>
+              )}
               {step === "input" && (
                 <Button onClick={onAnalisi} disabled={particelle.length === 0} className="w-full gap-2 h-9 text-xs">
                   <FileSearch size={14} />

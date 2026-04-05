@@ -1037,7 +1037,7 @@ function computeRischioComplessivo(allVincoli: VincoloItem[]): AnalisiVincolisti
   return "nessuno";
 }
 
-export async function runAnalisiVincolistica(particelle: Particella[]): Promise<AnalisiVincolistica> {
+export async function runAnalisiVincolistica(particelle: Particella[], _activeLayers?: string[]): Promise<AnalisiVincolistica> {
   await delay(2800);
 
   const partial = {
