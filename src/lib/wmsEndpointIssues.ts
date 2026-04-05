@@ -30,6 +30,10 @@ const KNOWN_OFFLINE_HOSTS: Array<{ host: string; issue: KnownEndpointIssue }> = 
   { host: "wms.cartografia.agenziaentrate.gov.it", issue: { status: "offline", message: "Servizio WMS Catasto (Inspire) non disponibile: risponde con errore HTTP 500." } },
   { host: "gis.snam.it", issue: { status: "offline", message: "Dominio SNAM non risolve via DNS: servizio non raggiungibile." } },
   { host: "gnac.beniculturali.it", issue: { status: "offline", message: "Dominio GNAC (vincoli archeologici) non risolve via DNS: servizio non raggiungibile." } },
+  { host: "sig.beniculturali.it", issue: { status: "offline", message: "Dominio sig.beniculturali.it non risolve via DNS: servizio non raggiungibile." } },
+  { host: "www.webms.it", issue: { status: "offline", message: "Servizio webms.it (faglie) non disponibile: dominio non in allowlist." } },
+  { host: "dati.protezionecivile.it", issue: { status: "offline", message: "Servizio DPC faglie non disponibile: endpoint dismesso." } },
+  { host: "www.snam.it", issue: { status: "offline", message: "Servizio WMS/WFS SNAM non disponibile: non è un endpoint GIS pubblico." } },
 ];
 
 export function getEndpointKey(url: string): string {
