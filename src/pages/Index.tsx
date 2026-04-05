@@ -271,6 +271,8 @@ export default function Index() {
               savedAnalysesLoading={savedAnalysesLoading}
               profile={profile}
               profileLoading={profileLoading}
+              analysisMode={analysisMode}
+              onSetAnalysisMode={setAnalysisMode}
               onSetParticelle={setParticelle}
               onToggleSelectParcel={handleToggleSelectParcel}
               onClearSelection={handleClearSelection}
