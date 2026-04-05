@@ -986,12 +986,11 @@ export const LAYER_GROUPS: LayerGroup[] = [
         label: "O4. Metanodotti SNAM (fasce rispetto)",
         color: "#f59e0b",
         defaultOn: false,
-        arcgisUrl: "https://gis.snam.it/arcgis/rest/services/Public/Rete_Trasporto_Gas/MapServer",
-        wmsUrl: "https://www.snam.it/wms",
-        wfsUrl: "https://www.snam.it/wfs",
+        // gis.snam.it DNS failure, www.snam.it non è endpoint GIS
+        // Nessun endpoint pubblico alternativo disponibile
         srid: "32632",
         opacity: 0.5,
-        description: "Rete trasporto gas SNAM — fasce di rispetto D.M. 17/04/2008",
+        description: "Rete trasporto gas SNAM — fasce di rispetto D.M. 17/04/2008. ⚠️ Nessun endpoint GIS pubblico disponibile",
       },
       {
         id: "aree_militari",
