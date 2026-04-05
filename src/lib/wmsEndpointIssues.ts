@@ -28,6 +28,8 @@ const KNOWN_OFFLINE_HOSTS: Array<{ host: string; issue: KnownEndpointIssue }> = 
   { host: "geoportale.regione.abruzzo.it", issue: { status: "offline", message: "Endpoint Abruzzo non pubblico o non in allowlist." } },
   { host: "www.umbriageo.regione.umbria.it", issue: { status: "tls_error", message: "Il server Umbria ha un certificato TLS non valido; abilita il bypass TLS per usarlo." } },
   { host: "wms.cartografia.agenziaentrate.gov.it", issue: { status: "offline", message: "Servizio WMS Catasto (Inspire) non disponibile: risponde con errore HTTP 500." } },
+  { host: "gis.snam.it", issue: { status: "offline", message: "Dominio SNAM non risolve via DNS: servizio non raggiungibile." } },
+  { host: "gnac.beniculturali.it", issue: { status: "offline", message: "Dominio GNAC (vincoli archeologici) non risolve via DNS: servizio non raggiungibile." } },
 ];
 
 export function getEndpointKey(url: string): string {
