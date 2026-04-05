@@ -181,6 +181,7 @@ export default function Index() {
     setStep("input");
     setAnalisi(null);
     setParticelle([]);
+    setParcelGeometries({});
   };
 
   const handleExportPDF = async () => {
