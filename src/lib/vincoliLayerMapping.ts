@@ -109,7 +109,7 @@ export function buildSpatialQueryUrl(
   if (endpoint.wfsUrl && endpoint.wfsLayer) {
     const queryUrl = `${endpoint.wfsUrl}?` +
       `SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature` +
-      `&TYPENAMES=${encodeURIComponent(endpoint.wfsLayer)}` +
+      `&TYPENAMES=${endpoint.wfsLayer}` +
       `&SRSNAME=urn:ogc:def:crs:EPSG::4326` +
       `&BBOX=${bbox.south},${bbox.west},${bbox.north},${bbox.east},EPSG:4326` +
       `&COUNT=1` +
