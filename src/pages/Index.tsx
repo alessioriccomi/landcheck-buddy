@@ -167,7 +167,7 @@ export default function Index() {
         ? mergedLayers.filter(l => layerState[l.id]).map(l => l.id)
         : undefined;
 
-      const parcelBbox = computeParcelBboxFromParticelle(particelle);
+      const parcelBbox = computeParcelBbox();
 
       const result = await runAnalisiVincolistica(particelle, activeLayers, parcelBbox);
       setAnalisi(result);
