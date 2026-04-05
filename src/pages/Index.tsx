@@ -103,11 +103,17 @@ export default function Index() {
     });
   }, [mergedGroups]);
 
+  // Analysis mode: "auto" = all applicable, "manual" = only active layers
+  const [analysisMode, setAnalysisMode] = useState<"auto" | "manual">("auto");
+
   const handleAnalisi = async () => {
     if (particelle.length === 0) return;
     setStep("analyzing");
     try {
-      const result = await runAnalisiVincolistica(particelle);
+      const activeLayers = analysisMode === "manual"
+        ? mergedLayers.filter(l => layerState[l.id]).map(l => l.id)
+        : undefined;
+      const result = await runAnalisiVincolistica(particelle, activeLayers);
       setAnalisi(result);
       setStep("results");
     } catch {
