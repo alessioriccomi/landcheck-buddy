@@ -121,12 +121,19 @@ export default function Settings() {
       } else {
         probeUrl = `${url}${url.includes("?") ? "&" : "?"}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities`;
       }
-      const resp = await fetch(`${SUPABASE_URL}/functions/v1/wfs-proxy?mode=wms_ext&url=${encodeURIComponent(probeUrl)}${skip ? "&skipTls=true" : ""}`, {
+      const resp = await fetch(`${SUPABASE_URL}/functions/v1/wfs-proxy?mode=wms_ext&probe=true&url=${encodeURIComponent(probeUrl)}${skip ? "&skipTls=true" : ""}`, {
         headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
         signal: AbortSignal.timeout(15000),
       });
       const text = await resp.text();
-      const ok = resp.ok && !text.includes("503 Service") && !text.includes("Pagina non trovata") && !text.includes("<title>40");
+      let hasProxyError = false;
+      try {
+        const maybeJson = JSON.parse(text);
+        hasProxyError = !!maybeJson?.error;
+      } catch {
+        hasProxyError = false;
+      }
+      const ok = resp.ok && !hasProxyError && !text.includes("503 Service") && !text.includes("Pagina non trovata") && !text.includes("<title>40");
       setTestingUrls(prev => ({ ...prev, [url]: ok ? "online" : "offline" }));
 
       // Auto-fill sub-fields from capabilities response
