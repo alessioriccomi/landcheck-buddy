@@ -839,6 +839,7 @@ serve(async (req) => {
         "sgi2.isprambiente.it",
         "sinacloud.isprambiente.it",
         "annuario.isprambiente.it",
+        "geoportale.enac.gov.it",
         "webapps.sit.puglia.it",
         "www502.regione.toscana.it",
         "www.cartografia.servizirl.it",
