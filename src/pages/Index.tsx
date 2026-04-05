@@ -209,6 +209,9 @@ export default function Index() {
                 }
                 probeAllServers(urls, setServerStatuses);
               }}
+              onProtocolChange={() => {
+                window.location.reload();
+              }}
             />
           </div>
         </aside>
