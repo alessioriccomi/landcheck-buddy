@@ -57,6 +57,7 @@ export function AnalysisPanel({
   isAuthenticated, user, constraints,
   savedAnalyses, savedAnalysesLoading,
   profile, profileLoading,
+  analysisMode, onSetAnalysisMode,
   onSetParticelle, onToggleSelectParcel, onClearSelection,
   onAnalisi, onReset, onExportPDF,
   onAuthOpen, onSignOut,
