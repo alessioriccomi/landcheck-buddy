@@ -27,8 +27,12 @@ export function LegendPanel({
   onToggleAllInGroup,
   serverStatuses = {},
   onRefreshStatuses,
+  onProtocolChange,
 }: LegendPanelProps) {
   const mergedGroups = getMergedGroups();
+  const [protocolState, setProtocolState] = useState<Record<string, LayerProtocol>>(() => {
+    try { return JSON.parse(localStorage.getItem("lc_layer_protocol") || "{}"); } catch { return {}; }
+  });
 
   // Normativa di riferimento per gruppo con link
   const GROUP_NORMATIVA: Record<string, { text: string; url?: string }> = {
