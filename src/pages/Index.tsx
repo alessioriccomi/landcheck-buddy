@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { Map, Download, Loader2, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LegendPanel } from "@/components/LegendPanel";
@@ -106,6 +106,14 @@ export default function Index() {
   // Analysis mode: "auto" = all applicable, "manual" = only active layers
   const [analysisMode, setAnalysisMode] = useState<"auto" | "manual">("auto");
 
+  // Compute approximate bbox from particelle (uses stored geometry bounds if available)
+  const computeParcelBboxFromParticelle = useCallback((ps: Particella[]): { south: number; west: number; north: number; east: number } | undefined => {
+    // If MapView has stored parcel geometries in the particelle objects, use them
+    // For now we return undefined — real bbox will come from MapView parcel geometry
+    // TODO: pass actual parcel GeoJSON from MapView for precise spatial queries
+    return undefined;
+  }, []);
+
   const handleAnalisi = async () => {
     if (particelle.length === 0) return;
     setStep("analyzing");
@@ -113,7 +121,10 @@ export default function Index() {
       const activeLayers = analysisMode === "manual"
         ? mergedLayers.filter(l => layerState[l.id]).map(l => l.id)
         : undefined;
-      const result = await runAnalisiVincolistica(particelle, activeLayers);
+
+      const parcelBbox = computeParcelBboxFromParticelle(particelle);
+
+      const result = await runAnalisiVincolistica(particelle, activeLayers, parcelBbox);
       setAnalisi(result);
       setStep("results");
     } catch {

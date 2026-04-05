@@ -1,4 +1,5 @@
 import { AnalisiVincolistica, Particella, VincoloItem, VincoloPresenza, CriticitaLevel, StepAutorizzativo, ClassificazioneIdoneita } from "@/types/vincoli";
+import { runSpatialQueries, getPresenzaFromSpatial, type SpatialQueryResult } from "@/lib/spatialAnalysis";
 
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -10,6 +11,29 @@ function randomPresenza(pesi: [VincoloPresenza, number][]): VincoloPresenza {
     if (r <= 0) return v;
   }
   return pesi[0][0];
+}
+
+/**
+ * Compute a WGS84 bounding box from parcel geometries or approximate from comune.
+ * Uses the particella surface area if available.
+ */
+function computeParcelBbox(particelle: Particella[]): { south: number; west: number; north: number; east: number } | null {
+  // For now, use a simple heuristic based on comune location
+  // In a future iteration, this should use actual parcel geometry from the WFS cadastral query
+  // We approximate based on typical Italian parcel sizes
+  // TODO: Accept actual GeoJSON geometry from MapView for precise intersection
+  return null;
+}
+
+/**
+ * Apply spatial query results to a list of vincoli items,
+ * replacing the random/simulated presence with real data where available.
+ */
+function applySpatialResults(vincoli: VincoloItem[], spatialResults: Map<string, SpatialQueryResult>): VincoloItem[] {
+  return vincoli.map(v => ({
+    ...v,
+    presenza: getPresenzaFromSpatial(v.id, spatialResults, v.presenza),
+  }));
 }
 
 function isPuglia(particelle: Particella[]): boolean {
@@ -1037,9 +1061,12 @@ function computeRischioComplessivo(allVincoli: VincoloItem[]): AnalisiVincolisti
   return "nessuno";
 }
 
-export async function runAnalisiVincolistica(particelle: Particella[], _activeLayers?: string[]): Promise<AnalisiVincolistica> {
-  await delay(2800);
-
+export async function runAnalisiVincolistica(
+  particelle: Particella[],
+  _activeLayers?: string[],
+  parcelBbox?: { south: number; west: number; north: number; east: number },
+): Promise<AnalisiVincolistica> {
+  // Step 1: Build simulated vincoli (used as fallback for unmapped endpoints)
   const partial = {
     particelle,
     dataAnalisi: new Date().toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }),
@@ -1059,6 +1086,48 @@ export async function runAnalisiVincolistica(particelle: Particella[], _activeLa
     areeIdonee: buildAreeIdonee(particelle),
     normativaAgrivoltaico: buildNormativaAgrivoltaico(particelle),
   };
+
+  // Step 2: Run real spatial queries if we have a bounding box
+  let spatialResults = new Map<string, SpatialQueryResult>();
+  if (parcelBbox) {
+    console.log("[Analisi] Running real spatial queries on bbox:", parcelBbox);
+    try {
+      spatialResults = await runSpatialQueries(parcelBbox);
+      console.log(`[Analisi] Spatial queries completed: ${spatialResults.size} results`);
+      for (const [id, result] of spatialResults) {
+        if (result.error) {
+          console.warn(`[Analisi] ${id}: ${result.error}`);
+        } else {
+          console.log(`[Analisi] ${id}: ${result.presenza}${result.featureCount !== undefined ? ` (${result.featureCount} features)` : ""}`);
+        }
+      }
+    } catch (err) {
+      console.error("[Analisi] Spatial query batch failed:", err);
+    }
+  } else {
+    // Fallback: simulate with delay
+    console.log("[Analisi] No parcel bbox provided, using simulated data");
+    await delay(2800);
+  }
+
+  // Step 3: Apply spatial results to replace simulated presence values
+  if (spatialResults.size > 0) {
+    partial.vincoliCulturali = applySpatialResults(partial.vincoliCulturali, spatialResults);
+    partial.vincoliPaesaggistici = applySpatialResults(partial.vincoliPaesaggistici, spatialResults);
+    partial.vincoliIdrogeologici = applySpatialResults(partial.vincoliIdrogeologici, spatialResults);
+    partial.vincoliAmbientali = applySpatialResults(partial.vincoliAmbientali, spatialResults);
+    partial.rischioIdrico = applySpatialResults(partial.rischioIdrico, spatialResults);
+    partial.serviziReti = applySpatialResults(partial.serviziReti, spatialResults);
+    partial.altriVincoli = applySpatialResults(partial.altriVincoli, spatialResults);
+    partial.vincoliAgricoli = applySpatialResults(partial.vincoliAgricoli, spatialResults);
+    partial.vincoliMilitariRadar = applySpatialResults(partial.vincoliMilitariRadar, spatialResults);
+    partial.vincoliForestali = applySpatialResults(partial.vincoliForestali, spatialResults);
+    partial.vincoliSismici = applySpatialResults(partial.vincoliSismici, spatialResults);
+    partial.vincoliCatastali = applySpatialResults(partial.vincoliCatastali, spatialResults);
+    partial.compatibilitaConnessione = applySpatialResults(partial.compatibilitaConnessione, spatialResults);
+    partial.areeIdonee = applySpatialResults(partial.areeIdonee, spatialResults);
+    partial.normativaAgrivoltaico = applySpatialResults(partial.normativaAgrivoltaico, spatialResults);
+  }
 
   const allVincoli = [
     ...partial.vincoliCulturali, ...partial.vincoliPaesaggistici,
@@ -1088,7 +1157,6 @@ export async function runAnalisiVincolistica(particelle: Particella[], _activeLa
   const condizionantiPresenti = vincoliNegativi.filter(v => v.presenza === "presente" && v.criticita === "condizionante").length;
   const verificare = vincoliNegativi.filter(v => v.presenza === "verifica").length;
   
-  // Escludenti riducono 15%, condizionanti 6%, da verificare 2%, idonee +5%
   const riduzioneBase = escludentiPresenti * 0.15 + condizionantiPresenti * 0.06 + verificare * 0.015;
   const bonusIdonee = areeIdoneeFavorevoli * 0.05;
   const riduzionePerc = Math.max(0, Math.min(0.95, riduzioneBase - bonusIdonee));

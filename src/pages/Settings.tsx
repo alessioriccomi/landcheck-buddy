@@ -587,6 +587,13 @@ export default function Settings() {
 
     return (
       <div key={layer.id} className={`px-3 py-2.5 space-y-1.5 ${isDeleted ? "opacity-40" : ""}`}>
+        {/* System-managed layer note */}
+        {layer.id === "catasto" && !isCustom && (
+          <div className="flex items-center gap-1.5 bg-primary/5 border border-primary/20 rounded px-2 py-1 mb-1">
+            <span className="text-[9px]">🔒</span>
+            <span className="text-[9px] text-primary font-medium">Layer gestito dal sistema — gli endpoint catastali sono integrati nel motore di ricerca WFS interno</span>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: layer.color }} />
           <span className={`text-[11px] font-medium flex-1 ${isDeleted ? "line-through" : ""}`}>
