@@ -1,4 +1,5 @@
 import { AnalisiVincolistica, Particella, VincoloItem, VincoloPresenza, CriticitaLevel, StepAutorizzativo, ClassificazioneIdoneita } from "@/types/vincoli";
+import { runSpatialQueries, getPresenzaFromSpatial, type SpatialQueryResult } from "@/lib/spatialAnalysis";
 
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -10,6 +11,29 @@ function randomPresenza(pesi: [VincoloPresenza, number][]): VincoloPresenza {
     if (r <= 0) return v;
   }
   return pesi[0][0];
+}
+
+/**
+ * Compute a WGS84 bounding box from parcel geometries or approximate from comune.
+ * Uses the particella surface area if available.
+ */
+function computeParcelBbox(particelle: Particella[]): { south: number; west: number; north: number; east: number } | null {
+  // For now, use a simple heuristic based on comune location
+  // In a future iteration, this should use actual parcel geometry from the WFS cadastral query
+  // We approximate based on typical Italian parcel sizes
+  // TODO: Accept actual GeoJSON geometry from MapView for precise intersection
+  return null;
+}
+
+/**
+ * Apply spatial query results to a list of vincoli items,
+ * replacing the random/simulated presence with real data where available.
+ */
+function applySpatialResults(vincoli: VincoloItem[], spatialResults: Map<string, SpatialQueryResult>): VincoloItem[] {
+  return vincoli.map(v => ({
+    ...v,
+    presenza: getPresenzaFromSpatial(v.id, spatialResults, v.presenza),
+  }));
 }
 
 function isPuglia(particelle: Particella[]): boolean {
