@@ -94,14 +94,14 @@ export default function Index() {
   }, []);
 
   const handleToggleAllInGroup = useCallback((groupId: string, on: boolean) => {
-    const group = LAYER_GROUPS.find(g => g.id === groupId);
+    const group = mergedGroups.find(g => g.id === groupId);
     if (!group) return;
     setLayerState(prev => {
       const next = { ...prev };
       for (const l of group.layers) next[l.id] = on;
       return next;
     });
-  }, []);
+  }, [mergedGroups]);
 
   const handleAnalisi = async () => {
     if (particelle.length === 0) return;
