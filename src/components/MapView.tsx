@@ -472,17 +472,17 @@ export function MapView({
         const wLayer = ov?.wmsLayer || layerDef.wmsLayer;
 
         const pref = protocolPrefs[layerDef.id] || "auto";
-        const arcOffline = arcUrl ? !!getKnownEndpointIssue(arcUrl) : false;
 
-        // Protocol selection logic
+        // Protocol selection logic — uses real-time serverStatuses instead of hardcoded list
         let useWms = false;
         if (pref === "wms" && wUrl && wLayer) {
           useWms = true;
         } else if (pref === "arcgis" && arcUrl) {
           useWms = false;
         } else {
-          // Auto: prefer WMS when ArcGIS is offline
-          useWms = !!(wUrl && wLayer && (!arcUrl || arcOffline));
+          // Auto: prefer ArcGIS, but fall back to WMS if ArcGIS URL is offline per live health check
+          const arcLiveOffline = arcUrl ? (getServerStatusForUrl(arcUrl, serverStatuses) === "offline") : false;
+          useWms = !!(wUrl && wLayer && (!arcUrl || arcLiveOffline));
         }
 
         if (useWms) {
