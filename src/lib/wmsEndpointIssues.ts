@@ -27,6 +27,7 @@ const KNOWN_OFFLINE_HOSTS: Array<{ host: string; issue: KnownEndpointIssue }> = 
   { host: "srvcarto.regione.liguria.it", issue: { status: "offline", message: "Endpoint Liguria non pubblico: risponde con pagina HTML 404." } },
   { host: "geoportale.regione.abruzzo.it", issue: { status: "offline", message: "Endpoint Abruzzo non pubblico o non in allowlist." } },
   { host: "www.umbriageo.regione.umbria.it", issue: { status: "tls_error", message: "Il server Umbria ha un certificato TLS non valido; abilita il bypass TLS per usarlo." } },
+  { host: "wms.cartografia.agenziaentrate.gov.it", issue: { status: "offline", message: "Servizio WMS Catasto (Inspire) non disponibile: risponde con errore HTTP 500." } },
 ];
 
 export function getEndpointKey(url: string): string {
