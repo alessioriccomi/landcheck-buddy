@@ -462,6 +462,7 @@ export function MapView({
 
     // Create all WMS layers (merged: built-in + custom from settings)
     const mergedLayers = getMergedLayers();
+    const protocolPrefs = getProtocolPreferences();
     for (const layerDef of mergedLayers) {
       try {
         const ov = urlOverrides[layerDef.id];
@@ -470,9 +471,19 @@ export function MapView({
         const wUrl = ov?.wmsUrl || layerDef.wmsUrl;
         const wLayer = ov?.wmsLayer || layerDef.wmsLayer;
 
-        // Prefer WMS when the ArcGIS host is known-offline
+        const pref = protocolPrefs[layerDef.id] || "auto";
         const arcOffline = arcUrl ? !!getKnownEndpointIssue(arcUrl) : false;
-        const useWms = wUrl && wLayer && (!arcUrl || arcOffline);
+
+        // Protocol selection logic
+        let useWms = false;
+        if (pref === "wms" && wUrl && wLayer) {
+          useWms = true;
+        } else if (pref === "arcgis" && arcUrl) {
+          useWms = false;
+        } else {
+          // Auto: prefer WMS when ArcGIS is offline
+          useWms = !!(wUrl && wLayer && (!arcUrl || arcOffline));
+        }
 
         if (useWms) {
           const layer = makeProxiedWmsLayer(wUrl!, wLayer!, layerDef.opacity ?? 0.5, layerDef.tlsBypass);
