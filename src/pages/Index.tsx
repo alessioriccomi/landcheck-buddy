@@ -106,13 +106,58 @@ export default function Index() {
   // Analysis mode: "auto" = all applicable, "manual" = only active layers
   const [analysisMode, setAnalysisMode] = useState<"auto" | "manual">("auto");
 
-  // Compute approximate bbox from particelle (uses stored geometry bounds if available)
-  const computeParcelBboxFromParticelle = useCallback((ps: Particella[]): { south: number; west: number; north: number; east: number } | undefined => {
-    // If MapView has stored parcel geometries in the particelle objects, use them
-    // For now we return undefined — real bbox will come from MapView parcel geometry
-    // TODO: pass actual parcel GeoJSON from MapView for precise spatial queries
-    return undefined;
+  // Store parcel geometries from MapView for real spatial queries
+  const [parcelGeometries, setParcelGeometries] = useState<Record<string, any[][]>>({});
+
+  const handleParcelGeometries = useCallback((geoms: Record<string, any[][]>) => {
+    setParcelGeometries(geoms);
   }, []);
+
+  // Compute real bbox from parcel geometries or _clickGeometry
+  const computeParcelBbox = useCallback((): { south: number; west: number; north: number; east: number } | undefined => {
+    let south = 90, north = -90, west = 180, east = -180;
+    let found = false;
+
+    // Try stored geometries from MapView
+    for (const rings of Object.values(parcelGeometries)) {
+      for (const ring of rings) {
+        for (const pt of ring) {
+          const lat = Array.isArray(pt) ? pt[0] : (pt as any).lat;
+          const lng = Array.isArray(pt) ? pt[1] : (pt as any).lng;
+          if (typeof lat === "number" && typeof lng === "number") {
+            south = Math.min(south, lat);
+            north = Math.max(north, lat);
+            west = Math.min(west, lng);
+            east = Math.max(east, lng);
+            found = true;
+          }
+        }
+      }
+    }
+
+    // Fallback: try _clickGeometry on particelle
+    if (!found) {
+      for (const p of particelle) {
+        const cg = (p as any)._clickGeometry as [number, number][][] | undefined;
+        if (cg) {
+          for (const ring of cg) {
+            for (const [lat, lng] of ring) {
+              south = Math.min(south, lat);
+              north = Math.max(north, lat);
+              west = Math.min(west, lng);
+              east = Math.max(east, lng);
+              found = true;
+            }
+          }
+        }
+      }
+    }
+
+    if (!found) return undefined;
+    // Add small buffer (~50m)
+    const buf = 0.0005;
+    return { south: south - buf, north: north + buf, west: west - buf, east: east + buf };
+  }, [parcelGeometries, particelle]);
 
   const handleAnalisi = async () => {
     if (particelle.length === 0) return;
@@ -122,7 +167,7 @@ export default function Index() {
         ? mergedLayers.filter(l => layerState[l.id]).map(l => l.id)
         : undefined;
 
-      const parcelBbox = computeParcelBboxFromParticelle(particelle);
+      const parcelBbox = computeParcelBbox();
 
       const result = await runAnalisiVincolistica(particelle, activeLayers, parcelBbox);
       setAnalisi(result);
@@ -136,6 +181,7 @@ export default function Index() {
     setStep("input");
     setAnalisi(null);
     setParticelle([]);
+    setParcelGeometries({});
   };
 
   const handleExportPDF = async () => {
@@ -243,6 +289,7 @@ export default function Index() {
             activeLayers={layerState}
             layerOpacity={layerOpacity}
             customConstraints={activeCustomConstraints}
+            onParcelGeometries={handleParcelGeometries}
             onParcelAreaUpdate={handleParcelAreaUpdate}
             selectedParcelIds={selectedParcelIds}
             onToggleSelectParcel={handleToggleSelectParcel}
