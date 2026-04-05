@@ -23,9 +23,12 @@ type GroupOverrides = Record<string, GroupOverride>;
 
 type Override = {
   wmsUrl?: string;
-  arcgisUrl?: string;
   wmsLayer?: string;
+  wfsUrl?: string;
+  wfsLayer?: string;
+  arcgisUrl?: string;
   arcgisLayers?: string;
+  srid?: string;
   fallbackUrls?: string[];
   deleted?: boolean;
 };
@@ -38,8 +41,11 @@ interface CustomLayer {
   color: string;
   wmsUrl?: string;
   wmsLayer?: string;
+  wfsUrl?: string;
+  wfsLayer?: string;
   arcgisUrl?: string;
   arcgisLayers?: string;
+  srid?: string;
   fallbackUrls?: string[];
   description?: string;
 }
@@ -93,8 +99,8 @@ export default function Settings() {
 
   const markDirty = () => setDirty(true);
 
-  // ── Test connection ──
-  const testUrl = async (url: string, layerId?: string) => {
+  // ── Test connection with auto-fill ──
+  const testUrl = async (url: string, layerId?: string, urlType?: "wms" | "wfs" | "arcgis", isCustom?: boolean) => {
     if (!url) return;
     setTestingUrls(prev => ({ ...prev, [url]: "checking" }));
     const knownIssue = getKnownEndpointIssue(url);
@@ -105,8 +111,16 @@ export default function Settings() {
     }
     try {
       const skip = layerId ? (tlsBypass[layerId] ?? false) : false;
-      const isArcgis = url.includes("/rest/services/") || url.includes("/MapServer");
-      const probeUrl = isArcgis ? `${url}${url.includes("?") ? "&" : "?"}f=json` : `${url}${url.includes("?") ? "&" : "?"}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities`;
+      const isArcgis = urlType === "arcgis" || url.includes("/rest/services/") || url.includes("/MapServer");
+      const isWfs = urlType === "wfs";
+      let probeUrl: string;
+      if (isArcgis) {
+        probeUrl = `${url}${url.includes("?") ? "&" : "?"}f=json`;
+      } else if (isWfs) {
+        probeUrl = `${url}${url.includes("?") ? "&" : "?"}SERVICE=WFS&VERSION=2.0.0&REQUEST=GetCapabilities`;
+      } else {
+        probeUrl = `${url}${url.includes("?") ? "&" : "?"}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities`;
+      }
       const resp = await fetch(`${SUPABASE_URL}/functions/v1/wfs-proxy?mode=wms_ext&url=${encodeURIComponent(probeUrl)}${skip ? "&skipTls=true" : ""}`, {
         headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
         signal: AbortSignal.timeout(15000),
@@ -114,9 +128,71 @@ export default function Settings() {
       const text = await resp.text();
       const ok = resp.ok && !text.includes("503 Service") && !text.includes("Pagina non trovata") && !text.includes("<title>40");
       setTestingUrls(prev => ({ ...prev, [url]: ok ? "online" : "offline" }));
+
+      // Auto-fill sub-fields from capabilities response
+      if (ok && layerId) {
+        try {
+          if (isArcgis) {
+            const json = JSON.parse(text);
+            // Try to extract SRID from spatialReference
+            const srid = json.spatialReference?.wkid || json.spatialReference?.latestWkid;
+            if (srid && layerId) {
+              autoFillField(layerId, "srid", String(srid), isCustom);
+            }
+            // Try to extract layers list for arcgisLayers
+            if (json.layers && json.layers.length > 0) {
+              const layerIds = json.layers.map((l: any) => l.id).join(",");
+              // Only auto-fill if currently empty
+              autoFillField(layerId, "arcgisLayers", `show:${layerIds}`, isCustom, true);
+            }
+          } else {
+            // Parse WMS/WFS capabilities XML for layers and SRS
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(text, "text/xml");
+            // Try to get SRID from CRS/SRS elements
+            const crsEls = xml.querySelectorAll("CRS, SRS");
+            if (crsEls.length > 0) {
+              const crsText = crsEls[0].textContent || "";
+              const match = crsText.match(/EPSG:(\d+)/);
+              if (match) {
+                autoFillField(layerId, "srid", match[1], isCustom);
+              }
+            }
+            // Try to get layer names
+            const layerEls = xml.querySelectorAll("Layer > Name");
+            if (layerEls.length > 0 && layerId) {
+              const firstLayerName = layerEls[0].textContent || "";
+              if (firstLayerName) {
+                const fieldName = isWfs ? "wfsLayer" : "wmsLayer";
+                autoFillField(layerId, fieldName, firstLayerName, isCustom, true);
+              }
+            }
+          }
+        } catch {
+          // Silent fail on auto-fill parsing
+        }
+      }
     } catch {
       setTestingUrls(prev => ({ ...prev, [url]: "offline" }));
     }
+  };
+
+  // Auto-fill a field (only if empty when onlyIfEmpty is true)
+  const autoFillField = (layerId: string, field: string, value: string, isCustom?: boolean, onlyIfEmpty?: boolean) => {
+    if (isCustom) {
+      setCustomLayers(prev => prev.map(l => {
+        if (l.id !== layerId) return l;
+        if (onlyIfEmpty && (l as any)[field]) return l;
+        return { ...l, [field]: value };
+      }));
+    } else {
+      setOverrides(prev => {
+        const ov = prev[layerId] || {};
+        if (onlyIfEmpty && (ov as any)[field]) return prev;
+        return { ...prev, [layerId]: { ...ov, [field]: value } };
+      });
+    }
+    markDirty();
   };
 
   // ── TLS bypass toggle ──
@@ -220,7 +296,7 @@ export default function Settings() {
   // ── Custom layer CRUD ──
   const addCustomLayer = (groupId: string) => {
     if (!newLayer.label) { toast.error("Inserisci un nome per il vincolo"); return; }
-    if (!newLayer.wmsUrl && !newLayer.arcgisUrl) { toast.error("Inserisci almeno un URL (WMS o ArcGIS)"); return; }
+    if (!newLayer.wmsUrl && !newLayer.wfsUrl && !newLayer.arcgisUrl) { toast.error("Inserisci almeno un URL (WMS, WFS o ArcGIS)"); return; }
     const cl: CustomLayer = {
       id: generateId(),
       groupId,
@@ -228,8 +304,11 @@ export default function Settings() {
       color: newLayer.color || "#ff6b6b",
       wmsUrl: newLayer.wmsUrl,
       wmsLayer: newLayer.wmsLayer,
+      wfsUrl: newLayer.wfsUrl,
+      wfsLayer: newLayer.wfsLayer,
       arcgisUrl: newLayer.arcgisUrl,
       arcgisLayers: newLayer.arcgisLayers,
+      srid: newLayer.srid,
       fallbackUrls: newLayer.fallbackUrls?.filter(Boolean),
       description: newLayer.description,
     };
@@ -292,7 +371,6 @@ export default function Settings() {
     if (isCustom) {
       setCustomGroups(prev => prev.map(g => g.id === groupId ? { ...g, label: editGroupData.label, icon: editGroupData.icon } : g));
     } else {
-      // Built-in group: store override
       setGroupOverrides(prev => ({ ...prev, [groupId]: { ...prev[groupId], label: editGroupData.label, icon: editGroupData.icon } }));
     }
     setEditingGroup(null);
@@ -305,7 +383,6 @@ export default function Settings() {
       setCustomLayers(prev => prev.map(l => l.groupId === groupId ? { ...l, groupId: "_orphan" } : l));
       setCustomGroups(prev => prev.filter(g => g.id !== groupId));
     } else {
-      // Built-in group: soft-delete via override
       setGroupOverrides(prev => ({ ...prev, [groupId]: { ...prev[groupId], deleted: true } }));
     }
     markDirty();
@@ -364,7 +441,7 @@ export default function Settings() {
 
   const lowerSearch = search.toLowerCase();
 
-  // Build full group list: built-in (with overrides applied, excluding soft-deleted) + custom groups
+  // Build full group list
   const allGroups: (LayerGroup & { isCustomGroup?: boolean; isDeletedGroup?: boolean; hasGroupOverride?: boolean })[] = [
     ...LAYER_GROUPS.map(g => {
       const ov = groupOverrides[g.id];
@@ -386,7 +463,6 @@ export default function Settings() {
     })),
   ];
 
-  // Merge custom layers into their respective groups
   const groupsWithCustom = allGroups.map(g => ({
     ...g,
     layers: [
@@ -395,17 +471,108 @@ export default function Settings() {
     ],
   }));
 
-  // Orphan custom layers (group doesn't exist in built-in or custom groups)
   const allGroupIds = new Set([...LAYER_GROUPS.map(g => g.id), ...customGroups.map(g => g.id)]);
   const orphanCustom = customLayers.filter(cl => !allGroupIds.has(cl.groupId));
 
-  const TestBtn = ({ url, layerId }: { url: string; layerId?: string }) => {
+  const TestBtn = ({ url, layerId, urlType, isCustom }: { url: string; layerId?: string; urlType?: "wms" | "wfs" | "arcgis"; isCustom?: boolean }) => {
     const st = testingUrls[url];
     return (
-      <button onClick={() => testUrl(url, layerId)} className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border border-border hover:bg-muted" title="Test connessione">
+      <button onClick={() => testUrl(url, layerId, urlType, isCustom)} className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded border border-border hover:bg-muted" title="Test connessione (auto-compila campi)">
         {st === "checking" ? <Loader2 size={8} className="animate-spin" /> : st === "online" ? <Wifi size={8} className="text-green-500" /> : st === "offline" ? <WifiOff size={8} className="text-destructive" /> : <Wifi size={8} />}
         <span>{st === "checking" ? "..." : st === "online" ? "OK" : st === "offline" ? "KO" : "Test"}</span>
       </button>
+    );
+  };
+
+  // Render the 3 URL sections for a layer
+  const renderUrlSections = (layer: LayerDef | CustomLayer, isCustom: boolean) => {
+    const ov = overrides[layer.id] || {};
+    const isTlsBypassed = tlsBypass[layer.id] ?? false;
+
+    const getVal = (field: string) => {
+      if (isCustom) return (layer as any)[field] || "";
+      return (ov as any)[field] ?? (layer as any)[field] ?? "";
+    };
+
+    const setVal = (field: string, value: string) => {
+      if (isCustom) updateCustomLayer(layer.id, field, value);
+      else updateField(layer.id, field, value);
+    };
+
+    const wmsUrl = getVal("wmsUrl");
+    const wfsUrl = getVal("wfsUrl");
+    const arcgisUrl = getVal("arcgisUrl");
+    const srid = getVal("srid");
+    const hasAnyUrl = wmsUrl || wfsUrl || arcgisUrl;
+
+    return (
+      <div className="space-y-2">
+        {/* SRID */}
+        <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
+          <span className="text-[9px] text-muted-foreground font-mono">SRID</span>
+          <Input value={srid} onChange={e => setVal("srid", e.target.value)} placeholder="es. 32632, 4326, 3003" className="h-6 text-[10px] font-mono w-40" />
+        </div>
+
+        {/* WMS Section */}
+        <div className="border border-border/50 rounded p-2 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">WMS</span>
+            {wmsUrl && <TestBtn url={wmsUrl} layerId={layer.id} urlType="wms" isCustom={isCustom} />}
+          </div>
+          <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
+            <span className="text-[9px] text-muted-foreground font-mono">URL</span>
+            <Input value={wmsUrl} onChange={e => setVal("wmsUrl", e.target.value)} placeholder="https://..." className="h-6 text-[10px] font-mono" />
+            <span className="text-[9px] text-muted-foreground font-mono">Layer</span>
+            <Input value={getVal("wmsLayer")} onChange={e => setVal("wmsLayer", e.target.value)} placeholder="nome layer WMS" className="h-6 text-[10px] font-mono" />
+          </div>
+        </div>
+
+        {/* WFS Section */}
+        <div className="border border-border/50 rounded p-2 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">WFS</span>
+            {wfsUrl && <TestBtn url={wfsUrl} layerId={layer.id} urlType="wfs" isCustom={isCustom} />}
+          </div>
+          <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
+            <span className="text-[9px] text-muted-foreground font-mono">URL</span>
+            <Input value={wfsUrl} onChange={e => setVal("wfsUrl", e.target.value)} placeholder="https://..." className="h-6 text-[10px] font-mono" />
+            <span className="text-[9px] text-muted-foreground font-mono">Layer</span>
+            <Input value={getVal("wfsLayer")} onChange={e => setVal("wfsLayer", e.target.value)} placeholder="nome layer WFS" className="h-6 text-[10px] font-mono" />
+          </div>
+        </div>
+
+        {/* ArcGIS REST Section */}
+        <div className="border border-border/50 rounded p-2 space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">ArcGIS REST</span>
+            {arcgisUrl && <TestBtn url={arcgisUrl} layerId={layer.id} urlType="arcgis" isCustom={isCustom} />}
+          </div>
+          <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
+            <span className="text-[9px] text-muted-foreground font-mono">URL</span>
+            <Input value={arcgisUrl} onChange={e => setVal("arcgisUrl", e.target.value)} placeholder="https://..." className="h-6 text-[10px] font-mono" />
+            <span className="text-[9px] text-muted-foreground font-mono">Layers</span>
+            <Input value={getVal("arcgisLayers")} onChange={e => setVal("arcgisLayers", e.target.value)} placeholder="show:0,1,2" className="h-6 text-[10px] font-mono" />
+          </div>
+        </div>
+
+        {/* TLS bypass */}
+        {hasAnyUrl && (
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={isTlsBypassed}
+              onCheckedChange={() => toggleTlsBypass(layer.id)}
+              className="h-3.5 w-7"
+            />
+            <span className="text-[9px] text-muted-foreground flex items-center gap-1">
+              {isTlsBypassed ? (
+                <><ShieldAlert size={9} className="text-amber-500" /> Bypass TLS attivo</>
+              ) : (
+                <><ShieldCheck size={9} className="text-green-600" /> Verifica TLS</>
+              )}
+            </span>
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -413,15 +580,8 @@ export default function Settings() {
     const ov = overrides[layer.id] || {};
     const hasOverride = !!overrides[layer.id];
     const isDeleted = ov.deleted;
-    const isWms = !!(isCustom ? (layer as CustomLayer).wmsUrl : layer.wmsUrl);
-    const isArcgis = !!(isCustom ? (layer as CustomLayer).arcgisUrl : layer.arcgisUrl);
-    const noUrl = !isWms && !isArcgis;
     const effectiveFallbacks = ov.fallbackUrls || (layer as LayerDef).fallbackUrls || [];
     const fbExpanded = expandedFallbacks.has(layer.id);
-    const primaryUrl = isCustom
-      ? ((layer as CustomLayer).wmsUrl || (layer as CustomLayer).arcgisUrl || "")
-      : (ov.wmsUrl || ov.arcgisUrl || layer.wmsUrl || layer.arcgisUrl || "");
-    const isTlsBypassed = tlsBypass[layer.id] ?? false;
 
     if (isDeleted && search) return null;
 
@@ -434,7 +594,6 @@ export default function Settings() {
             {isCustom && <span className="ml-1 text-[9px] bg-primary/10 text-primary px-1 rounded">custom</span>}
           </span>
           <div className="flex items-center gap-1">
-            {!isDeleted && primaryUrl && <TestBtn url={primaryUrl} layerId={layer.id} />}
             {isDeleted ? (
               <button onClick={() => restoreLayer(layer.id)} className="text-[9px] text-primary hover:underline">Ripristina</button>
             ) : (
@@ -458,30 +617,8 @@ export default function Settings() {
 
         {!isDeleted && (
           <>
-            {noUrl && !isCustom && (
-              <p className="text-[9px] text-muted-foreground italic">Layer gestito internamente</p>
-            )}
-
-            {/* TLS bypass toggle */}
-            {(isWms || isArcgis) && (
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={isTlsBypassed}
-                  onCheckedChange={() => toggleTlsBypass(layer.id)}
-                  className="h-3.5 w-7"
-                />
-                <span className="text-[9px] text-muted-foreground flex items-center gap-1">
-                  {isTlsBypassed ? (
-                    <><ShieldAlert size={9} className="text-amber-500" /> Bypass TLS attivo</>
-                  ) : (
-                    <><ShieldCheck size={9} className="text-green-600" /> Verifica TLS</>
-                  )}
-                </span>
-              </div>
-            )}
-
             {isCustom && (
-              <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
+              <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center mb-2">
                 <span className="text-[9px] text-muted-foreground">Nome</span>
                 <Input value={layer.label} onChange={e => updateCustomLayer(layer.id, "label", e.target.value)} className="h-6 text-[10px]" />
                 <span className="text-[9px] text-muted-foreground">Colore</span>
@@ -489,76 +626,43 @@ export default function Settings() {
                   <input type="color" value={layer.color} onChange={e => updateCustomLayer(layer.id, "color", e.target.value)} className="w-6 h-6 rounded cursor-pointer border-0" />
                   <Input value={layer.color} onChange={e => updateCustomLayer(layer.id, "color", e.target.value)} className="h-6 text-[10px] font-mono w-24" />
                 </div>
-                {(layer as CustomLayer).wmsUrl !== undefined && (
-                  <>
-                    <span className="text-[9px] text-muted-foreground font-mono">WMS URL</span>
-                    <Input value={(layer as CustomLayer).wmsUrl || ""} onChange={e => updateCustomLayer(layer.id, "wmsUrl", e.target.value)} className="h-6 text-[10px] font-mono" />
-                    <span className="text-[9px] text-muted-foreground font-mono">Layer</span>
-                    <Input value={(layer as CustomLayer).wmsLayer || ""} onChange={e => updateCustomLayer(layer.id, "wmsLayer", e.target.value)} className="h-6 text-[10px] font-mono" />
-                  </>
-                )}
-                {(layer as CustomLayer).arcgisUrl !== undefined && (
-                  <>
-                    <span className="text-[9px] text-muted-foreground font-mono">ArcGIS URL</span>
-                    <Input value={(layer as CustomLayer).arcgisUrl || ""} onChange={e => updateCustomLayer(layer.id, "arcgisUrl", e.target.value)} className="h-6 text-[10px] font-mono" />
-                    <span className="text-[9px] text-muted-foreground font-mono">Layers</span>
-                    <Input value={(layer as CustomLayer).arcgisLayers || ""} onChange={e => updateCustomLayer(layer.id, "arcgisLayers", e.target.value)} className="h-6 text-[10px] font-mono" />
-                  </>
-                )}
               </div>
             )}
 
-            {!isCustom && isWms && (
-              <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
-                <span className="text-[9px] text-muted-foreground font-mono">WMS URL</span>
-                <Input value={ov.wmsUrl ?? layer.wmsUrl ?? ""} onChange={e => updateField(layer.id, "wmsUrl", e.target.value)} className="h-6 text-[10px] font-mono" />
-                <span className="text-[9px] text-muted-foreground font-mono">Layer</span>
-                <Input value={ov.wmsLayer ?? (layer as LayerDef).wmsLayer ?? ""} onChange={e => updateField(layer.id, "wmsLayer", e.target.value)} className="h-6 text-[10px] font-mono" />
-              </div>
-            )}
-
-            {!isCustom && isArcgis && (
-              <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
-                <span className="text-[9px] text-muted-foreground font-mono">ArcGIS URL</span>
-                <Input value={ov.arcgisUrl ?? layer.arcgisUrl ?? ""} onChange={e => updateField(layer.id, "arcgisUrl", e.target.value)} className="h-6 text-[10px] font-mono" />
-                <span className="text-[9px] text-muted-foreground font-mono">Layers</span>
-                <Input value={ov.arcgisLayers ?? (layer as LayerDef).arcgisLayers ?? ""} onChange={e => updateField(layer.id, "arcgisLayers", e.target.value)} className="h-6 text-[10px] font-mono" />
-              </div>
-            )}
+            {/* 3 URL sections (WMS, WFS, ArcGIS) + SRID */}
+            {renderUrlSections(layer, isCustom)}
 
             {/* Fallback URLs */}
-            {(isWms || isArcgis) && (
-              <div className="mt-1">
-                <button onClick={() => toggleFallbacks(layer.id)} className="flex items-center gap-1 text-[9px] text-muted-foreground hover:text-foreground">
-                  {fbExpanded ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
-                  Fallback ({effectiveFallbacks.length})
-                </button>
-                {fbExpanded && (
-                  <div className="ml-3 mt-1 space-y-1">
-                    {effectiveFallbacks.map((fb, i) => (
-                      <div key={i} className="flex items-center gap-1">
-                        <span className="text-[9px] text-muted-foreground">↳</span>
-                        {isCustom ? (
-                          <Input value={fb} onChange={e => updateCustomFallback(layer.id, i, e.target.value)} className="h-5 text-[9px] font-mono flex-1" />
-                        ) : (
-                          <Input value={fb} onChange={e => updateFallback(layer.id, i, e.target.value)} className="h-5 text-[9px] font-mono flex-1" />
-                        )}
-                        {fb && <TestBtn url={fb} layerId={layer.id} />}
-                        <button onClick={() => isCustom ? removeCustomFallback(layer.id, i) : removeFallback(layer.id, i)} className="text-muted-foreground hover:text-destructive">
-                          <X size={9} />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      onClick={() => isCustom ? addCustomFallback(layer.id) : addFallback(layer.id, (layer as LayerDef).fallbackUrls || [])}
-                      className="text-[9px] text-primary hover:underline flex items-center gap-0.5"
-                    >
-                      <Plus size={8} /> Aggiungi fallback
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="mt-1">
+              <button onClick={() => toggleFallbacks(layer.id)} className="flex items-center gap-1 text-[9px] text-muted-foreground hover:text-foreground">
+                {fbExpanded ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
+                Fallback ({effectiveFallbacks.length})
+              </button>
+              {fbExpanded && (
+                <div className="ml-3 mt-1 space-y-1">
+                  {effectiveFallbacks.map((fb, i) => (
+                    <div key={i} className="flex items-center gap-1">
+                      <span className="text-[9px] text-muted-foreground">↳</span>
+                      {isCustom ? (
+                        <Input value={fb} onChange={e => updateCustomFallback(layer.id, i, e.target.value)} className="h-5 text-[9px] font-mono flex-1" />
+                      ) : (
+                        <Input value={fb} onChange={e => updateFallback(layer.id, i, e.target.value)} className="h-5 text-[9px] font-mono flex-1" />
+                      )}
+                      {fb && <TestBtn url={fb} layerId={layer.id} />}
+                      <button onClick={() => isCustom ? removeCustomFallback(layer.id, i) : removeFallback(layer.id, i)} className="text-muted-foreground hover:text-destructive">
+                        <X size={9} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => isCustom ? addCustomFallback(layer.id) : addFallback(layer.id, (layer as LayerDef).fallbackUrls || [])}
+                    className="text-[9px] text-primary hover:underline flex items-center gap-0.5"
+                  >
+                    <Plus size={8} /> Aggiungi fallback
+                  </button>
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -576,14 +680,37 @@ export default function Settings() {
           <input type="color" value={newLayer.color || "#ff6b6b"} onChange={e => setNewLayer(p => ({ ...p, color: e.target.value }))} className="w-6 h-6 rounded cursor-pointer border-0" />
           <Input value={newLayer.color || "#ff6b6b"} onChange={e => setNewLayer(p => ({ ...p, color: e.target.value }))} className="h-6 text-[10px] font-mono w-24" />
         </div>
-        <span className="text-[9px] text-muted-foreground">WMS URL</span>
-        <Input value={newLayer.wmsUrl || ""} onChange={e => setNewLayer(p => ({ ...p, wmsUrl: e.target.value }))} placeholder="https://..." className="h-6 text-[10px] font-mono" />
-        <span className="text-[9px] text-muted-foreground">WMS Layer</span>
-        <Input value={newLayer.wmsLayer || ""} onChange={e => setNewLayer(p => ({ ...p, wmsLayer: e.target.value }))} className="h-6 text-[10px] font-mono" />
-        <span className="text-[9px] text-muted-foreground">ArcGIS URL</span>
-        <Input value={newLayer.arcgisUrl || ""} onChange={e => setNewLayer(p => ({ ...p, arcgisUrl: e.target.value }))} placeholder="https://..." className="h-6 text-[10px] font-mono" />
-        <span className="text-[9px] text-muted-foreground">ArcGIS Layers</span>
-        <Input value={newLayer.arcgisLayers || ""} onChange={e => setNewLayer(p => ({ ...p, arcgisLayers: e.target.value }))} placeholder="show:0" className="h-6 text-[10px] font-mono" />
+        <span className="text-[9px] text-muted-foreground">SRID</span>
+        <Input value={newLayer.srid || ""} onChange={e => setNewLayer(p => ({ ...p, srid: e.target.value }))} placeholder="es. 32632" className="h-6 text-[10px] font-mono w-24" />
+      </div>
+      <div className="space-y-2 mt-2">
+        <div className="border border-border/50 rounded p-2 space-y-1">
+          <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">WMS</span>
+          <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
+            <span className="text-[9px] text-muted-foreground font-mono">URL</span>
+            <Input value={newLayer.wmsUrl || ""} onChange={e => setNewLayer(p => ({ ...p, wmsUrl: e.target.value }))} placeholder="https://..." className="h-6 text-[10px] font-mono" />
+            <span className="text-[9px] text-muted-foreground font-mono">Layer</span>
+            <Input value={newLayer.wmsLayer || ""} onChange={e => setNewLayer(p => ({ ...p, wmsLayer: e.target.value }))} className="h-6 text-[10px] font-mono" />
+          </div>
+        </div>
+        <div className="border border-border/50 rounded p-2 space-y-1">
+          <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">WFS</span>
+          <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
+            <span className="text-[9px] text-muted-foreground font-mono">URL</span>
+            <Input value={newLayer.wfsUrl || ""} onChange={e => setNewLayer(p => ({ ...p, wfsUrl: e.target.value }))} placeholder="https://..." className="h-6 text-[10px] font-mono" />
+            <span className="text-[9px] text-muted-foreground font-mono">Layer</span>
+            <Input value={newLayer.wfsLayer || ""} onChange={e => setNewLayer(p => ({ ...p, wfsLayer: e.target.value }))} className="h-6 text-[10px] font-mono" />
+          </div>
+        </div>
+        <div className="border border-border/50 rounded p-2 space-y-1">
+          <span className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">ArcGIS REST</span>
+          <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 items-center">
+            <span className="text-[9px] text-muted-foreground font-mono">URL</span>
+            <Input value={newLayer.arcgisUrl || ""} onChange={e => setNewLayer(p => ({ ...p, arcgisUrl: e.target.value }))} placeholder="https://..." className="h-6 text-[10px] font-mono" />
+            <span className="text-[9px] text-muted-foreground font-mono">Layers</span>
+            <Input value={newLayer.arcgisLayers || ""} onChange={e => setNewLayer(p => ({ ...p, arcgisLayers: e.target.value }))} placeholder="show:0" className="h-6 text-[10px] font-mono" />
+          </div>
+        </div>
       </div>
       <div className="flex gap-2 justify-end">
         <Button variant="ghost" size="sm" onClick={() => { setAddingToGroup(null); setNewLayer({}); }} className="h-6 text-[10px]">Annulla</Button>
@@ -602,7 +729,7 @@ export default function Settings() {
           </Button>
           <div>
             <h1 className="text-sm font-bold">Impostazioni Vincoli</h1>
-            <p className="text-[10px] text-muted-foreground">Gestisci gruppi, vincoli, URL e fallback</p>
+            <p className="text-[10px] text-muted-foreground">Gestisci gruppi, vincoli, URL (WMS/WFS/ArcGIS), SRID e fallback</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -670,9 +797,9 @@ export default function Settings() {
             !search || l.label.toLowerCase().includes(lowerSearch) ||
             l.id.toLowerCase().includes(lowerSearch) ||
             ((l as LayerDef).wmsUrl || "").toLowerCase().includes(lowerSearch) ||
+            ((l as LayerDef).wfsUrl || "").toLowerCase().includes(lowerSearch) ||
             ((l as LayerDef).arcgisUrl || "").toLowerCase().includes(lowerSearch)
           );
-          // Show deleted groups (collapsed) so user can restore them
           if (filteredLayers.length === 0 && addingToGroup !== group.id && !isCustomGroup && !isDeletedGroup) return null;
 
           const isEditingThis = editingGroup === group.id;
