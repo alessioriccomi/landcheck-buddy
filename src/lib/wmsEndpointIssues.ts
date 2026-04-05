@@ -36,6 +36,7 @@ const KNOWN_OFFLINE_HOSTS: Array<{ host: string; issue: KnownEndpointIssue }> = 
   { host: "www.snam.it", issue: { status: "offline", message: "Servizio WMS/WFS SNAM non disponibile: non è un endpoint GIS pubblico." } },
   { host: "sgi2.isprambiente.it", issue: { status: "offline", message: "Servizio ITHACA (ISPRA) instabile: connessione rifiutata dal server remoto (Connection reset)." } },
   { host: "annuario.isprambiente.it", issue: { status: "tls_error", message: "Certificato TLS scaduto sul server annuario.isprambiente.it. Abilita bypass TLS per utilizzarlo." } },
+  { host: "geoportale.enac.gov.it", issue: { status: "offline", message: "Dominio geoportale.enac.gov.it non risolve via DNS: servizio non raggiungibile." } },
 ];
 
 export function getEndpointKey(url: string): string {
