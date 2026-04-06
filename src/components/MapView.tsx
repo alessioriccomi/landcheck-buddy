@@ -420,8 +420,15 @@ export function MapView({
           const north = Math.max(nw.lat, se.lat);
           const west = Math.min(nw.lng, se.lng);
           const east = Math.max(nw.lng, se.lng);
+          // Convert lat/lon to EPSG:3857 meters
+          const toMercatorX = (lng: number) => lng * 20037508.342 / 180;
+          const toMercatorY = (lat: number) => Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180) * 20037508.342 / 180;
+          const minX = toMercatorX(west);
+          const maxX = toMercatorX(east);
+          const minY = toMercatorY(south);
+          const maxY = toMercatorY(north);
           const sep = wmsBaseUrl.includes("?") ? "&" : "?";
-          const targetUrl = `${wmsBaseUrl}${sep}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${encodeURIComponent(wmsLayerName)}&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:4326&WIDTH=${sz}&HEIGHT=${sz}&BBOX=${south},${west},${north},${east}`;
+          const targetUrl = `${wmsBaseUrl}${sep}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${encodeURIComponent(wmsLayerName)}&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&WIDTH=${sz}&HEIGHT=${sz}&BBOX=${minX},${minY},${maxX},${maxY}`;
           return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}${tlsParam}`;
         },
       });
