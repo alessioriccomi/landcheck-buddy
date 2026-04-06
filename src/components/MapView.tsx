@@ -862,7 +862,7 @@ export function MapView({
     updateLayers();
     map.on("moveend", updateLayers);
     return () => { map.off("moveend", updateLayers); };
-  }, [activeLayers, serverStatuses]);
+  }, [activeLayers, serverStatuses, mapReady]);
 
   // ── Apply dynamic opacity changes ──────────────────────────
   useEffect(() => {
