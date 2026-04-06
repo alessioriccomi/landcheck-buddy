@@ -69,6 +69,13 @@ export function AnalysisPanel({
   const [activeTab, setActiveTab] = useState("particelle");
   const navigate = useNavigate();
 
+  // Auto-switch to results tab when analysis completes
+  useEffect(() => {
+    if (step === "results" && analisi) {
+      setActiveTab("risultati");
+    }
+  }, [step, analisi]);
+
   return (
     <div className="flex flex-col h-full">
       <CustomConstraintDialog
