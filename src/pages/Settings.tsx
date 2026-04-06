@@ -97,6 +97,122 @@ export default function Settings() {
   const [showAddGroup, setShowAddGroup] = useState(false);
   const [newGroup, setNewGroup] = useState<{ label: string; icon: string }>({ label: "", icon: "📌" });
 
+  // GetCapabilities Explorer state
+  const [explorerUrl, setExplorerUrl] = useState("");
+  const [explorerLoading, setExplorerLoading] = useState(false);
+  const [explorerResults, setExplorerResults] = useState<{ name: string; id: string; title?: string }[]>([]);
+  const [explorerError, setExplorerError] = useState("");
+  const [explorerType, setExplorerType] = useState<"wms" | "arcgis" | null>(null);
+  const [showExplorer, setShowExplorer] = useState(false);
+
+  // ── GetCapabilities Explorer logic ──
+  const exploreServer = async () => {
+    if (!explorerUrl.trim()) return;
+    setExplorerLoading(true);
+    setExplorerResults([]);
+    setExplorerError("");
+    setExplorerType(null);
+    try {
+      const url = explorerUrl.trim();
+      const isArcgis = url.includes("/MapServer") || url.includes("/rest/services/");
+      setExplorerType(isArcgis ? "arcgis" : "wms");
+
+      let probeUrl: string;
+      if (isArcgis) {
+        probeUrl = `${url}${url.includes("?") ? "&" : "?"}f=json`;
+      } else {
+        probeUrl = `${url}${url.includes("?") ? "&" : "?"}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities`;
+      }
+
+      const resp = await fetch(
+        `${SUPABASE_URL}/functions/v1/wfs-proxy?mode=wms_ext&url=${encodeURIComponent(probeUrl)}`,
+        { headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` }, signal: AbortSignal.timeout(20000) }
+      );
+      const text = await resp.text();
+
+      if (!resp.ok) {
+        try {
+          const err = JSON.parse(text);
+          setExplorerError(err.userMessage || err.detail || err.error || "Errore sconosciuto");
+        } catch { setExplorerError(`HTTP ${resp.status}`); }
+        return;
+      }
+
+      if (isArcgis) {
+        const json = JSON.parse(text);
+        const layers = json.layers || json.services || [];
+        if (layers.length === 0) {
+          setExplorerError("Nessun layer trovato nel servizio ArcGIS");
+          return;
+        }
+        setExplorerResults(layers.map((l: any) => ({
+          name: l.name || l.mapName || `Layer ${l.id}`,
+          id: String(l.id ?? ""),
+          title: l.name,
+        })));
+      } else {
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(text, "text/xml");
+        const layerEls = xml.querySelectorAll("Layer");
+        const results: { name: string; id: string; title?: string }[] = [];
+        layerEls.forEach(el => {
+          const nameEl = el.querySelector(":scope > Name");
+          const titleEl = el.querySelector(":scope > Title");
+          if (nameEl?.textContent) {
+            results.push({
+              name: nameEl.textContent,
+              id: nameEl.textContent,
+              title: titleEl?.textContent || undefined,
+            });
+          }
+        });
+        if (results.length === 0) {
+          setExplorerError("Nessun layer con <Name> trovato nella risposta WMS GetCapabilities");
+          return;
+        }
+        setExplorerResults(results);
+      }
+    } catch (err: any) {
+      setExplorerError(err.message || "Errore di connessione");
+    } finally {
+      setExplorerLoading(false);
+    }
+  };
+
+  const addExplorerLayerAsCustom = (layerName: string, layerId: string, title?: string) => {
+    const url = explorerUrl.trim();
+    const isArcgis = explorerType === "arcgis";
+    const id = generateId();
+    const label = title || layerName;
+    const cl: CustomLayer = {
+      id,
+      groupId: customGroups.length > 0 ? customGroups[0].id : "custom_explorer",
+      label,
+      color: "#" + Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0"),
+      description: `Scoperto via GetCapabilities Explorer da ${new URL(url).hostname}`,
+    };
+    if (isArcgis) {
+      cl.arcgisUrl = url;
+      cl.arcgisLayers = `show:${layerId}`;
+    } else {
+      cl.wmsUrl = url;
+      cl.wmsLayer = layerName;
+    }
+    // Ensure a custom group exists
+    if (!customGroups.some(g => g.id === cl.groupId)) {
+      const explorerGroup: CustomGroup = { id: "custom_explorer", label: "🔍 Layer scoperti (Explorer)", icon: "🔍" };
+      const newGroups = [...customGroups, explorerGroup];
+      setCustomGroups(newGroups);
+      localStorage.setItem(CUSTOM_GROUPS_KEY, JSON.stringify(newGroups));
+      cl.groupId = "custom_explorer";
+    }
+    const updated = [...customLayers, cl];
+    setCustomLayers(updated);
+    localStorage.setItem(CUSTOM_LAYERS_KEY, JSON.stringify(updated));
+    markDirty();
+    toast.success(`Layer "${label}" aggiunto ai vincoli personalizzati`);
+  };
+
   const markDirty = () => setDirty(true);
 
   // ── Test connection with auto-fill ──
@@ -794,6 +910,75 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      {/* GetCapabilities Explorer */}
+      <div className="px-4 py-2 border-b border-border">
+        <button
+          onClick={() => setShowExplorer(!showExplorer)}
+          className="flex items-center gap-2 text-xs font-semibold text-foreground hover:text-primary transition-colors"
+        >
+          <Search size={14} />
+          <span>GetCapabilities Explorer — Scopri layer da qualsiasi server GIS</span>
+          {showExplorer ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </button>
+        {showExplorer && (
+          <div className="mt-3 space-y-3 max-w-3xl">
+            <div className="flex gap-2">
+              <Input
+                value={explorerUrl}
+                onChange={e => setExplorerUrl(e.target.value)}
+                placeholder="https://wms.example.it/geoserver/wms  oppure  https://.../MapServer"
+                className="h-8 text-xs font-mono flex-1"
+                onKeyDown={e => e.key === "Enter" && exploreServer()}
+              />
+              <Button size="sm" onClick={exploreServer} disabled={explorerLoading || !explorerUrl.trim()} className="h-8 text-[10px] gap-1">
+                {explorerLoading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+                Interroga server
+              </Button>
+            </div>
+            <p className="text-[9px] text-muted-foreground">
+              Inserisci un URL WMS o ArcGIS REST MapServer. Il sistema interrogherà il GetCapabilities e mostrerà tutti i layer disponibili.
+            </p>
+            {explorerError && (
+              <div className="bg-destructive/10 border border-destructive/30 rounded px-3 py-2 text-[10px] text-destructive">
+                {explorerError}
+              </div>
+            )}
+            {explorerResults.length > 0 && (
+              <div className="border border-border rounded-lg overflow-hidden">
+                <div className="bg-muted/50 px-3 py-1.5 border-b border-border flex items-center justify-between">
+                  <span className="text-[10px] font-semibold">
+                    {explorerResults.length} layer trovati ({explorerType === "arcgis" ? "ArcGIS REST" : "WMS"})
+                  </span>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto divide-y divide-border">
+                  {explorerResults.map((layer, i) => (
+                    <div key={`${layer.name}-${i}`} className="px-3 py-1.5 flex items-center justify-between gap-2 hover:bg-muted/30">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[10px] font-mono text-foreground truncate block">{layer.name}</span>
+                        {layer.title && layer.title !== layer.name && (
+                          <span className="text-[9px] text-muted-foreground truncate block">{layer.title}</span>
+                        )}
+                      </div>
+                      {explorerType === "arcgis" && (
+                        <span className="text-[9px] text-muted-foreground font-mono shrink-0">ID: {layer.id}</span>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => addExplorerLayerAsCustom(layer.name, layer.id, layer.title)}
+                        className="h-5 text-[9px] gap-1 shrink-0"
+                      >
+                        <Plus size={9} /> Aggiungi
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Layer groups */}
       <div className="max-w-5xl mx-auto p-4 space-y-6">
