@@ -514,6 +514,57 @@ export const LAYER_GROUPS: LayerGroup[] = [
   },
 
   // ══════════════════════════════════════════════════════════════
+  // E2. PERICOLOSITÀ IDROGEO (ISPRA 2024)
+  // ══════════════════════════════════════════════════════════════
+  {
+    id: "idrogeo_ispra",
+    label: "E2. Pericolosità IdroGEO (ISPRA 2024)",
+    icon: "🌊",
+    layers: [
+      {
+        id: "idrogeo_frane_p4",
+        label: "Pericolosità frana molto elevata P4 (IdroGEO)",
+        color: "#7f0000",
+        defaultOn: false,
+        arcgisUrl: "https://idrogeo.isprambiente.it/arcgis/rest/services/PAIFrane/Aree_pericolosita_frana_PAI/MapServer",
+        arcgisLayers: "show:0",
+        opacity: 0.6,
+        description: "Mosaicatura ISPRA PAI pericolosità da frana P4 (molto elevata) — IdroGEO 2024. Alternativa più aggiornata al PCN.",
+      },
+      {
+        id: "idrogeo_frane_p3",
+        label: "Pericolosità frana elevata P3 (IdroGEO)",
+        color: "#dc2626",
+        defaultOn: false,
+        arcgisUrl: "https://idrogeo.isprambiente.it/arcgis/rest/services/PAIFrane/Aree_pericolosita_frana_PAI/MapServer",
+        arcgisLayers: "show:1",
+        opacity: 0.55,
+        description: "Mosaicatura ISPRA PAI pericolosità da frana P3 (elevata) — IdroGEO 2024.",
+      },
+      {
+        id: "idrogeo_alluvioni_p3",
+        label: "Pericolosità idraulica elevata P3 (IdroGEO)",
+        color: "#1d4ed8",
+        defaultOn: false,
+        arcgisUrl: "https://idrogeo.isprambiente.it/arcgis/rest/services/PAIAlluvioni/Aree_pericolosita_idraulica/MapServer",
+        arcgisLayers: "show:0",
+        opacity: 0.55,
+        description: "Mosaicatura ISPRA pericolosità idraulica P3 (TR 20-50 anni) — IdroGEO 2024.",
+      },
+      {
+        id: "idrogeo_alluvioni_p2",
+        label: "Pericolosità idraulica media P2 (IdroGEO)",
+        color: "#3b82f6",
+        defaultOn: false,
+        arcgisUrl: "https://idrogeo.isprambiente.it/arcgis/rest/services/PAIAlluvioni/Aree_pericolosita_idraulica/MapServer",
+        arcgisLayers: "show:1",
+        opacity: 0.5,
+        description: "Mosaicatura ISPRA pericolosità idraulica P2 (TR 100-200 anni) — IdroGEO 2024.",
+      },
+    ],
+  },
+
+  // ══════════════════════════════════════════════════════════════
   // F. RISCHIO FRANA (PAI)
   // ══════════════════════════════════════════════════════════════
   {
