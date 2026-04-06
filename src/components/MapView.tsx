@@ -509,6 +509,7 @@ export function MapView({
     }
     mapRef.current = map;
 
+    setMapReady(true);
     return () => {
       map.remove();
       mapRef.current = null;
