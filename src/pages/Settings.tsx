@@ -210,7 +210,7 @@ export default function Settings() {
     setCustomLayers(updated);
     localStorage.setItem(CUSTOM_LAYERS_KEY, JSON.stringify(updated));
     markDirty();
-    toast.success(`Layer "${label}" aggiunto ai vincoli personalizzati`);
+    toast.success(`✅ Layer "${label}" aggiunto al gruppo Custom — visibile nel tab Custom sulla mappa`);
   };
 
   const markDirty = () => setDirty(true);

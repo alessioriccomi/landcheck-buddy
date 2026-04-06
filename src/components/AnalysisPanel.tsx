@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FileSearch, AlertCircle, Download, RotateCcw, Loader2,
@@ -68,6 +68,13 @@ export function AnalysisPanel({
   const [constraintDialogOpen, setConstraintDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("particelle");
   const navigate = useNavigate();
+
+  // Auto-switch to results tab when analysis completes
+  useEffect(() => {
+    if (step === "results" && analisi) {
+      setActiveTab("risultati");
+    }
+  }, [step, analisi]);
 
   return (
     <div className="flex flex-col h-full">
