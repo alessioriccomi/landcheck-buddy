@@ -224,7 +224,7 @@ export const LAYER_GROUPS: LayerGroup[] = [
         wmsUrl: "https://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/Vettoriali/Vincoli_Paesaggistici_Art142.map",
         wmsLayer: "Vincoli_Paesaggistici_Art142",
         wmsUrlFallback: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wms",
-        wmsLayerFallback: "sitap_ws:parchi_riserve",
+        wmsLayerFallback: "sitap_ws:vw_vasvia_parchi_nazionali,sitap_ws:vw_vasvia_parchi_regionali",
         wfsUrl: "https://wms.pcn.minambiente.it/ogc?service=wfs",
         srid: "32632",
         opacity: 0.5,
