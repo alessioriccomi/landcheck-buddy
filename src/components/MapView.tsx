@@ -573,6 +573,40 @@ export function MapView({
         resolvedFallbacksRef.current.add(layerDef.id);
         break;
       }
+
+      // If primary ArcGIS is offline and layer has a WMS URL, switch to WMS
+      if (!resolvedFallbacksRef.current.has(layerDef.id) && layerDef.wmsUrl && layerDef.wmsLayer) {
+        const arcUrl = layerDef.arcgisUrl;
+        if (arcUrl && getServerStatusForUrl(arcUrl, serverStatuses) === "offline") {
+          console.log(`[WMSFallback] ${layerDef.id}: ArcGIS offline, switching to WMS`);
+          const proxyBase = `${SUPABASE_URL}/functions/v1/wfs-proxy`;
+          const oldLayer = wmsLayersRef.current[layerDef.id];
+          const wasOnMap = oldLayer && map.hasLayer(oldLayer);
+          const TileLayerClass = L.TileLayer.extend({
+            getTileUrl(coords: L.Coords): string {
+              const m = (this as unknown as { _map: L.Map })._map;
+              if (!m) return "";
+              const sz = 256;
+              const nw = m.unproject([coords.x * sz, coords.y * sz], coords.z);
+              const se = m.unproject([(coords.x + 1) * sz, (coords.y + 1) * sz], coords.z);
+              const south = Math.min(nw.lat, se.lat), north = Math.max(nw.lat, se.lat);
+              const west = Math.min(nw.lng, se.lng), east = Math.max(nw.lng, se.lng);
+              const toMercatorX = (lng: number) => lng * 20037508.342 / 180;
+              const toMercatorY = (lat: number) => Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180) * 20037508.342 / 180;
+              const sep = layerDef.wmsUrl!.includes("?") ? "&" : "?";
+              const targetUrl = `${layerDef.wmsUrl}${sep}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${encodeURIComponent(layerDef.wmsLayer!)}&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&WIDTH=${sz}&HEIGHT=${sz}&BBOX=${toMercatorX(west)},${toMercatorY(south)},${toMercatorX(east)},${toMercatorY(north)}`;
+              return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}`;
+            },
+          });
+          const newLayer = new (TileLayerClass as any)(
+            "", { opacity: layerDef.opacity ?? 0.5, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: "Geoportale (WMS fallback)" }
+          ) as L.TileLayer;
+          (newLayer as L.TileLayer & { _sourceUrl?: string })._sourceUrl = layerDef.wmsUrl!;
+          if (wasOnMap) { map.removeLayer(oldLayer); newLayer.addTo(map); }
+          wmsLayersRef.current[layerDef.id] = newLayer;
+          resolvedFallbacksRef.current.add(layerDef.id);
+        }
+      }
     }
   }, [serverStatuses]);
 
