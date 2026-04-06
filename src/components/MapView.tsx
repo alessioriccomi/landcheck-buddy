@@ -895,7 +895,7 @@ export function MapView({
           const [lS, lW, lN, lE] = lb;
           inBounds = !(mapN < lS || mapS > lN || mapE < lW || mapW > lE);
         }
-        const shouldShow = isActive && inBounds && sourceStatus !== "offline" && sourceStatus !== "tls_error";
+        const shouldShow = isActive && inBounds && sourceStatus !== "tls_error";
         if (shouldShow && !map.hasLayer(layer)) {
           console.log(`[LayerToggle] Adding layer: ${id}`);
           map.addLayer(layer);
