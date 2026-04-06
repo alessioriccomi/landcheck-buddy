@@ -153,6 +153,8 @@ export const LAYER_GROUPS: LayerGroup[] = [
         defaultOn: false,
         arcgisUrl: "https://www.pcn.minambiente.it/arcgis/rest/services/Vincoli_Paesaggistici_Art142/MapServer",
         arcgisLayers: "show:1",
+        wmsUrl: "https://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/Vettoriali/Vincoli_Paesaggistici_Art142.map",
+        wmsLayer: "Vincoli_Paesaggistici_Art142",
         wfsUrl: "https://wms.pcn.minambiente.it/ogc?service=wfs",
         srid: "32632",
         opacity: 0.5,
