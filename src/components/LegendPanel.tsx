@@ -188,7 +188,7 @@ export function LegendPanel({
                           <span className={cn(
                             "text-[11px] flex-1 leading-tight",
                             isActive ? "text-foreground" : "text-muted-foreground",
-                            (layerStatus === "offline" || layerStatus === "tls_error") && "line-through opacity-60"
+                            layerStatus === "tls_error" && "line-through opacity-60"
                           )}>
                             {l.label}
                           </span>
