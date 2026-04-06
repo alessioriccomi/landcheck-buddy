@@ -300,6 +300,7 @@ export function MapView({
   const [clickLoading, setClickLoading] = useState(false);
   const [clickMode] = useState(false);
   const [basemapMenuOpen, setBasemapMenuOpen] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
   // Track parcel IDs already drawn/fetched to prevent redundant re-runs
   const drawnParcelIdsRef = useRef<string>("");
 
@@ -508,6 +509,7 @@ export function MapView({
     }
     mapRef.current = map;
 
+    setMapReady(true);
     return () => {
       map.remove();
       mapRef.current = null;
@@ -860,7 +862,7 @@ export function MapView({
     updateLayers();
     map.on("moveend", updateLayers);
     return () => { map.off("moveend", updateLayers); };
-  }, [activeLayers, serverStatuses]);
+  }, [activeLayers, serverStatuses, mapReady]);
 
   // ── Apply dynamic opacity changes ──────────────────────────
   useEffect(() => {
