@@ -884,6 +884,9 @@ serve(async (req) => {
         "sig.beniculturali.it",
         // SNAM / Infrastrutture
         "gis.snam.it",
+        // INGV
+        "shakemap.rm.ingv.it",
+        "esse1-gis.mi.ingv.it",
       ];
       let parsedUrl: URL;
       try {
