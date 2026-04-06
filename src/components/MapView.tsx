@@ -877,7 +877,13 @@ export function MapView({
 
       const layerCount = Object.keys(wmsLayersRef.current).length;
       const activeIds = Object.entries(activeLayers).filter(([, v]) => v).map(([k]) => k);
-      console.log(`[LayerToggle] ${layerCount} layers in ref, ${activeIds.length} active: ${activeIds.join(", ")}`);
+      const statusSummary = activeIds.map(id => {
+        const layer = wmsLayersRef.current[id];
+        const src = (layer as any)?._sourceUrl;
+        const st = getServerStatusForUrl(src, serverStatuses);
+        return `${id}(${st})`;
+      }).join(", ");
+      console.log(`[LayerToggle] ${layerCount} layers, active: ${statusSummary}`);
 
       for (const [id, layer] of Object.entries(wmsLayersRef.current)) {
         const isActive = activeLayers[id] ?? false;
