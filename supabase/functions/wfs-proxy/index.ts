@@ -919,6 +919,10 @@ serve(async (req) => {
         const visitedUrls = new Set<string>();
 
         for (let i = 0; i < 20; i++) {
+          // Upgrade HTTP to HTTPS
+          if (currentUrl.startsWith("http://")) {
+            currentUrl = currentUrl.replace("http://", "https://");
+          }
           let resp: Response;
           try {
             resp = await fetch(currentUrl, fetchOptions);
