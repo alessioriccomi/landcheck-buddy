@@ -105,6 +105,114 @@ export default function Settings() {
   const [explorerType, setExplorerType] = useState<"wms" | "arcgis" | null>(null);
   const [showExplorer, setShowExplorer] = useState(false);
 
+  // ── GetCapabilities Explorer logic ──
+  const exploreServer = async () => {
+    if (!explorerUrl.trim()) return;
+    setExplorerLoading(true);
+    setExplorerResults([]);
+    setExplorerError("");
+    setExplorerType(null);
+    try {
+      const url = explorerUrl.trim();
+      const isArcgis = url.includes("/MapServer") || url.includes("/rest/services/");
+      setExplorerType(isArcgis ? "arcgis" : "wms");
+
+      let probeUrl: string;
+      if (isArcgis) {
+        probeUrl = `${url}${url.includes("?") ? "&" : "?"}f=json`;
+      } else {
+        probeUrl = `${url}${url.includes("?") ? "&" : "?"}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetCapabilities`;
+      }
+
+      const resp = await fetch(
+        `${SUPABASE_URL}/functions/v1/wfs-proxy?mode=wms_ext&url=${encodeURIComponent(probeUrl)}`,
+        { headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` }, signal: AbortSignal.timeout(20000) }
+      );
+      const text = await resp.text();
+
+      if (!resp.ok) {
+        try {
+          const err = JSON.parse(text);
+          setExplorerError(err.userMessage || err.detail || err.error || "Errore sconosciuto");
+        } catch { setExplorerError(`HTTP ${resp.status}`); }
+        return;
+      }
+
+      if (isArcgis) {
+        const json = JSON.parse(text);
+        const layers = json.layers || json.services || [];
+        if (layers.length === 0) {
+          setExplorerError("Nessun layer trovato nel servizio ArcGIS");
+          return;
+        }
+        setExplorerResults(layers.map((l: any) => ({
+          name: l.name || l.mapName || `Layer ${l.id}`,
+          id: String(l.id ?? ""),
+          title: l.name,
+        })));
+      } else {
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(text, "text/xml");
+        const layerEls = xml.querySelectorAll("Layer");
+        const results: { name: string; id: string; title?: string }[] = [];
+        layerEls.forEach(el => {
+          const nameEl = el.querySelector(":scope > Name");
+          const titleEl = el.querySelector(":scope > Title");
+          if (nameEl?.textContent) {
+            results.push({
+              name: nameEl.textContent,
+              id: nameEl.textContent,
+              title: titleEl?.textContent || undefined,
+            });
+          }
+        });
+        if (results.length === 0) {
+          setExplorerError("Nessun layer con <Name> trovato nella risposta WMS GetCapabilities");
+          return;
+        }
+        setExplorerResults(results);
+      }
+    } catch (err: any) {
+      setExplorerError(err.message || "Errore di connessione");
+    } finally {
+      setExplorerLoading(false);
+    }
+  };
+
+  const addExplorerLayerAsCustom = (layerName: string, layerId: string, title?: string) => {
+    const url = explorerUrl.trim();
+    const isArcgis = explorerType === "arcgis";
+    const id = generateId();
+    const label = title || layerName;
+    const cl: CustomLayer = {
+      id,
+      groupId: customGroups.length > 0 ? customGroups[0].id : "custom_explorer",
+      label,
+      color: "#" + Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0"),
+      description: `Scoperto via GetCapabilities Explorer da ${new URL(url).hostname}`,
+    };
+    if (isArcgis) {
+      cl.arcgisUrl = url;
+      cl.arcgisLayers = `show:${layerId}`;
+    } else {
+      cl.wmsUrl = url;
+      cl.wmsLayer = layerName;
+    }
+    // Ensure a custom group exists
+    if (!customGroups.some(g => g.id === cl.groupId)) {
+      const explorerGroup: CustomGroup = { id: "custom_explorer", label: "🔍 Layer scoperti (Explorer)", icon: "🔍" };
+      const newGroups = [...customGroups, explorerGroup];
+      setCustomGroups(newGroups);
+      localStorage.setItem(CUSTOM_GROUPS_KEY, JSON.stringify(newGroups));
+      cl.groupId = "custom_explorer";
+    }
+    const updated = [...customLayers, cl];
+    setCustomLayers(updated);
+    localStorage.setItem(CUSTOM_LAYERS_KEY, JSON.stringify(updated));
+    markDirty();
+    toast.success(`Layer "${label}" aggiunto ai vincoli personalizzati`);
+  };
+
   const markDirty = () => setDirty(true);
 
   // ── Test connection with auto-fill ──
