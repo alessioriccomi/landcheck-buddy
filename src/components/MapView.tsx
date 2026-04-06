@@ -300,6 +300,7 @@ export function MapView({
   const [clickLoading, setClickLoading] = useState(false);
   const [clickMode] = useState(false);
   const [basemapMenuOpen, setBasemapMenuOpen] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
   // Track parcel IDs already drawn/fetched to prevent redundant re-runs
   const drawnParcelIdsRef = useRef<string>("");
 
