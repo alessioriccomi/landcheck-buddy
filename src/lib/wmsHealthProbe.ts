@@ -26,7 +26,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
  * Probe a single endpoint via proxy to avoid CORS.
  * Uses a lightweight HEAD-like request through the wfs-proxy.
  */
-async function probeEndpoint(url: string, timeoutMs = 8000, skipTls = false): Promise<{ ok: boolean; tlsError?: boolean; detail?: string }> {
+async function probeEndpoint(url: string, timeoutMs = 15000, skipTls = false): Promise<{ ok: boolean; tlsError?: boolean; detail?: string }> {
   const proxyBase = `${SUPABASE_URL}/functions/v1/wfs-proxy`;
   let testUrl: string;
   if (url.includes("/MapServer")) {
@@ -37,49 +37,58 @@ async function probeEndpoint(url: string, timeoutMs = 8000, skipTls = false): Pr
   }
   const skipParam = skipTls ? "&skipTls=true" : "";
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const resp = await fetch(
-      `${proxyBase}?mode=wms_ext&probe=true&url=${encodeURIComponent(testUrl)}${skipParam}`,
-      {
-        headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
-        signal: controller.signal,
-      }
-    );
-    clearTimeout(timer);
-    if (!resp.ok) {
-      try {
-        const json = await resp.json();
-        return {
-          ok: false,
-          tlsError: json.error === "TLS_INVALID_CERT",
-          detail: json.userMessage || json.detail || json.error,
-        };
-      } catch { /* not json */ }
-      return { ok: false };
-    }
-    const text = await resp.text();
-    if (text.length < 50) return { ok: false };
-    const lower = text.substring(0, 2000).toLowerCase();
-    if (lower.includes("503 service") || lower.includes("service temporarily unavailable")) return { ok: false };
-    if (lower.includes("<!doctype html") || lower.includes("<html")) {
-      if (!lower.includes("<wms_capabilities") && !lower.includes("<wmt_ms_capabilities") && !lower.includes('"mapname"')) {
+  const doProbe = async (): Promise<{ ok: boolean; tlsError?: boolean; detail?: string }> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const resp = await fetch(
+        `${proxyBase}?mode=wms_ext&probe=true&url=${encodeURIComponent(testUrl)}${skipParam}`,
+        {
+          headers: { Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+          signal: controller.signal,
+        }
+      );
+      clearTimeout(timer);
+      if (!resp.ok) {
+        try {
+          const json = await resp.json();
+          return {
+            ok: false,
+            tlsError: json.error === "TLS_INVALID_CERT",
+            detail: json.userMessage || json.detail || json.error,
+          };
+        } catch { /* not json */ }
         return { ok: false };
       }
+      const text = await resp.text();
+      if (text.length < 50) return { ok: false };
+      const lower = text.substring(0, 2000).toLowerCase();
+      if (lower.includes("503 service") || lower.includes("service temporarily unavailable")) return { ok: false };
+      if (lower.includes("<!doctype html") || lower.includes("<html")) {
+        if (!lower.includes("<wms_capabilities") && !lower.includes("<wmt_ms_capabilities") && !lower.includes('"mapname"')) {
+          return { ok: false };
+        }
+      }
+      if (text.startsWith("{")) {
+        try {
+          const json = JSON.parse(text);
+          if (json.error) return { ok: false };
+        } catch { /* not JSON */ }
+      }
+      return { ok: true };
+    } catch {
+      clearTimeout(timer);
+      return { ok: false };
     }
-    if (text.startsWith("{")) {
-      try {
-        const json = JSON.parse(text);
-        if (json.error) return { ok: false };
-      } catch { /* not JSON */ }
-    }
-    return { ok: true };
-  } catch {
-    clearTimeout(timer);
-    return { ok: false };
-  }
+  };
+
+  // First attempt
+  const first = await doProbe();
+  if (first.ok || first.tlsError) return first;
+
+  // Retry once after 3 seconds for slow Italian GIS servers
+  await new Promise(r => setTimeout(r, 3000));
+  return doProbe();
 }
 
 /**

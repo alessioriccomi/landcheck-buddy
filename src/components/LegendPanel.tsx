@@ -192,6 +192,9 @@ export function LegendPanel({
                           )}>
                             {l.label}
                           </span>
+                          {layerStatus === "offline" && (
+                            <span title="Server momentaneamente non disponibile — il layer potrebbe non caricarsi" className="text-yellow-500 text-[9px] flex-shrink-0">⚠</span>
+                          )}
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span className="inline-flex cursor-help text-muted-foreground hover:text-primary transition-colors flex-shrink-0" onClick={(e) => e.stopPropagation()}>
