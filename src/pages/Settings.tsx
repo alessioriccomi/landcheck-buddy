@@ -97,6 +97,14 @@ export default function Settings() {
   const [showAddGroup, setShowAddGroup] = useState(false);
   const [newGroup, setNewGroup] = useState<{ label: string; icon: string }>({ label: "", icon: "📌" });
 
+  // GetCapabilities Explorer state
+  const [explorerUrl, setExplorerUrl] = useState("");
+  const [explorerLoading, setExplorerLoading] = useState(false);
+  const [explorerResults, setExplorerResults] = useState<{ name: string; id: string; title?: string }[]>([]);
+  const [explorerError, setExplorerError] = useState("");
+  const [explorerType, setExplorerType] = useState<"wms" | "arcgis" | null>(null);
+  const [showExplorer, setShowExplorer] = useState(false);
+
   const markDirty = () => setDirty(true);
 
   // ── Test connection with auto-fill ──
