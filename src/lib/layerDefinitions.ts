@@ -24,6 +24,10 @@ export interface LayerDef {
   fallbackUrls?: string[];
   /** Skip TLS certificate verification for this layer */
   tlsBypass?: boolean;
+  /** Secondary WMS fallback URL (e.g. SITAP GeoServer) when primary wmsUrl also fails */
+  wmsUrlFallback?: string;
+  /** WMS layer name for the secondary fallback */
+  wmsLayerFallback?: string;
 }
 
 export interface LayerGroup {
