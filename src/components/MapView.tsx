@@ -462,10 +462,14 @@ export function MapView({
           return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}${tlsParam}`;
         },
       });
-      return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
+      const layer = new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
         proxyBase,
         { opacity, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: "Geoportale Nazionale (PCN)" } as L.TileLayerOptions & { pane: string }
       );
+      layer.on('tileerror', (e: any) => {
+        console.warn(`[TileError] ArcGIS tile failed:`, e.tile?.src?.substring(0, 120));
+      });
+      return layer;
     };
 
     // Load user URL overrides from localStorage
