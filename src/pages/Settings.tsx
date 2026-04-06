@@ -911,6 +911,75 @@ export default function Settings() {
         </div>
       )}
 
+      {/* GetCapabilities Explorer */}
+      <div className="px-4 py-2 border-b border-border">
+        <button
+          onClick={() => setShowExplorer(!showExplorer)}
+          className="flex items-center gap-2 text-xs font-semibold text-foreground hover:text-primary transition-colors"
+        >
+          <Search size={14} />
+          <span>GetCapabilities Explorer — Scopri layer da qualsiasi server GIS</span>
+          {showExplorer ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </button>
+        {showExplorer && (
+          <div className="mt-3 space-y-3 max-w-3xl">
+            <div className="flex gap-2">
+              <Input
+                value={explorerUrl}
+                onChange={e => setExplorerUrl(e.target.value)}
+                placeholder="https://wms.example.it/geoserver/wms  oppure  https://.../MapServer"
+                className="h-8 text-xs font-mono flex-1"
+                onKeyDown={e => e.key === "Enter" && exploreServer()}
+              />
+              <Button size="sm" onClick={exploreServer} disabled={explorerLoading || !explorerUrl.trim()} className="h-8 text-[10px] gap-1">
+                {explorerLoading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+                Interroga server
+              </Button>
+            </div>
+            <p className="text-[9px] text-muted-foreground">
+              Inserisci un URL WMS o ArcGIS REST MapServer. Il sistema interrogherà il GetCapabilities e mostrerà tutti i layer disponibili.
+            </p>
+            {explorerError && (
+              <div className="bg-destructive/10 border border-destructive/30 rounded px-3 py-2 text-[10px] text-destructive">
+                {explorerError}
+              </div>
+            )}
+            {explorerResults.length > 0 && (
+              <div className="border border-border rounded-lg overflow-hidden">
+                <div className="bg-muted/50 px-3 py-1.5 border-b border-border flex items-center justify-between">
+                  <span className="text-[10px] font-semibold">
+                    {explorerResults.length} layer trovati ({explorerType === "arcgis" ? "ArcGIS REST" : "WMS"})
+                  </span>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto divide-y divide-border">
+                  {explorerResults.map((layer, i) => (
+                    <div key={`${layer.name}-${i}`} className="px-3 py-1.5 flex items-center justify-between gap-2 hover:bg-muted/30">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[10px] font-mono text-foreground truncate block">{layer.name}</span>
+                        {layer.title && layer.title !== layer.name && (
+                          <span className="text-[9px] text-muted-foreground truncate block">{layer.title}</span>
+                        )}
+                      </div>
+                      {explorerType === "arcgis" && (
+                        <span className="text-[9px] text-muted-foreground font-mono shrink-0">ID: {layer.id}</span>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => addExplorerLayerAsCustom(layer.name, layer.id, layer.title)}
+                        className="h-5 text-[9px] gap-1 shrink-0"
+                      >
+                        <Plus size={9} /> Aggiungi
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Layer groups */}
       <div className="max-w-5xl mx-auto p-4 space-y-6">
         {groupsWithCustom.map(group => {
