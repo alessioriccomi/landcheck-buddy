@@ -433,10 +433,14 @@ export function MapView({
           return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}${tlsParam}`;
         },
       });
-      return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
+      const layer = new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
         proxyBase,
         { opacity, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: "Geoportale Nazionale/ISPRA/MASE" } as L.TileLayerOptions & { pane: string }
       );
+      layer.on('tileerror', (e: any) => {
+        console.warn(`[TileError] WMS tile failed:`, e.tile?.src?.substring(0, 120));
+      });
+      return layer;
     };
 
     // ArcGIS REST MapServer export — uses L.TileLayer.extend + getTileUrl
@@ -458,10 +462,14 @@ export function MapView({
           return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}${tlsParam}`;
         },
       });
-      return new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
+      const layer = new (TileLayerClass as unknown as new (url: string, opts: L.TileLayerOptions & { pane: string }) => L.TileLayer)(
         proxyBase,
         { opacity, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: "Geoportale Nazionale (PCN)" } as L.TileLayerOptions & { pane: string }
       );
+      layer.on('tileerror', (e: any) => {
+        console.warn(`[TileError] ArcGIS tile failed:`, e.tile?.src?.substring(0, 120));
+      });
+      return layer;
     };
 
     // Load user URL overrides from localStorage
@@ -869,7 +877,13 @@ export function MapView({
 
       const layerCount = Object.keys(wmsLayersRef.current).length;
       const activeIds = Object.entries(activeLayers).filter(([, v]) => v).map(([k]) => k);
-      console.log(`[LayerToggle] ${layerCount} layers in ref, ${activeIds.length} active: ${activeIds.join(", ")}`);
+      const statusSummary = activeIds.map(id => {
+        const layer = wmsLayersRef.current[id];
+        const src = (layer as any)?._sourceUrl;
+        const st = getServerStatusForUrl(src, serverStatuses);
+        return `${id}(${st})`;
+      }).join(", ");
+      console.log(`[LayerToggle] ${layerCount} layers, active: ${statusSummary}`);
 
       for (const [id, layer] of Object.entries(wmsLayersRef.current)) {
         const isActive = activeLayers[id] ?? false;
