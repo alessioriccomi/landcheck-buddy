@@ -269,6 +269,8 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:8",
         wmsUrl: "https://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/Vettoriali/Vincoli_Paesaggistici_Art142.map",
         wmsLayer: "Vincoli_Paesaggistici_Art142",
+        wmsUrlFallback: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wms",
+        wmsLayerFallback: "sitap_ws:zone_umide",
         wfsUrl: "https://wms.pcn.minambiente.it/ogc?service=wfs",
         srid: "32632",
         opacity: 0.5,
