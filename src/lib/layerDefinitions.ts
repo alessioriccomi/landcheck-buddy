@@ -1075,6 +1075,35 @@ export const LAYER_GROUPS: LayerGroup[] = [
   // ══════════════════════════════════════════════════════════════
   // P. SISMICA
   // ══════════════════════════════════════════════════════════════
+
+  // ── P2. Sismicità INGV ──
+  {
+    id: "ingv_sismica",
+    label: "P2. Sismicità INGV (aggiornato)",
+    icon: "🔴",
+    layers: [
+      {
+        id: "ingv_shakemap",
+        label: "ShakeMap — scuotimento sismico recente",
+        color: "#f97316",
+        defaultOn: false,
+        wmsUrl: "https://shakemap.rm.ingv.it/shake4/ws/event/last/shakemap/wms",
+        wmsLayer: "PGA",
+        opacity: 0.5,
+        description: "ShakeMap INGV — accelerazione di picco al suolo (PGA) degli ultimi eventi sismici significativi",
+      },
+      {
+        id: "ingv_pericolosita_mps04",
+        label: "Pericolosità sismica MPS04 (INGV)",
+        color: "#ef4444",
+        defaultOn: false,
+        wmsUrl: "https://esse1-gis.mi.ingv.it/ms_sito_ingv2/ms_sito.php",
+        wmsLayer: "MPS04",
+        opacity: 0.45,
+        description: "Mappa di Pericolosità Sismica italiana MPS04 — INGV. Stessa base dati delle NTC 2018.",
+      },
+    ],
+  },
   {
     id: "sismica",
     label: "P. Sismica",
