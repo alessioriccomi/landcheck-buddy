@@ -1477,6 +1477,17 @@ export const LAYER_GROUPS: LayerGroup[] = [
         bounds: [39.78, 15.33, 42.23, 18.52],
         description: "Terreni gravati da usi civici — Regione Puglia",
       },
+      {
+        id: "puglia_vincoli_delegati_art142",
+        label: "Vincoli paesaggistici Art.142 (PPTR Puglia)",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://webapps.sit.puglia.it/arcgis/rest/services/Operationals/VincoliDelegati/MapServer",
+        arcgisLayers: "show:2,5,6,7,8,9,10,11,12",
+        opacity: 0.5,
+        bounds: [39.78, 15.33, 42.23, 18.52],
+        description: "Vincoli paesaggistici Art.142 (fiumi, boschi, macchie, zone umide, parchi) — PPTR Puglia delegati",
+      },
     ],
   },
 
