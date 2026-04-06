@@ -583,7 +583,13 @@ export function MapView({
 
       // 2. If still not resolved and layer has wmsUrl, switch to WMS
       if (!resolvedFallbacksRef.current.has(layerDef.id) && layerDef.wmsUrl && layerDef.wmsLayer && layerDef.arcgisUrl) {
-        console.log(`[WMSFallback] ${layerDef.id}: ArcGIS offline, switching to WMS`);
+        // Check if primary WMS is also offline — if so, try wmsUrlFallback
+        const wmsStatus = getServerStatusForUrl(layerDef.wmsUrl, serverStatuses);
+        const useSecondaryFallback = wmsStatus === "offline" && layerDef.wmsUrlFallback && layerDef.wmsLayerFallback;
+        const effectiveWmsUrl = useSecondaryFallback ? layerDef.wmsUrlFallback! : layerDef.wmsUrl;
+        const effectiveWmsLayer = useSecondaryFallback ? layerDef.wmsLayerFallback! : layerDef.wmsLayer;
+        
+        console.log(`[WMSFallback] ${layerDef.id}: ArcGIS offline, switching to WMS${useSecondaryFallback ? " (SITAP fallback)" : ""}`);
         const proxyBase = `${SUPABASE_URL}/functions/v1/wfs-proxy`;
         const oldLayer = wmsLayersRef.current[layerDef.id];
         const wasOnMap = oldLayer && map.hasLayer(oldLayer);
@@ -598,15 +604,46 @@ export function MapView({
             const west = Math.min(nw.lng, se.lng), east = Math.max(nw.lng, se.lng);
             const toMercatorX = (lng: number) => lng * 20037508.342 / 180;
             const toMercatorY = (lat: number) => Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180) * 20037508.342 / 180;
-            const sep = layerDef.wmsUrl!.includes("?") ? "&" : "?";
-            const targetUrl = `${layerDef.wmsUrl}${sep}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${encodeURIComponent(layerDef.wmsLayer!)}&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&WIDTH=${sz}&HEIGHT=${sz}&BBOX=${toMercatorX(west)},${toMercatorY(south)},${toMercatorX(east)},${toMercatorY(north)}`;
+            const sep = effectiveWmsUrl.includes("?") ? "&" : "?";
+            const targetUrl = `${effectiveWmsUrl}${sep}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${encodeURIComponent(effectiveWmsLayer)}&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&WIDTH=${sz}&HEIGHT=${sz}&BBOX=${toMercatorX(west)},${toMercatorY(south)},${toMercatorX(east)},${toMercatorY(north)}`;
             return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}`;
           },
         });
         const newLayer = new (TileLayerClass as any)(
-          "", { opacity: layerDef.opacity ?? 0.5, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: "Geoportale (WMS fallback)" }
+          "", { opacity: layerDef.opacity ?? 0.5, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: useSecondaryFallback ? "SITAP MiC (fallback)" : "Geoportale (WMS fallback)" }
         ) as L.TileLayer;
-        (newLayer as L.TileLayer & { _sourceUrl?: string })._sourceUrl = layerDef.wmsUrl!;
+        (newLayer as L.TileLayer & { _sourceUrl?: string })._sourceUrl = effectiveWmsUrl;
+        if (wasOnMap) { map.removeLayer(oldLayer); newLayer.addTo(map); }
+        wmsLayersRef.current[layerDef.id] = newLayer;
+        resolvedFallbacksRef.current.add(layerDef.id);
+      }
+
+      // 3. If primary has no wmsUrl but has wmsUrlFallback directly (edge case)
+      if (!resolvedFallbacksRef.current.has(layerDef.id) && !layerDef.wmsUrl && layerDef.wmsUrlFallback && layerDef.wmsLayerFallback) {
+        console.log(`[WMSFallback] ${layerDef.id}: No primary WMS, using SITAP fallback directly`);
+        const proxyBase = `${SUPABASE_URL}/functions/v1/wfs-proxy`;
+        const oldLayer = wmsLayersRef.current[layerDef.id];
+        const wasOnMap = oldLayer && map.hasLayer(oldLayer);
+        const TileLayerClass = L.TileLayer.extend({
+          getTileUrl(coords: L.Coords): string {
+            const m = (this as unknown as { _map: L.Map })._map;
+            if (!m) return "";
+            const sz = 256;
+            const nw = m.unproject([coords.x * sz, coords.y * sz], coords.z);
+            const se = m.unproject([(coords.x + 1) * sz, (coords.y + 1) * sz], coords.z);
+            const south = Math.min(nw.lat, se.lat), north = Math.max(nw.lat, se.lat);
+            const west = Math.min(nw.lng, se.lng), east = Math.max(nw.lng, se.lng);
+            const toMercatorX = (lng: number) => lng * 20037508.342 / 180;
+            const toMercatorY = (lat: number) => Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180) * 20037508.342 / 180;
+            const sep = layerDef.wmsUrlFallback!.includes("?") ? "&" : "?";
+            const targetUrl = `${layerDef.wmsUrlFallback}${sep}SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${encodeURIComponent(layerDef.wmsLayerFallback!)}&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&WIDTH=${sz}&HEIGHT=${sz}&BBOX=${toMercatorX(west)},${toMercatorY(south)},${toMercatorX(east)},${toMercatorY(north)}`;
+            return `${proxyBase}?mode=wms_ext&url=${encodeURIComponent(targetUrl)}`;
+          },
+        });
+        const newLayer = new (TileLayerClass as any)(
+          "", { opacity: layerDef.opacity ?? 0.5, pane: "wmsPane", tileSize: 256, maxZoom: 19, attribution: "SITAP MiC (fallback)" }
+        ) as L.TileLayer;
+        (newLayer as L.TileLayer & { _sourceUrl?: string })._sourceUrl = layerDef.wmsUrlFallback!;
         if (wasOnMap) { map.removeLayer(oldLayer); newLayer.addTo(map); }
         wmsLayersRef.current[layerDef.id] = newLayer;
         resolvedFallbacksRef.current.add(layerDef.id);

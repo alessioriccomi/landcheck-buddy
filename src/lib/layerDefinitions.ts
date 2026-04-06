@@ -24,6 +24,10 @@ export interface LayerDef {
   fallbackUrls?: string[];
   /** Skip TLS certificate verification for this layer */
   tlsBypass?: boolean;
+  /** Secondary WMS fallback URL (e.g. SITAP GeoServer) when primary wmsUrl also fails */
+  wmsUrlFallback?: string;
+  /** WMS layer name for the secondary fallback */
+  wmsLayerFallback?: string;
 }
 
 export interface LayerGroup {
@@ -141,6 +145,8 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:0",
         wmsUrl: "https://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/Vettoriali/Vincoli_Paesaggistici_Art142.map",
         wmsLayer: "Vincoli_Paesaggistici_Art142",
+        wmsUrlFallback: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wms",
+        wmsLayerFallback: "sitap_ws:aree_rispetto_coste_corpi_idrici",
         wfsUrl: "https://wms.pcn.minambiente.it/ogc?service=wfs",
         srid: "32632",
         opacity: 0.5,
@@ -155,6 +161,8 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:1",
         wmsUrl: "https://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/Vettoriali/Vincoli_Paesaggistici_Art142.map",
         wmsLayer: "Vincoli_Paesaggistici_Art142",
+        wmsUrlFallback: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wms",
+        wmsLayerFallback: "sitap_ws:aree_rispetto_coste_corpi_idrici",
         wfsUrl: "https://wms.pcn.minambiente.it/ogc?service=wfs",
         srid: "32632",
         opacity: 0.5,
@@ -169,6 +177,8 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:2",
         wmsUrl: "https://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/Vettoriali/Vincoli_Paesaggistici_Art142.map",
         wmsLayer: "Vincoli_Paesaggistici_Art142",
+        wmsUrlFallback: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wms",
+        wmsLayerFallback: "sitap_ws:aree_rispetto_coste_corpi_idrici",
         wfsUrl: "https://wms.pcn.minambiente.it/ogc?service=wfs",
         srid: "32632",
         opacity: 0.5,
@@ -183,6 +193,8 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:3",
         wmsUrl: "https://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/Vettoriali/Vincoli_Paesaggistici_Art142.map",
         wmsLayer: "Vincoli_Paesaggistici_Art142",
+        wmsUrlFallback: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wms",
+        wmsLayerFallback: "sitap_ws:montagne",
         wfsUrl: "https://wms.pcn.minambiente.it/ogc?service=wfs",
         srid: "32632",
         opacity: 0.5,
@@ -211,6 +223,8 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:5",
         wmsUrl: "https://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/Vettoriali/Vincoli_Paesaggistici_Art142.map",
         wmsLayer: "Vincoli_Paesaggistici_Art142",
+        wmsUrlFallback: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wms",
+        wmsLayerFallback: "sitap_ws:parchi_riserve",
         wfsUrl: "https://wms.pcn.minambiente.it/ogc?service=wfs",
         srid: "32632",
         opacity: 0.5,
@@ -225,6 +239,8 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:6",
         wmsUrl: "https://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/Vettoriali/Vincoli_Paesaggistici_Art142.map",
         wmsLayer: "Vincoli_Paesaggistici_Art142",
+        wmsUrlFallback: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wms",
+        wmsLayerFallback: "sitap_ws:boschi",
         wfsUrl: "https://wms.pcn.minambiente.it/ogc?service=wfs",
         srid: "32632",
         opacity: 0.5,
@@ -253,6 +269,8 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:8",
         wmsUrl: "https://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/Vettoriali/Vincoli_Paesaggistici_Art142.map",
         wmsLayer: "Vincoli_Paesaggistici_Art142",
+        wmsUrlFallback: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wms",
+        wmsLayerFallback: "sitap_ws:zone_umide",
         wfsUrl: "https://wms.pcn.minambiente.it/ogc?service=wfs",
         srid: "32632",
         opacity: 0.5,
@@ -281,6 +299,8 @@ export const LAYER_GROUPS: LayerGroup[] = [
         arcgisLayers: "show:10",
         wmsUrl: "https://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/Vettoriali/Vincoli_Paesaggistici_Art142.map",
         wmsLayer: "Vincoli_Paesaggistici_Art142",
+        wmsUrlFallback: "https://sitap.cultura.gov.it/geoserver/sitap_ws/wms",
+        wmsLayerFallback: "sitap_ws:vulcani",
         wfsUrl: "https://wms.pcn.minambiente.it/ogc?service=wfs",
         srid: "32632",
         opacity: 0.5,
@@ -1456,6 +1476,17 @@ export const LAYER_GROUPS: LayerGroup[] = [
         opacity: 0.5,
         bounds: [39.78, 15.33, 42.23, 18.52],
         description: "Terreni gravati da usi civici — Regione Puglia",
+      },
+      {
+        id: "puglia_vincoli_delegati_art142",
+        label: "Vincoli paesaggistici Art.142 (PPTR Puglia)",
+        color: "#7c3aed",
+        defaultOn: false,
+        arcgisUrl: "https://webapps.sit.puglia.it/arcgis/rest/services/Operationals/VincoliDelegati/MapServer",
+        arcgisLayers: "show:2,5,6,7,8,9,10,11,12",
+        opacity: 0.5,
+        bounds: [39.78, 15.33, 42.23, 18.52],
+        description: "Vincoli paesaggistici Art.142 (fiumi, boschi, macchie, zone umide, parchi) — PPTR Puglia delegati",
       },
     ],
   },
