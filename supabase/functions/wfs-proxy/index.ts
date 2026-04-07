@@ -828,7 +828,7 @@ serve(async (req) => {
       const errorResponse = (payload: Record<string, unknown>, status = 502) =>
         new Response(JSON.stringify(probeOnly ? { ok: false, ...payload } : payload), {
           status: probeOnly ? 200 : status,
-          headers: jsonHeaders,
+          headers: { ...jsonHeaders, "Cache-Control": "no-store" },
         });
       if (!targetUrl) {
         return errorResponse({ error: "Missing url parameter" }, 400);
@@ -1019,11 +1019,12 @@ serve(async (req) => {
         }
 
         const imageData = await finalResp.arrayBuffer();
+        const isImageResponse = contentType.toLowerCase().startsWith("image/");
         return new Response(imageData, {
           headers: {
             ...corsHeaders,
             "Content-Type": contentType,
-            "Cache-Control": "public, max-age=3600",
+            "Cache-Control": isImageResponse ? "public, max-age=3600" : "no-store",
           },
         });
       } catch (err) {
