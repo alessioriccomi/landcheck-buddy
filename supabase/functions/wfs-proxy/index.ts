@@ -918,14 +918,12 @@ serve(async (req) => {
           }
         }
         let finalResp: Response | null = null;
-        let currentUrl = targetUrl;
+        let currentUrl = targetUrl.startsWith("http://")
+          ? targetUrl.replace("http://", "https://")
+          : targetUrl;
         const visitedUrls = new Set<string>();
 
         for (let i = 0; i < 20; i++) {
-          // Upgrade HTTP to HTTPS
-          if (currentUrl.startsWith("http://")) {
-            currentUrl = currentUrl.replace("http://", "https://");
-          }
           let resp: Response;
           try {
             resp = await fetch(currentUrl, fetchOptions);
@@ -956,10 +954,16 @@ serve(async (req) => {
             }
 
             const looksLikeAuthRedirect = /cassrv\/login|gateway=true/i.test(nextUrl);
-            if (visitedUrls.has(nextUrl) || looksLikeAuthRedirect) {
+            if (visitedUrls.has(nextUrl)) {
+              return errorResponse({
+                error: "Redirect loop",
+                detail: `Upstream redirected in a loop ending at ${nextUrl}`,
+              }, 502);
+            }
+            if (looksLikeAuthRedirect) {
               return errorResponse({
                 error: "UPSTREAM_AUTH_REQUIRED",
-                detail: `Redirect loop or authentication gateway detected for ${nextUrl}`,
+                detail: `Authentication gateway detected for ${nextUrl}`,
                 userMessage: "Il server remoto richiede autenticazione e non espone un endpoint pubblico utilizzabile dal layer.",
               }, 502);
             }
