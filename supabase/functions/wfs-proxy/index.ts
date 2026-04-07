@@ -1028,7 +1028,16 @@ serve(async (req) => {
           },
         });
       } catch (err) {
-        return errorResponse({ error: "WMS fetch failed", detail: String(err) }, 502);
+        const errMsg = String(err);
+        const isConnectionError = errMsg.includes("Connection reset") || errMsg.includes("Connection refused") || errMsg.includes("timed out") || errMsg.includes("dns error");
+        if (isConnectionError) {
+          // Return soft error as 200 JSON so client doesn't treat it as a fatal 502
+          return new Response(JSON.stringify({ ok: false, error: "UPSTREAM_CONNECT_ERROR", detail: errMsg, userMessage: "Il server remoto non è raggiungibile al momento." }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
+            status: 200,
+          });
+        }
+        return errorResponse({ error: "WMS fetch failed", detail: errMsg }, 502);
       }
     }
 
