@@ -985,16 +985,6 @@ export const LAYER_GROUPS: LayerGroup[] = [
         description: "Cave e miniere dismesse — potenziali aree idonee FER (D.Lgs. 199/2021)",
       },
       {
-        id: "toscana_aree_non_idonee_pv",
-        label: "Aree non idonee FV Toscana (GEOscopio)",
-        color: "#dc2626",
-        defaultOn: false,
-        wmsUrl: "https://www502.regione.toscana.it/wmsraster/com.rt.wms.RTmap/wms?map=wmsrinnovabili",
-        opacity: 0.5,
-        bounds: [42.24, 9.69, 44.47, 12.37],
-        description: "Perimetrazione aree non idonee all'installazione di impianti fotovoltaici a terra — Regione Toscana (GEOscopio)",
-      },
-      {
         id: "basilicata_impianti_eolici",
         label: "Impianti eolici Basilicata",
         color: "#22c55e",
